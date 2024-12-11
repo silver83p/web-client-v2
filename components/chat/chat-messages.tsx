@@ -18,6 +18,104 @@ const MOCK_MESSAGES: Message[] = [
     sender: 'Omar',
     timestamp: '12:00pm',
     isOutgoing: false
+  },
+  {
+    id: '2',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '3',
+    content: 'I will send you the NFT today',
+    sender: 'Daniel',
+    timestamp: '12:00pm',
+    isOutgoing: true
+  },
+  {
+    id: '4',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '5',
+    content: 'I will send you the NFT today',
+    sender: 'Daniel',
+    timestamp: '12:00pm',
+    isOutgoing: true
+  },
+  {
+    id: '6',
+    content: 'I will send you the NFT today',
+    sender: 'Daniel',
+    timestamp: '12:00pm',
+    isOutgoing: true
+  },
+  {
+    id: '7',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '8',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '9',
+    content: 'I will send you the NFT today',
+    sender: 'Daniel',
+    timestamp: '12:00pm',
+    isOutgoing: true
+  },
+  {
+    id: '10',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '11',
+    content: 'I will send you the NFT today',
+    sender: 'Daniel',
+    timestamp: '12:00pm',
+    isOutgoing: true
+  },
+  {
+    id: '12',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '13',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
+  },
+  {
+    id: '14',
+    content: 'I will send you the NFT today',
+    sender: 'Daniel',
+    timestamp: '12:00pm',
+    isOutgoing: true
+  },
+  {
+    id: '15',
+    content: 'I will send you the NFT today',
+    sender: 'Omar',
+    timestamp: '12:00pm',
+    isOutgoing: false
   }
 ];
 
