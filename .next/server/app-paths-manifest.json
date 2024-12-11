@@ -1,0 +1,11 @@
+{
+  "/not-found": "app/not-found.js",
+  "/page": "app/page.js",
+  "/contacts/page": "app/contacts/page.js",
+  "/wallet/page": "app/wallet/page.js",
+  "/account/page": "app/account/page.js",
+  "/auth/get-started/page": "app/auth/get-started/page.js",
+  "/auth/recovery/page": "app/auth/recovery/page.js",
+  "/auth/username/page": "app/auth/username/page.js",
+  "/chats/[id]/page": "app/chats/[id]/page.js"
+}
