@@ -18,7 +18,7 @@ export default function ChatsPage() {
       <SearchBar placeholder="Search messages..." />
     </header>
     <ChatList />
-    <div className="fixed bottom-24 right-0 left-0 flex justify-end max-w-md mx-auto">
+    <div className="absolute bottom-24 right-5">
       <NewChatButton />
     </div>
   </div>

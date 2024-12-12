@@ -6,6 +6,7 @@ import { SearchBar } from '@/components/search-bar';
 import { ChatList } from '@/components/chat-list';
 import { NewChatButton } from '@/components/new-chat-button';
 import ChatsPage from './chats/page';
+import ContactsPage from './contacts/page';
 import { BottomNav } from '@/components/bottom-nav';
 
 export default function Home() {
@@ -21,5 +22,6 @@ export default function Home() {
 
   return (
       <ChatsPage />
+      // <ContactsPage />
   );
 }

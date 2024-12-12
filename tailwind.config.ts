@@ -83,6 +83,18 @@ const config: Config = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
+      container: {
+        screens: {
+          sm: '500px',
+          md: '500px',
+          lg: '500px',
+          xl: '500px',
+          '2xl': '500px'
+        },
+      },
+      maxHeight: {
+        'container': '900px', // Set your desired max height here
+      },
     },
   },
   plugins: [require('tailwindcss-animate')],

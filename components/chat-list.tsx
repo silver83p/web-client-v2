@@ -45,6 +45,48 @@ const chats = [
     time: '11:00 AM',
     avatar: 'https://source.unsplash.com/random/100x100?face-5',
     status: 'offline'
+  },
+  {
+    id: 6,
+    name: 'Omar Syed',
+    message: 'I will send you the NFT today',
+    time: 'Just now',
+    unread: 1,
+    avatar: 'https://source.unsplash.com/random/100x100?face-6',
+    status: 'online'
+  },
+  {
+    id: 7,
+    name: 'Thant',
+    message: "Sure, what's the latest?",
+    time: '2:00 PM',
+    avatar: 'https://source.unsplash.com/random/100x100?face-2',
+    status: 'offline'
+  },
+  {
+    id: 8,
+    name: 'Jai',
+    message: 'Hi, can we discuss the tokenomics for the new project?',
+    time: '1:00 PM',
+    unread: 3,
+    avatar: 'https://source.unsplash.com/random/100x100?face-3',
+    status: 'offline'
+  },
+  {
+    id: 9,
+    name: 'Aamir',
+    message: 'I have some interesting ideas for the smart contracts',
+    time: '12:00 PM',
+    avatar: 'https://source.unsplash.com/random/100x100?face-4',
+    status: 'offline'
+  },
+  {
+    id: 10,
+    name: 'Andrey',
+    message: "How's your progress on the DApp UI design?",
+    time: '11:00 AM',
+    avatar: 'https://source.unsplash.com/random/100x100?face-5',
+    status: 'offline'
   }
 ];
 

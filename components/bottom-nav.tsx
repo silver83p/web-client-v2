@@ -16,8 +16,8 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t">
-      <div className="flex justify-around py-2">
+    <footer className="bg-white border-t">
+      <nav className="flex justify-around py-2">
         {navItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
@@ -31,7 +31,7 @@ export function BottomNav() {
             <span className="text-xs mt-1">{label}</span>
           </Link>
         ))}
-      </div>
-    </nav>
+      </nav>
+    </footer>
   );
 }
