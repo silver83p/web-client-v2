@@ -18,7 +18,9 @@ export default function ContactsPage() {
         <SearchBar placeholder="Search contacts..." />
       </header>
       <ContactList />
-      <AddFriendButton />
+      <div className="fixed bottom-24 right-0 left-0 flex justify-end max-w-md mx-auto">
+        <AddFriendButton />
+      </div>
     </div>
   );
 }

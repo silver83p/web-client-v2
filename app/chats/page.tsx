@@ -1,10 +1,8 @@
 import { SearchBar } from '@/components/search-bar';
-import { ContactList } from '@/components/contact-list';
-import { AddFriendButton } from '@/components/add-friend-button';
 import { ChatList } from '@/components/chat-list';
 import { NewChatButton } from '@/components/new-chat-button';
 
-export default function ContactsPage() {
+export default function ChatsPage() {
   return (
     <div className="pb-20">
     <header className="sticky top-0 bg-white z-10 px-4 py-3 border-b">
@@ -20,7 +18,9 @@ export default function ContactsPage() {
       <SearchBar placeholder="Search messages..." />
     </header>
     <ChatList />
-    <NewChatButton />
+    <div className="fixed bottom-24 right-0 left-0 flex justify-end max-w-md mx-auto">
+      <NewChatButton />
+    </div>
   </div>
   );
 }
