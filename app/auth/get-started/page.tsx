@@ -22,14 +22,14 @@ export default function GetStartedPage() {
         </Link>
         
         <Link
-          href="/auth/login"
+          href="/auth/import"
           className="w-full bg-gray-100 text-gray-900 rounded-lg py-3 px-4 text-center block"
         >
           I have an account
         </Link>
       </div>
 
-      <p className="text-sm text-gray-500 text-center mt-auto mb-6">
+      <p className="absolute bottom-4 left-2 right-2 text-sm text-gray-500 text-center mt-auto mb-6 ">
         By using this service, you agree to our{' '}
         <Link href="/terms" className="text-indigo-600">Terms of Service</Link>
         {' '}and{' '}

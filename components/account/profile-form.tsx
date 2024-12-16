@@ -1,32 +1,34 @@
-'use client';
+'use client'
 
-import { Input } from '@/components/ui/input';
-import { ChevronRight } from 'lucide-react';
+import { Input } from '@/components/ui/input'
+import { ChevronRight } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 export function ProfileForm() {
+  const router = useRouter()
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <span>Profile photo</span>
         <span className="text-indigo-600">Set up</span>
       </div>
-      
+
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <label className="block text-sm mb-1">Name</label>
           <span>Daniel Ingamells</span>
         </div>
-        
+
         <div className="flex justify-between items-center">
           <label className="block text-sm mb-1">Username</label>
           <span>Ingamells</span>
         </div>
-        
+
         <div className="flex justify-between items-center">
           <label className="block text-sm mb-1">Mobile Number</label>
           <span>+44 7599441978</span>
         </div>
-        
+
         <div className="flex justify-between items-center">
           <label className="block text-sm mb-1">Email</label>
           <span>dan@liberdus.com</span>
@@ -43,9 +45,15 @@ export function ProfileForm() {
         <Input placeholder="Enter USD value" />
       </div>
 
-      <button className="w-full bg-indigo-600 text-white rounded-lg py-3 mt-6">
+      <button
+        onClick={() => {
+          localStorage.removeItem('authenticated')
+          router.push('/auth/get-started')
+        }}
+        className="w-full bg-indigo-600 text-white rounded-lg py-3 mt-6"
+      >
         Sign Out
       </button>
     </div>
-  );
+  )
 }

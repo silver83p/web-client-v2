@@ -1,28 +1,24 @@
-import "./globals.css";
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import { BottomNav } from "@/components/bottom-nav";
+import './globals.css'
+import { Inter } from 'next/font/google'
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] })
+
+import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: "Liberdus",
-  description: "Liberdus web app",
-  manifest: "/manifest.json",
-  themeColor: "#ffffff",
+  title: 'Liberdus',
+  description: 'Liberdus web app',
+  manifest: '/manifest.json',
+  themeColor: '#ffffff',
   viewport: {
-    width: "device-width",
+    width: 'device-width',
     initialScale: 1,
     maximumScale: 1,
     userScalable: false,
   },
-};
+}
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -30,10 +26,9 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <main className="relative container mx-auto w-[min(100vw,400px)] h-[min(100vh,800px)] overflow-hidden rounded-xl border border-gray-300 px-4 flex flex-col">
-            <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden scrollbar-thin">{children}</div>
-            <BottomNav />
+          {children}
         </main>
       </body>
     </html>
-  );
+  )
 }

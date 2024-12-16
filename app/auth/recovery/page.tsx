@@ -2,15 +2,19 @@
 
 import { Flame } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { copyTextToClipboard, currentUserName, getPrivateKeyHex, loadWallet } from '@/lib/utils'
 
-const RECOVERY_PHRASE = [
-  'hefty festival lordship galaxy',
-  'album enhanced powder segments',
-  'nearby paradise thwart tarnished powder'
-];
+
+// const RECOVERY_PHRASE = [
+//   'hefty festival lordship galaxy',
+//   'album enhanced powder segments',
+//   'nearby paradise thwart tarnished powder'
+// ];
 
 export default function RecoveryPage() {
   const router = useRouter();
+  const [seedPhrase, setSeedPhrase] = useState(undefined);
 
   const handleContinue = () => {
     // Store authentication in localStorage instead of cookies
@@ -18,8 +22,15 @@ export default function RecoveryPage() {
     router.push('/');
   };
 
+  useEffect(() => {
+    // Check authentication from localStorage instead of cookies
+    const wallet = loadWallet(currentUserName)
+    setSeedPhrase(getPrivateKeyHex(wallet?.entry.keys.privateKey))
+    
+  }, [router])
+
   return (
-    <div className="min-h-screen flex flex-col items-center px-4 pt-12">
+    <div className="flex flex-col items-center px-4 pt-12">
       <button 
         onClick={() => router.back()}
         className="self-start p-2 -ml-2"
@@ -38,18 +49,21 @@ export default function RecoveryPage() {
       <img src="/icon-512x512.png" className="w-24 h-24 rounded-full flex items-center justify-center mb-8" alt="Liberdus logo" />
 
 
-      
+
 
       <p className="text-gray-600 mb-6 text-center max-w-xs">
-        Use your recovery password to access your account on new devices. Keep it safe and secure, as your account cannot be recovered without it. Do not share it with anyone.
+        Use your recovery privateKey to access your account on new devices. Keep it safe and secure, as your account cannot be recovered without it. Do not share it with anyone.
       </p>
 
       <div className="w-full max-w-sm bg-gray-50 rounded-lg p-4 mb-6">
-        {RECOVERY_PHRASE.map((phrase, index) => (
+        {/* {RECOVERY_PHRASE.map((phrase, index) => (
           <p key={index} className="text-center text-gray-800 my-1">
             {phrase}
           </p>
-        ))}
+        ))} */}
+        <p className="text-center text-gray-800 my-1 break-all">
+            {seedPhrase}
+          </p>
       </div>
 
       <div className="w-full max-w-sm grid grid-cols-2 gap-4">
@@ -60,14 +74,14 @@ export default function RecoveryPage() {
           Continue
         </button>
         <button
-          onClick={() => navigator.clipboard.writeText(RECOVERY_PHRASE.join(' '))}
+          onClick={() => copyTextToClipboard(seedPhrase)}
           className="bg-gray-100 text-gray-900 rounded-lg py-3 px-4"
         >
           Copy
         </button>
       </div>
 
-      <p className="text-sm text-gray-500 text-center mt-auto mb-6">
+      <p className="absolute bottom-4 left-2 right-2 text-sm text-gray-500 text-center mt-auto mb-6">
         By using this service, you agree to our Terms of Service and Privacy Policy
       </p>
     </div>
