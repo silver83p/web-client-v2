@@ -14,7 +14,7 @@ interface Message {
 const MOCK_MESSAGES: Message[] = [
   {
     id: '1',
-    content: 'I will send you the NFT today',
+    content: 'I will send you the NFT today. What is your address?',
     sender: 'Omar',
     timestamp: '12:00pm',
     isOutgoing: false
