@@ -1,5 +1,6 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
+import { AppProvider } from './AppContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         suppressHydrationWarning
       >
         <main className="relative container mx-auto w-[min(100vw,400px)] h-[min(100vh,800px)] overflow-hidden rounded-xl border border-gray-300 px-4 flex flex-col">
-          {children}
+          <AppProvider>{children}</AppProvider>
         </main>
       </body>
     </html>

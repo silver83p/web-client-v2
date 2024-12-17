@@ -3,9 +3,12 @@
 import { Input } from '@/components/ui/input'
 import { ChevronRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useApp } from '@/app/AppContext'
 
 export function ProfileForm() {
   const router = useRouter()
+  const { state, dispatch } = useApp()
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -16,12 +19,12 @@ export function ProfileForm() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <label className="block text-sm mb-1">Name</label>
-          <span>Daniel Ingamells</span>
+          <span>{state.auth.username}</span>
         </div>
 
         <div className="flex justify-between items-center">
           <label className="block text-sm mb-1">Username</label>
-          <span>Ingamells</span>
+          <span>{state.auth.username}</span>
         </div>
 
         <div className="flex justify-between items-center">
@@ -47,7 +50,7 @@ export function ProfileForm() {
 
       <button
         onClick={() => {
-          localStorage.removeItem('authenticated')
+          dispatch({ type: 'AUTH', action: { type: 'LOGOUT' }})
           router.push('/auth/get-started')
         }}
         className="w-full bg-indigo-600 text-white rounded-lg py-3 mt-6"

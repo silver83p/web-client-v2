@@ -1,21 +1,23 @@
-'use client'
+"use client"
 
-import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { ImportKeyBox } from '@/components/import-key-box'
-import { getAddress, importWallet, saveWallet, registerAlias, WalletEntry, WalletInfo } from '@/lib/utils'
-import { Input } from '@/components/ui/input'
+import { useRouter } from "next/navigation"
+import { useEffect, useReducer, useState } from "react"
+import { ImportKeyBox } from "@/components/import-key-box"
+import { getAddress, importWallet, saveWallet, registerAlias, WalletEntry, WalletInfo } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
+import { useApp } from "@/app/AppContext"
 
 export default function ImportPage() {
   const router = useRouter()
-  const [seedPhrase, setSeedPhrase] = useState('')
-
-  const [username, setUsername] = useState('')
+  const [seedPhrase, setSeedPhrase] = useState("")
+  const [username, setUsername] = useState("")
   const [entry, setEntry] = useState<WalletEntry | null>(null)
   const [isRegistered, setIsRegistered] = useState(true)
   const [availability, setAvailability] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
+
+  const { dispatch } = useApp()
 
   const checkAccountCreation = async (
     username: string
@@ -49,19 +51,19 @@ export default function ImportPage() {
     const debounceCheck = setTimeout(async () => {
       if (username) {
         if (username.length < 3) {
-          setAvailability('Username must be at least 3 characters long.')
+          setAvailability("Username must be at least 3 characters long.")
           return
         }
         if (!/^[a-zA-Z0-9]*$/.test(username)) {
-          setAvailability('Username can contain only alphabets and numeric characters.')
+          setAvailability("Username can contain only alphabets and numeric characters.")
           return
         }
         setIsChecking(true)
         const address = await getAddress(username)
         if (address) {
-          setAvailability('Username is available!')
+          setAvailability("Username is already taken.")
         } else {
-          setAvailability('Username is already taken.')
+          setAvailability("Username is available!")
         }
         setIsChecking(false)
       } else {
@@ -76,44 +78,48 @@ export default function ImportPage() {
     e.preventDefault()
     if (username.trim()) {
       if (username.length < 3) {
-        setAvailability('Username must be at least 3 characters long.')
+        setAvailability("Username must be at least 3 characters long.")
         return
       }
       if (!/^[a-zA-Z0-9]*$/.test(username)) {
-        setAvailability('Username can contain only alphabets and numeric characters.')
+        setAvailability("Username can contain only alphabets and numeric characters.")
         return
       }
-      const address = await getAddress(username)
-      if (address) {
-        setIsCreatingAccount(true)
+      const fetchedAddress = await getAddress(username)
+      if (fetchedAddress) {
+        setAvailability("Username is already taken.")
+        return
+      }
+      setIsCreatingAccount(true)
 
-        const wallet = {
-          handle: username.toLowerCase(),
-          entry,
-        } as WalletInfo
+      const wallet = {
+        handle: username.toLowerCase(),
+        entry,
+      } as WalletInfo
 
-        let isSubmitted = await registerAlias(wallet.handle, wallet.entry)
-        if (!isSubmitted) {
-          setAvailability('Error creating account. Please try again.')
-          setIsCreatingAccount(false)
-          return
-        }
-
-        const { success: isAccountCreated, address } = await checkAccountCreation(username)
+      let isSubmitted = await registerAlias(wallet.handle, wallet.entry)
+      if (!isSubmitted) {
+        setAvailability("Error creating account. Please try again.")
         setIsCreatingAccount(false)
-        if (isAccountCreated) {
-          if (address === wallet.entry.address) {
-            saveWallet(wallet)
-            localStorage.setItem('authenticated', 'true')
-            router.push('/')
-          } else {
-            setAvailability('Account creation failed with the specified username. Please try again.')
-          }
+        return
+      }
+
+      const { success: isAccountCreated, address } = await checkAccountCreation(username)
+      setIsCreatingAccount(false)
+      if (isAccountCreated) {
+        if (address === wallet.entry.address) {
+          saveWallet(wallet)
+          dispatch({
+            type: "AUTH",
+            action: { type: "SAVE_CREDENTIALS", payload: { username, walletEntry: wallet.entry } },
+          })
+          dispatch({ type: "AUTH", action: { type: "LOGIN" } })
+          router.push("/")
         } else {
-          setAvailability('Error creating account. Please try again.')
+          setAvailability("Account creation failed with the specified username. Please try again.")
         }
       } else {
-        setAvailability('Username is already taken.')
+        setAvailability("Error creating account. Please try again.")
       }
     }
   }
@@ -121,13 +127,17 @@ export default function ImportPage() {
   const handleContinue = async () => {
     if (seedPhrase.trim()) {
       const { handle, entry } = await importWallet(seedPhrase)
-      console.log('importWallet', handle, entry)
-      if (handle !== 'Nousername') {
+      console.log("importWallet", handle, entry)
+      if (handle !== "Nousername") {
         setIsRegistered(true)
         setUsername(handle)
         saveWallet({ handle, entry })
-        localStorage.setItem('authenticated', 'true')
-        router.push('/')
+        dispatch({
+          type: "AUTH",
+          action: { type: "SAVE_CREDENTIALS", payload: { username: handle, walletEntry: entry } },
+        })
+        dispatch({ type: "AUTH", action: { type: "LOGIN" } })
+        router.push("/")
         return
       }
       setIsRegistered(false)
@@ -148,7 +158,7 @@ export default function ImportPage() {
       </button>
 
       <h1 className="text-xl font-semibold mb-8">
-        {isRegistered ? 'Enter Seed Phrase' : 'Register Username'}
+        {isRegistered ? "Enter Seed Phrase" : "Register Username"}
       </h1>
 
       <img src="/icon-512x512.png" className="w-24 h-24 rounded-full mb-8" alt="Liberdus logo" />
@@ -185,7 +195,7 @@ export default function ImportPage() {
             ) : (
               availability && (
                 <p
-                  className={`mt-2 ${availability.includes('available') ? 'text-green-600' : 'text-red-600'}`}
+                  className={`mt-2 ${availability.includes("available") ? "text-green-600" : "text-red-600"}`}
                 >
                   {availability}
                 </p>
@@ -225,4 +235,3 @@ export default function ImportPage() {
     </div>
   )
 }
-

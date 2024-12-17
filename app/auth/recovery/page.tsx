@@ -2,8 +2,9 @@
 
 import { Flame } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { copyTextToClipboard, currentUserName, getPrivateKeyHex, loadWallet } from '@/lib/utils'
+import { useEffect, useReducer, useState } from 'react';
+import { copyTextToClipboard, getPrivateKeyHex, loadWallet } from '@/lib/utils'
+import { useApp } from '@/app/AppContext';
 
 
 // const RECOVERY_PHRASE = [
@@ -14,20 +15,12 @@ import { copyTextToClipboard, currentUserName, getPrivateKeyHex, loadWallet } fr
 
 export default function RecoveryPage() {
   const router = useRouter();
-  const [seedPhrase, setSeedPhrase] = useState(undefined);
+  const { state, dispatch } = useApp();
 
   const handleContinue = () => {
-    // Store authentication in localStorage instead of cookies
-    localStorage.setItem('authenticated', 'true');
+    dispatch({ type: 'AUTH', action: { type: 'LOGIN' }})
     router.push('/');
   };
-
-  useEffect(() => {
-    // Check authentication from localStorage instead of cookies
-    const wallet = loadWallet(currentUserName)
-    setSeedPhrase(getPrivateKeyHex(wallet?.entry.keys.privateKey))
-    
-  }, [router])
 
   return (
     <div className="flex flex-col items-center px-4 pt-12">
@@ -62,7 +55,7 @@ export default function RecoveryPage() {
           </p>
         ))} */}
         <p className="text-center text-gray-800 my-1 break-all">
-            {seedPhrase}
+            {getPrivateKeyHex(state.auth.walletEntry.keys.privateKey)}
           </p>
       </div>
 
@@ -74,7 +67,7 @@ export default function RecoveryPage() {
           Continue
         </button>
         <button
-          onClick={() => copyTextToClipboard(seedPhrase)}
+          onClick={() => copyTextToClipboard(getPrivateKeyHex(state.auth.walletEntry.keys.privateKey))}
           className="bg-gray-100 text-gray-900 rounded-lg py-3 px-4"
         >
           Copy

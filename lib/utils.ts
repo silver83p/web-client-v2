@@ -1,11 +1,11 @@
-import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
-import * as crypto from '@shardus/crypto-web'
-import axios from 'axios'
-import stringify from 'fast-stable-stringify'
-import { ethers } from 'ethers'
-import { Ratchet, getPublicKey, secpUtils } from '@thant-dev/ciphersuite'
-import { orderBy, keys, update } from 'lodash'
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+import * as crypto from "@shardus/crypto-web"
+import axios from "axios"
+import stringify from "fast-stable-stringify"
+import { ethers } from "ethers"
+import { Ratchet, getPublicKey, secpUtils } from "@thant-dev/ciphersuite"
+import { orderBy, keys, update } from "lodash"
 
 const config = {
   archiver: {
@@ -13,7 +13,7 @@ const config = {
     port: 4000,
   },
   proxy: {
-    ip: 'test.liberdus.com',
+    ip: "test.liberdus.com",
     port: 443,
   },
   rpc_server: {
@@ -40,39 +40,40 @@ export type WalletInfo = {
 
 let host: string
 const defaultSeedNode = `${config.archiver.ip}:${config.archiver.port}`
-console.log('defaultSeedNode', defaultSeedNode)
-const storedSeedNode = localStorage.getItem('seednode')
+console.log("defaultSeedNode", defaultSeedNode)
+const storedSeedNode = localStorage.getItem("seednode")
 const seedNodeHost = storedSeedNode || defaultSeedNode
 const walletEntries: { [handle: string]: WalletEntry } = {}
-const network = '0'.repeat(64)
+const network = "0".repeat(64)
 const verboseLogs = false
 
-export let currentUserName = ''
-
 const LIB_RRC_METHODS = {
-  SEND_TRANSACTION: 'lib_sendTransaction',
-  GET_ACCOUNT: 'lib_getAccount',
-  GET_TRANSACTION_RECEIPT: 'lib_getTransactionReceipt',
-  GET_TRANSACTION_HISTORY: 'lib_getTransactionHistory',
-  GET_MESSAGES: 'lib_getMessages',
-  SUBSCRIBE: 'lib_subscribe',
-  UNSUBSCRIBE: 'lib_unsubscribe',
+  SEND_TRANSACTION: "lib_sendTransaction",
+  GET_ACCOUNT: "lib_getAccount",
+  GET_TRANSACTION_RECEIPT: "lib_getTransactionReceipt",
+  GET_TRANSACTION_HISTORY: "lib_getTransactionHistory",
+  GET_MESSAGES: "lib_getMessages",
+  SUBSCRIBE: "lib_subscribe",
+  UNSUBSCRIBE: "lib_unsubscribe",
 }
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+let isCryptoInitialized = false
+
 export const initializeShardusCrypto = () => {
-  console.log('initializeShardusCrypto')
-  crypto.initialize('69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc')
-  console.log('crypto initialized')
+  if (isCryptoInitialized) return
+  crypto.initialize("69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc")
+  console.log("crypto initialized")
+  isCryptoInitialized = true
 }
 
-const getCurrentSeedNode =  (host: string) => {
+const getCurrentSeedNode = (host: string) => {
   return {
-    ip: host.split(':')[0],
-    port: parseInt(host.split(':')[1]),
+    ip: host.split(":")[0],
+    port: parseInt(host.split(":")[1]),
   }
 }
 
@@ -86,7 +87,7 @@ const updateHost = (newHost: string) => {
 
 const isServerActive = async () => {
   try {
-    const res = await axios.get(getProxyUrl('/network/parameters'))
+    const res = await axios.get(getProxyUrl("/network/parameters"))
     const isActive = !!(res.status === 200)
     return isActive
   } catch (e) {
@@ -98,37 +99,37 @@ const getProxyUrl = (url: string, option?: any) => {
   try {
     let ip, port
     if (!option) {
-      ip = host.split(':')[0]
-      port = host.split(':')[1]
+      ip = host.split(":")[0]
+      port = host.split(":")[1]
     } else if (option) {
       ip = option.ip
       port = option.port
     }
     if (verboseLogs) {
-      console.log('getProxyUrl', url, option, ip, port)
+      console.log("getProxyUrl", url, option, ip, port)
       console.log(ip, port)
     }
-    if (ip === 'localhost' || ip === '127.0.0.1') {
+    if (ip === "localhost" || ip === "127.0.0.1") {
       return `http://localhost:${port}${url}`
     }
 
-    if (ip.includes('192.168.1')) {
+    if (ip.includes("192.168.1")) {
       return `http://${ip}:${port}${url}`
     }
     return `http://${ip}:${port}${url}`
     // return `https://${config.proxy.ip}:${config.proxy.port}/rproxy/${ip}:${port}${url}`
   } catch (e) {
-    return ''
+    return ""
   }
 }
 
 const getProxyUrlWithRandomHost = async function (url: string) {
   const randomHost = await getRandomHost()
   const { ip, port } = randomHost
-  if (ip === 'localhost' || ip === '127.0.0.1') {
+  if (ip === "localhost" || ip === "127.0.0.1") {
     return `http://localhost:${port}${url}`
   }
-  if (ip.includes('192.168.1')) {
+  if (ip.includes("192.168.1")) {
     return `http://${ip}:${port}${url}`
   }
   return `http://${ip}:${port}${url}`
@@ -136,19 +137,19 @@ const getProxyUrlWithRandomHost = async function (url: string) {
 }
 
 const getRandomHost = async () => {
-  const ip = seedNodeHost.split(':')[0]
-  const port = seedNodeHost.split(':')[1]
-  const res = await axios.get(getProxyUrl('/nodelist', { ip, port }), {
+  const ip = seedNodeHost.split(":")[0]
+  const port = seedNodeHost.split(":")[1]
+  const res = await axios.get(getProxyUrl("/nodelist", { ip, port }), {
     timeout: 10000,
   })
   const nodeList = res.data.nodeList
   const randIndex = Math.floor(Math.random() * nodeList.length)
   const randHost = nodeList[randIndex]
   if (!randHost) {
-    throw new Error('Unable to get random host')
+    throw new Error("Unable to get random host")
   }
-  if (randHost.ip === '127.0.0.1' || randHost.ip === 'localhost') {
-    randHost.ip = seedNodeHost.split(':')[0]
+  if (randHost.ip === "127.0.0.1" || randHost.ip === "localhost") {
+    randHost.ip = seedNodeHost.split(":")[0]
   }
   return randHost
 }
@@ -156,13 +157,13 @@ const getRandomHost = async () => {
 const updateSeedNodeHostLocally = async (ip: string, port: string) => {
   const seedNodeHost = `${ip}:${port}`
   // eslint-disable-next-line no-undef
-  localStorage.setItem('seednode', seedNodeHost)
+  localStorage.setItem("seednode", seedNodeHost)
 }
 
 const isSeedNodeOnline = async (ip: string, port: string) => {
   try {
     // const seedNodeHost = `${ip}:${port}`
-    const res = await axios.get(getProxyUrl('/nodelist', { ip, port }), {
+    const res = await axios.get(getProxyUrl("/nodelist", { ip, port }), {
       timeout: 10000,
     })
     if (res.status === 200) {
@@ -177,23 +178,23 @@ const isSeedNodeOnline = async (ip: string, port: string) => {
 
 const getSeedNode = async (ip: string, port: string) => {
   return {
-    ip: seedNodeHost.split(':')[0],
-    port: seedNodeHost.split(':')[1],
+    ip: seedNodeHost.split(":")[0],
+    port: seedNodeHost.split(":")[1],
   }
 }
 
 const bytesToHex = (uint8Array: Uint8Array) => {
   return Array.from(uint8Array)
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
 }
 
 const createAccount = (): WalletEntry => {
   let key = {
-    address: '',
+    address: "",
     keys: {
-      publicKey: '',
-      privateKey: '',
+      publicKey: "",
+      privateKey: "",
     },
   } as WalletEntry
   if (config.useEthereumAddress) {
@@ -203,7 +204,7 @@ const createAccount = (): WalletEntry => {
     // Derive Ethereum address if needed
     const uncompressedPublicKey = getPublicKey(privateKey, false) // false indicates uncompressed
     const uncompressedPublicKeyHex = ethers.hexlify(uncompressedPublicKey)
-    console.log('uncompressedPublicKeyHex', uncompressedPublicKeyHex)
+    console.log("uncompressedPublicKeyHex", uncompressedPublicKeyHex)
     const ethAddress = ethers.computeAddress(uncompressedPublicKeyHex)
 
     key.address = toShardusAddress(ethAddress)
@@ -216,22 +217,22 @@ const createAccount = (): WalletEntry => {
     key.keys.privateKey = newAccount.privateKey
   }
   // TODO: Remove the debug log in production
-  console.log('createAccount', key)
+  console.log("createAccount", key)
   return key
 }
 
-export const getPrivateKeyHex = (sk: Uint8Array) => {
+export const getPrivateKeyHex = (sk: Uint8Array | string): string => {
   if (config.useEthereumAddress) {
     return ethers.hexlify(sk)
   } else {
-    return sk
+    return sk as string
   }
 }
 
 const toShardusAddress = (addressStr: string) => {
   //  change this: 0x665eab3be2472e83e3100b4233952a16eed20c76
   //  to this: 665eab3be2472e83e3100b4233952a16eed20c76000000000000000000000000
-  return addressStr.slice(2).toLowerCase() + '0'.repeat(24)
+  return addressStr.slice(2).toLowerCase() + "0".repeat(24)
 }
 
 const signObj = async (tx: object, source: WalletEntry) => {
@@ -242,10 +243,10 @@ const signObj = async (tx: object, source: WalletEntry) => {
   }
 }
 
-const signEthereumTx = async (tx: object, source: WalletEntry) => {
+const signEthereumTx = async (tx: object & { sign: { owner: string; sig: string } }, source: WalletEntry) => {
   console.log(`signEthereumTx`, source)
   if (source == null || source.keys == null) {
-    throw new Error('Keys are required for signing')
+    throw new Error("Keys are required for signing")
   }
 
   // Convert the object to a string with BigInt support
@@ -269,12 +270,11 @@ const signEthereumTx = async (tx: object, source: WalletEntry) => {
 }
 
 export const saveWallet = (newWalletEntry: WalletInfo) => {
-  console.log('\n\n saveWallet \n\n', newWalletEntry)
+  console.log("\n\n saveWallet \n\n", newWalletEntry)
   try {
-    currentUserName = newWalletEntry.handle
-    let savedWallets = localStorage.getItem('wallets')
+    let savedWallets = localStorage.getItem("wallets")
     if (savedWallets === null) {
-      localStorage.setItem('wallets', crypto.safeStringify([newWalletEntry]))
+      localStorage.setItem("wallets", crypto.safeStringify([newWalletEntry]))
       return
     }
     const existingWalletList = crypto.safeJsonParse(savedWallets) as WalletInfo[]
@@ -284,18 +284,17 @@ export const saveWallet = (newWalletEntry: WalletInfo) => {
     newWallet = newWallet.concat(newWalletEntry)
     // .filter(w => w.handle !== newWalletEntry.handle)
     // .concat(newWalletEntry)
-    localStorage.setItem('wallets', crypto.safeStringify(newWallet))
+    localStorage.setItem("wallets", crypto.safeStringify(newWallet))
   } catch (e) {
     console.log(e)
-    currentUserName = newWalletEntry.handle
-    localStorage.setItem('wallets', crypto.safeStringify([newWalletEntry]))
+    localStorage.setItem("wallets", crypto.safeStringify([newWalletEntry]))
   }
 }
 
 export const loadWallet = (username: string): WalletInfo | undefined => {
   try {
     // eslint-disable-next-line no-undef
-    const loadedEntries = localStorage.getItem('wallets')
+    const loadedEntries = localStorage.getItem("wallets")
     if (loadedEntries === null) {
       return undefined
     }
@@ -309,7 +308,7 @@ export const loadWallet = (username: string): WalletInfo | undefined => {
 const loadLastMessage = (username: string) => {
   try {
     // eslint-disable-next-line no-undef
-    const loadedEntries = localStorage.getItem('lastMessage')
+    const loadedEntries = localStorage.getItem("lastMessage")
     const lastMessage = crypto.safeJsonParse(loadedEntries)
     return lastMessage[username]
   } catch (e) {
@@ -320,7 +319,7 @@ const loadLastMessage = (username: string) => {
 const loadLastTx = (username: string) => {
   try {
     // eslint-disable-next-line no-undef
-    const loadedEntries = localStorage.getItem('lastTx')
+    const loadedEntries = localStorage.getItem("lastTx")
     const lastTx = crypto.safeJsonParse(loadedEntries)
     return lastTx[username]
   } catch (e) {
@@ -328,13 +327,12 @@ const loadLastTx = (username: string) => {
   }
 }
 
-
 const getInjectUrl = (): string => {
-  return getProxyUrl('/inject')
+  return getProxyUrl("/inject")
 }
 
 const getAccountsUrl = (): string => {
-  return getProxyUrl('/accounts')
+  return getProxyUrl("/accounts")
 }
 
 const getAccountUrl = (id: string) => {
@@ -391,18 +389,18 @@ const getToll = async (friendId: string, yourId: string): Promise<bigint> => {
 export const getAddress = async (handle: string): Promise<string | null> => {
   if (handle.length === 64) return handle
   try {
-      const randomUrl = await getProxyUrlWithRandomHost(`/address/${crypto.hash(handle)}`)
-      const data = await getJSON(randomUrl)
-      console.log('getAddress', randomUrl, data)
-      const { address, error } = data
-      if (error) {
-        console.log(error)
-        console.log(`Error while getting address for ${handle}`)
-      } else if (address) {
-        return address
-      }
+    const randomUrl = await getProxyUrlWithRandomHost(`/address/${crypto.hash(handle)}`)
+    const data = await getJSON(randomUrl)
+    console.log("getAddress", randomUrl, data)
+    const { address, error } = data
+    if (error) {
+      console.log(error)
+      console.log(`Error while getting address for ${handle}`)
+    } else if (address) {
+      return address
+    }
   } catch (e) {
-    console.log('getAddress', e)
+    console.log("getAddress", e)
   }
   return null
 }
@@ -433,7 +431,7 @@ const getTransactionHistory = async (address: string) => {
 
 const makeJsonRpcRequest = async (method: string, params: unknown[] = []) => {
   const requestBody = {
-    jsonrpc: '2.0',
+    jsonrpc: "2.0",
     method,
     params,
     id: 1,
@@ -444,20 +442,20 @@ const makeJsonRpcRequest = async (method: string, params: unknown[] = []) => {
     const url = `http://${config.rpc_server.ip}:${config.rpc_server.port}`
     const response = await axios.post(url, requestBody, {
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        "Access-Control-Allow-Origin": "*",
       },
     })
     const responseData = response.data
 
     if (responseData.error) {
-      console.error('makeJsonRpcRequest Error:', method, responseData.error)
+      console.error("makeJsonRpcRequest Error:", method, responseData.error)
       throw new Error(responseData.error)
     } else {
-      console.log('makeJsonRpcRequest Result:', method, responseData.result)
+      console.log("makeJsonRpcRequest Result:", method, responseData.result)
       return responseData.result
     }
   } catch (error) {
-    console.error('makeJsonRpcRequest Error:', method, error)
+    console.error("makeJsonRpcRequest Error:", method, error)
     throw new Error(error)
   }
 }
@@ -473,7 +471,7 @@ const pollMessages = async (from: string, to: string, timestamp: number) => {
 }
 
 export const createWallet = (name: string): WalletEntry => {
-  if (typeof walletEntries[name] !== 'undefined' && walletEntries[name] !== null) {
+  if (typeof walletEntries[name] !== "undefined" && walletEntries[name] !== null) {
     console.log(`Wallet named '${name}' already exists.`)
     return walletEntries[name]
   } else {
@@ -483,21 +481,21 @@ export const createWallet = (name: string): WalletEntry => {
   }
 }
 
-export const importWallet = async (sk: string) : Promise<{ handle: string; entry: WalletEntry }>  => {
+export const importWallet = async (sk: string): Promise<{ handle: string; entry: WalletEntry }> => {
   let entry = {
-    address: '',
+    address: "",
     keys: {
-      publicKey: '',
-      privateKey: '',
+      publicKey: "",
+      privateKey: "",
     },
   } as WalletEntry
   if (config.useEthereumAddress) {
     // Convert the hex private key to a byte array supported by @noble/secp256k1
-    const privateKey = Buffer.from(sk.slice(2), 'hex')
+    const privateKey = Buffer.from(sk.slice(2), "hex")
 
     // Validate the private key
     if (!secpUtils.isValidPrivateKey(privateKey)) {
-      throw new Error('Invalid Ethereum private key')
+      throw new Error("Invalid Ethereum private key")
     }
     const uncompressedPublicKey = getPublicKey(privateKey, false) // false indicates uncompressed
     const uncompressedPublicKeyHex = ethers.hexlify(uncompressedPublicKey)
@@ -511,12 +509,12 @@ export const importWallet = async (sk: string) : Promise<{ handle: string; entry
     entry.keys.privateKey = sk
   }
   let handle = await getHandle(entry.address)
-  console.log('importWallet', handle, entry)
+  console.log("importWallet", handle, entry)
   if (handle === undefined || handle == null) {
-    handle = 'Nousername'
+    handle = "Nousername"
   }
   // TODO: Remove the debug log in production
-  console.log('importWallet', handle, entry)
+  console.log("importWallet", handle, entry)
   return {
     handle,
     entry,
@@ -525,7 +523,7 @@ export const importWallet = async (sk: string) : Promise<{ handle: string; entry
 
 const listWallet = (name: string): void => {
   const wallet = walletEntries[name]
-  if (typeof wallet !== 'undefined' && wallet !== null) {
+  if (typeof wallet !== "undefined" && wallet !== null) {
     console.log(`${crypto.safeStringify(wallet, null, 2)}`)
   } else {
     console.log(`${crypto.safeStringify(walletEntries, null, 2)}`)
@@ -534,7 +532,7 @@ const listWallet = (name: string): void => {
 
 export const registerAlias = async (handle: string, source: WalletEntry) => {
   const tx = {
-    type: 'register',
+    type: "register",
     aliasHash: crypto.hash(handle),
     from: source.address,
     alias: handle,
@@ -542,16 +540,21 @@ export const registerAlias = async (handle: string, source: WalletEntry) => {
     timestamp: Date.now(),
   }
   await signObj(tx, source)
-  console.log('register tx', tx)
+  console.log("register tx", tx)
   return new Promise((resolve) => {
-    injectTx(tx).then((res) => {
-      console.log(res)
-      if (res.result.success) {
-        resolve(true)
-      } else {
+    injectTx(tx)
+      .then((res) => {
+        console.log(res)
+        if (res.result.success) {
+          resolve(true)
+        } else {
+          resolve(false)
+        }
+      })
+      .catch((e) => {
+        console.log(e)
         resolve(false)
-      }
-    })
+      })
   })
 }
 
@@ -563,7 +566,7 @@ const addFriend = async (tgt: string, keys: WalletEntry) => {
     return
   }
   const tx = {
-    type: 'friend',
+    type: "friend",
     network,
     alias: tgt,
     from: keys.address,
@@ -591,7 +594,7 @@ const removeFriend = async (tgt: string, keys: WalletEntry) => {
     return
   }
   const tx = {
-    type: 'remove_friend',
+    type: "remove_friend",
     network,
     alias: tgt,
     from: keys.address,
@@ -614,7 +617,7 @@ const removeFriend = async (tgt: string, keys: WalletEntry) => {
 
 const claimTokens = async (keys: WalletEntry) => {
   const tx = {
-    type: 'claim_coins',
+    type: "claim_coins",
     network,
     srcAcc: keys.address,
     timestamp: Date.now(),
@@ -634,7 +637,7 @@ const claimTokens = async (keys: WalletEntry) => {
 
 const setToll = async (toll: number, keys: WalletEntry) => {
   const tx = {
-    type: 'toll',
+    type: "toll",
     network,
     from: keys.address,
     toll: BigInt(toll),
@@ -657,7 +660,7 @@ const setToll = async (toll: number, keys: WalletEntry) => {
 const depositStake = async (nominee: string, stake: number, keys: WalletEntry) => {
   console.log(keys)
   const tx = {
-    type: 'deposit_stake',
+    type: "deposit_stake",
     nominator: keys.address,
     nominee,
     stake: BigInt(stake),
@@ -679,7 +682,7 @@ const depositStake = async (nominee: string, stake: number, keys: WalletEntry) =
 
 const withdrawStake = async (nominee: string, force: boolean, keys: WalletEntry) => {
   const tx = {
-    type: 'withdraw_stake',
+    type: "withdraw_stake",
     nominator: keys.address,
     nominee,
     force,
@@ -700,8 +703,8 @@ const withdrawStake = async (nominee: string, force: boolean, keys: WalletEntry)
 }
 
 const hashMessage = (message: object) => {
-  if (typeof message !== 'object') {
-    console.log('Message must be an object')
+  if (typeof message !== "object") {
+    console.log("Message must be an object")
     return
   }
   return crypto.hashObj(message)
@@ -718,11 +721,11 @@ const sendMessage = async (payload: object, sourceAcc: WalletInfo, targetHandle:
   const messageTimestamp = Date.now()
   const stringifiedPayload = crypto.safeStringify(payload)
   const tx = {
-    type: 'message',
+    type: "message",
     network,
     from: source.address,
     to: targetAddress,
-    chatId: crypto.hash([source.address, targetAddress].sort().join('')),
+    chatId: crypto.hash([source.address, targetAddress].sort().join("")),
     message: stringifiedPayload,
     amount: tollAmount,
     timestamp: messageTimestamp,
@@ -745,7 +748,7 @@ const broadcastMessage = async (text: string, source: WalletEntry, recipients: s
   const messages = []
   let requiredAmount = BigInt(0)
   for (let i = 0; i < recipients.length; i++) {
-    console.log('RECIP: ', recipients[i])
+    console.log("RECIP: ", recipients[i])
     const tgtAddress = await getAddress(recipients[i])
     if (tgtAddress === undefined || tgtAddress === null) {
       console.log("Target account doesn't exist for: ", recipients[i])
@@ -767,7 +770,7 @@ const broadcastMessage = async (text: string, source: WalletEntry, recipients: s
     requiredAmount += await getToll(tgtAddress, source.address)
   }
   const tx = {
-    type: 'broadcast',
+    type: "broadcast",
     network,
     messages: messages,
     srcAcc: source.address,
@@ -785,12 +788,12 @@ export const getHandle = async (address: string): Promise<string | null> => {
   if (host === undefined) {
     const randomHost = await getRandomHost()
     updateHost(`${randomHost.ip}:${randomHost.port}`)
-    console.log('getHandle', host)
+    console.log("getHandle", host)
   }
 
   const url = getProxyUrl(`/account/${address}/alias`)
   const { handle } = await getJSON(url)
-  console.log('getHandle', handle)
+  console.log("getHandle", handle)
   return handle
 }
 
@@ -816,32 +819,32 @@ const queryAccount = async (handle: string) => {
 }
 
 const queryProposals = async () => {
-  const { proposals } = await getJSON(getProxyUrl('/proposals'))
+  const { proposals } = await getJSON(getProxyUrl("/proposals"))
   return proposals
 }
 
 const queryDevProposals = async () => {
-  const { devProposals } = await getJSON(getProxyUrl('/proposals/dev'))
+  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev"))
   return devProposals
 }
 
 const queryLatestProposals = async () => {
-  const { proposals } = await getJSON(getProxyUrl('/proposals/latest'))
+  const { proposals } = await getJSON(getProxyUrl("/proposals/latest"))
   return proposals
 }
 
 const queryLatestDevProposals = async () => {
-  const { devProposals } = await getJSON(getProxyUrl('/proposals/dev/latest'))
+  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev/latest"))
   return devProposals
 }
 
 const getProposalCount = async (): Promise<number> => {
-  const { count } = await getJSON(getProxyUrl('/proposals/count'))
+  const { count } = await getJSON(getProxyUrl("/proposals/count"))
   return count ? count : 0
 }
 
 const getDevProposalCount = async (): Promise<number> => {
-  const { count } = await getJSON(getProxyUrl('/proposals/dev/count'))
+  const { count } = await getJSON(getProxyUrl("/proposals/dev/count"))
   return count ? count : 0
 }
 
@@ -884,10 +887,10 @@ const getDevProposalCount = async (): Promise<number> => {
 // };
 
 const sortByTimestamp = (list: unknown[], direction: string) => {
-  if (direction === 'desc') {
-    return orderBy(list, ['timestamp'], ['desc'])
+  if (direction === "desc") {
+    return orderBy(list, ["timestamp"], ["desc"])
   } else {
-    return orderBy(list, ['timestamp'], ['asc'])
+    return orderBy(list, ["timestamp"], ["asc"])
   }
 }
 
@@ -900,8 +903,8 @@ function isIosSafari() {
 }
 
 const queryParameters = async () => {
-  const { parameters, error } = await getJSON(getProxyUrl('/network/parameters'))
-  console.log('parameters', parameters)
+  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters"))
+  console.log("parameters", parameters)
   if (error) {
     return error
   } else {
@@ -910,7 +913,7 @@ const queryParameters = async () => {
 }
 
 const queryNodeParameters = async () => {
-  const { parameters, error } = await getJSON(getProxyUrl('/network/parameters/node'))
+  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters/node"))
   if (error) {
     return error
   } else {
@@ -919,42 +922,42 @@ const queryNodeParameters = async () => {
 }
 
 const queryIssues = async () => {
-  const { issues } = await getJSON(getProxyUrl('/issues'))
+  const { issues } = await getJSON(getProxyUrl("/issues"))
   return issues
 }
 
 const queryDevIssues = async () => {
-  const { devIssues } = await getJSON(getProxyUrl('/issues/dev'))
+  const { devIssues } = await getJSON(getProxyUrl("/issues/dev"))
   return devIssues
 }
 
 const queryLatestIssue = async () => {
-  const { issue } = await getJSON(getProxyUrl('/issues/latest'))
+  const { issue } = await getJSON(getProxyUrl("/issues/latest"))
   return issue
 }
 
 const queryLatestDevIssue = async () => {
-  const { devIssue } = await getJSON(getProxyUrl('/issues/dev/latest'))
+  const { devIssue } = await getJSON(getProxyUrl("/issues/dev/latest"))
   return devIssue
 }
 
 const getIssueCount = async () => {
-  const { count } = await getJSON(getProxyUrl('/issues/count'))
+  const { count } = await getJSON(getProxyUrl("/issues/count"))
   return count ? count : 0
 }
 
 const getDevIssueCount = async () => {
-  const { count } = await getJSON(getProxyUrl('/issues/dev/count'))
+  const { count } = await getJSON(getProxyUrl("/issues/dev/count"))
   // return res.data.devIssueCount
   return count ? count : 0
 }
 
 const iosCopyClipboard = (str: string) => {
-  const el = document.createElement('textarea')
+  const el = document.createElement("textarea")
   el.value = str
-  el.setAttribute('readonly', '')
-  el.style.position = 'absolute'
-  el.style.left = '-9999px'
+  el.setAttribute("readonly", "")
+  el.style.position = "absolute"
+  el.style.left = "-9999px"
 
   el.contentEditable = true
   el.readOnly = false
@@ -962,7 +965,7 @@ const iosCopyClipboard = (str: string) => {
   document.body.appendChild(el)
   const selected = document.getSelection().rangeCount > 0 ? document.getSelection().getRangeAt(0) : false
   el.select()
-  document.execCommand('copy')
+  document.execCommand("copy")
   document.body.removeChild(el)
   if (selected) {
     // If a selection existed before copying
@@ -977,20 +980,20 @@ const createProposal = async function (source: WalletEntry, newParameters) {
 
   if (issueCount >= 0 && proposalCount >= 0) {
     const proposalTx = {
-      type: 'proposal',
+      type: "proposal",
       network,
       from: source.address,
       proposal: crypto.hash(`issue-${issueCount}-proposal-${proposalCount + 1}`),
       issue: crypto.hash(`issue-${issueCount}`),
       parameters: newParameters,
-      description: newParameters.description || '',
+      description: newParameters.description || "",
       timestamp: Date.now(),
     }
     await signObj(proposalTx, source)
     return proposalTx
   } else {
-    if (!issueCount) throw new Error('Unable to get issue count')
-    else if (!proposalCount) throw new Error('Unable to get proposal count')
+    if (!issueCount) throw new Error("Unable to get issue count")
+    else if (!proposalCount) throw new Error("Unable to get proposal count")
   }
 }
 
@@ -998,7 +1001,7 @@ const createDevProposal = async function (source: WalletEntry, proposal: any) {
   let paymentCount
   let delay
 
-  if (proposal.paymentType === 'multiple') {
+  if (proposal.paymentType === "multiple") {
     paymentCount = proposal.paymentCount
     delay = proposal.delay
   } else {
@@ -1014,11 +1017,11 @@ const createDevProposal = async function (source: WalletEntry, proposal: any) {
     amount: BigInt(1) / BigInt(paymentCount),
     delay: delay * i,
   }))
-  console.log('Issue count:', issueCount)
-  console.log('Proposal count:', proposalCount)
+  console.log("Issue count:", issueCount)
+  console.log("Proposal count:", proposalCount)
   if (issueCount >= 0 && proposalCount >= 0) {
     const tx = {
-      type: 'dev_proposal',
+      type: "dev_proposal",
       network,
       from: source.address,
       devIssue: crypto.hash(`dev-issue-${issueCount}`),
@@ -1033,9 +1036,9 @@ const createDevProposal = async function (source: WalletEntry, proposal: any) {
     await signObj(tx, source)
     return tx
   } else {
-    if (!issueCount) throw new Error('Unable to get issue count')
+    if (!issueCount) throw new Error("Unable to get issue count")
     else if (!proposalCount && proposalCount !== 0) {
-      throw new Error('Unable to get dev proposal count')
+      throw new Error("Unable to get dev proposal count")
     }
   }
 }
@@ -1047,7 +1050,7 @@ const createEmailTx = async (email: string, source: WalletEntry) => {
   }
   await signObj(signedTx, source)
   const tx = {
-    type: 'email',
+    type: "email",
     network,
     signedTx,
     email: email,
@@ -1058,7 +1061,7 @@ const createEmailTx = async (email: string, source: WalletEntry) => {
 
 const createVerifyTx = async (code: string, source: WalletEntry) => {
   const tx = {
-    type: 'verify',
+    type: "verify",
     network,
     from: source.address,
     code: code,
@@ -1092,7 +1095,7 @@ const verifyEmail = async (code: string, source: WalletEntry) => {
 
 const getDifferentParameter = async (newParameters: any, currentParameters: any) => {
   const obj = {}
-  const excludeKeys = ['hash', 'id', 'timestamp']
+  const excludeKeys = ["hash", "id", "timestamp"]
   for (const key in newParameters) {
     if (excludeKeys.indexOf(key) >= 0) continue
     if (currentParameters[key] && currentParameters[key] !== newParameters[key]) {
@@ -1116,7 +1119,7 @@ const createVote = async (source: WalletEntry, proposalNumber = 1, approve = tru
   const issueCount = await getIssueCount()
   // const proposalCount = await const getProposalCount()
   const tx = {
-    type: 'vote',
+    type: "vote",
     network,
     from: source.address,
     issue: crypto.hash(`issue-${issueCount}`),
@@ -1132,7 +1135,7 @@ const createVote = async (source: WalletEntry, proposalNumber = 1, approve = tru
 const createDevVote = async (source: WalletEntry, proposalNumber = 1, amount = 50, approve = true) => {
   const devIssueCount = await getDevIssueCount()
   const tx = {
-    type: 'dev_vote',
+    type: "dev_vote",
     network,
     from: source.address,
     devIssue: crypto.hash(`dev-issue-${devIssueCount}`),
@@ -1156,18 +1159,18 @@ const submitVote = async (tx: unknown) => {
 }
 
 const fallbackCopyTextToClipboard = (text: string) => {
-  var textArea = document.createElement('textarea')
+  var textArea = document.createElement("textarea")
   textArea.value = text
   document.body.appendChild(textArea)
   textArea.focus()
   textArea.select()
 
   try {
-    var successful = document.execCommand('copy')
-    var msg = successful ? 'successful' : 'unsuccessful'
-    console.log('Fallback: Copying text command was ' + msg)
+    var successful = document.execCommand("copy")
+    var msg = successful ? "successful" : "unsuccessful"
+    console.log("Fallback: Copying text command was " + msg)
   } catch (err) {
-    console.error('Fallback: Oops, unable to copy', err)
+    console.error("Fallback: Oops, unable to copy", err)
   }
 
   document.body.removeChild(textArea)
@@ -1181,10 +1184,10 @@ export const copyTextToClipboard = (text: string) => {
   }
   navigator.clipboard.writeText(text).then(
     function () {
-      console.log('Async: Copying to clipboard was successful!')
+      console.log("Async: Copying to clipboard was successful!")
     },
     function (err) {
-      console.error('Async: Could not copy text: ', err)
+      console.error("Async: Could not copy text: ", err)
     }
   )
 }
@@ -1202,7 +1205,7 @@ const transferTokens = async (tgtHandle: string, amount: number, keys: WalletEnt
   const targetAddress = await getAddress(tgtHandle)
   const parameters = await queryParameters()
   const tx = {
-    type: 'transfer',
+    type: "transfer",
     from: keys.address,
     to: targetAddress,
     amount: BigInt(amount),
@@ -1229,34 +1232,34 @@ const playSoundFile = (soundFile: string) => {
 
 const updateBadge = (tabName: string, type: string) => {
   try {
-    const badgeElementList = document.querySelectorAll('.tabbar__badge.notification')
-    if (tabName === 'home') {
-      if (type === 'increase') {
+    const badgeElementList = document.querySelectorAll(".tabbar__badge.notification")
+    if (tabName === "home") {
+      if (type === "increase") {
         const currentBadgeCount = parseInt(badgeElementList[0].innerHTML || 0)
         badgeElementList[0].innerHTML = currentBadgeCount + 1
-      } else if (type === 'reset') {
-        badgeElementList[0].innerHTML = ''
+      } else if (type === "reset") {
+        badgeElementList[0].innerHTML = ""
       }
-    } else if (tabName === 'message') {
-      if (type === 'increase') {
+    } else if (tabName === "message") {
+      if (type === "increase") {
         const currentBadgeCount = parseInt(badgeElementList[1].innerHTML || 0)
         badgeElementList[1].innerHTML = currentBadgeCount + 1
-      } else if (type === 'reset') {
-        badgeElementList[1].innerHTML = ''
+      } else if (type === "reset") {
+        badgeElementList[1].innerHTML = ""
       }
-    } else if (tabName === 'funding') {
-      if (type === 'increase') {
+    } else if (tabName === "funding") {
+      if (type === "increase") {
         const currentBadgeCount = parseInt(badgeElementList[2].innerHTML || 0)
         badgeElementList[2].innerHTML = currentBadgeCount + 1
-      } else if (type === 'reset') {
-        badgeElementList[2].innerHTML = ''
+      } else if (type === "reset") {
+        badgeElementList[2].innerHTML = ""
       }
-    } else if (tabName === 'economy') {
-      if (type === 'increase') {
+    } else if (tabName === "economy") {
+      if (type === "increase") {
         const currentBadgeCount = parseInt(badgeElementList[3].innerHTML || 0)
         badgeElementList[3].innerHTML = currentBadgeCount + 1
-      } else if (type === 'reset') {
-        badgeElementList[3].innerHTML = ''
+      } else if (type === "reset") {
+        badgeElementList[3].innerHTML = ""
       }
     }
   } catch (e) {}
@@ -1273,10 +1276,10 @@ const queryEncryptedChats = async (chatId: string) => {
 }
 
 const isInitiator = (myAddress: string, otherPersonAddress: string) => {
-  console.log('isInitiator', myAddress, otherPersonAddress)
-  if (!myAddress || !otherPersonAddress) throw new Error('Invalid address in isInitiator')
+  console.log("isInitiator", myAddress, otherPersonAddress)
+  if (!myAddress || !otherPersonAddress) throw new Error("Invalid address in isInitiator")
   if (myAddress.length === 0 || otherPersonAddress.length === 0)
-    throw new Error('Invalid address length in isInitiator')
+    throw new Error("Invalid address length in isInitiator")
   const isInitiator = [myAddress, otherPersonAddress].sort()[0] === myAddress
   console.log(`isInitiator: ${isInitiator}`)
   return isInitiator
@@ -1292,16 +1295,16 @@ const calculateWholeCycleDuration = function (window: any, devWindow: any) {
 
 const isNodeOnline = async function () {
   try {
-    const res = await axios.get(getProxyUrl('/issues/count'))
+    const res = await axios.get(getProxyUrl("/issues/count"))
     if (res.status === 200) return true
   } catch (e) {
     console.warn(e.message)
-    if (e.message === 'Network Error') return false
+    if (e.message === "Network Error") return false
   }
 }
 
 const bytesArrayToHex = function (bytesArray: Uint8Array) {
-  return bytesArray.reduce((acc, byte) => acc + byte.toString(16).padStart(2, '0'), '')
+  return bytesArray.reduce((acc, byte) => acc + byte.toString(16).padStart(2, "0"), "")
 }
 
 const aliasId = function (handle: string) {

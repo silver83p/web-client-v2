@@ -1,12 +1,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { getAddress, createWallet, registerAlias, saveWallet, loadWallet } from '@/lib/utils'
+import { useApp } from '@/app/AppContext'
 
 export default function UsernamePage() {
   const router = useRouter()
+  const { dispatch } = useApp()
   const [username, setUsername] = useState('')
   const [availability, setAvailability] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
@@ -92,7 +94,8 @@ export default function UsernamePage() {
           if (fetchedAddress !== existingWallet.entry.address) {
             setAvailability('Username is on another network.')
           } else {
-            localStorage.setItem('authenticated', 'true')
+            dispatch({ type: 'AUTH', action: { type: 'SAVE_CREDENTIALS', payload: { username, walletEntry: existingWallet.entry } }})
+            dispatch({ type: 'AUTH', action: { type: 'LOGIN' }})
             router.push('/')
           }
         } else {
@@ -123,7 +126,7 @@ export default function UsernamePage() {
         if (isAccountCreated) {
           if (address === wallet.entry.address) {
             saveWallet(wallet)
-            localStorage.setItem('authenticated', 'true')
+            dispatch({ type: 'AUTH', action: { type: 'SAVE_CREDENTIALS', payload: { username, walletEntry: wallet.entry } }})
             router.push('/auth/recovery')
           } else {
             setAvailability('Account creation failed with the specified username. Please try again.')
