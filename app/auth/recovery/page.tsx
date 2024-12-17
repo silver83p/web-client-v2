@@ -15,10 +15,10 @@ import { useApp } from '@/app/AppContext';
 
 export default function RecoveryPage() {
   const router = useRouter();
-  const { state, dispatch } = useApp();
+  const { state, authActions } = useApp();
 
   const handleContinue = () => {
-    dispatch({ type: 'AUTH', action: { type: 'LOGIN' }})
+    authActions.login(state.auth.walletEntry.address)
     router.push('/');
   };
 

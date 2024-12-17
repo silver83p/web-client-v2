@@ -126,6 +126,7 @@ const getProxyUrl = (url: string, option?: any) => {
 const getProxyUrlWithRandomHost = async function (url: string) {
   const randomHost = await getRandomHost()
   const { ip, port } = randomHost
+  updateHost(`${ip}:${port}`)
   if (ip === "localhost" || ip === "127.0.0.1") {
     return `http://localhost:${port}${url}`
   }
@@ -368,8 +369,12 @@ const injectTx = async (tx: unknown) => {
   }
 }
 
-const getAccountData = async (id: string) => {
+export const getAccountData = async (id: string) => {
   try {
+    if (host === undefined) {
+      const randomHost = await getRandomHost()
+      updateHost(`${randomHost.ip}:${randomHost.port}`)
+    }
     const accountData = await getJSON(getAccountUrl(id))
     return accountData
   } catch (err) {

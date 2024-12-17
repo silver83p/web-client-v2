@@ -1,10 +1,14 @@
+'use client'
+
 import { WalletTabs } from '@/components/wallet/wallet-tabs'
 import { TokenBalance } from '@/components/wallet/token-balance'
 import { WalletActions } from '@/components/wallet/wallet-actions'
 import { Avatar } from '@/components/ui/avatar'
 import { BottomNav } from '@/components/bottom-nav'
+import { useApp } from '@/app/AppContext'
 
 export default function WalletPage() {
+  const { state } = useApp();
   return (
     <>
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden scrollbar-thin">
@@ -27,7 +31,7 @@ export default function WalletPage() {
 
           <div className="px-4">
             <WalletTabs />
-            <TokenBalance symbol="LIB" amount="87.041" usdValue="15.88" percentageChange="1.59" />
+            <TokenBalance symbol="LIB" amount={state.auth.accountData.data.balance.toString()} usdValue="15.88" percentageChange="1.59" />
             <WalletActions />
           </div>
         </div>

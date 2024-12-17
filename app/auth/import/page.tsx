@@ -17,7 +17,7 @@ export default function ImportPage() {
   const [isChecking, setIsChecking] = useState(false)
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
 
-  const { dispatch } = useApp()
+  const { authActions } = useApp()
 
   const checkAccountCreation = async (
     username: string
@@ -109,11 +109,8 @@ export default function ImportPage() {
       if (isAccountCreated) {
         if (address === wallet.entry.address) {
           saveWallet(wallet)
-          dispatch({
-            type: "AUTH",
-            action: { type: "SAVE_CREDENTIALS", payload: { username, walletEntry: wallet.entry } },
-          })
-          dispatch({ type: "AUTH", action: { type: "LOGIN" } })
+          authActions.saveCredentials(username, wallet.entry)
+          authActions.login(wallet.entry.address)
           router.push("/")
         } else {
           setAvailability("Account creation failed with the specified username. Please try again.")
@@ -132,11 +129,8 @@ export default function ImportPage() {
         setIsRegistered(true)
         setUsername(handle)
         saveWallet({ handle, entry })
-        dispatch({
-          type: "AUTH",
-          action: { type: "SAVE_CREDENTIALS", payload: { username: handle, walletEntry: entry } },
-        })
-        dispatch({ type: "AUTH", action: { type: "LOGIN" } })
+        authActions.saveCredentials(handle, entry)
+        authActions.login(entry.address)
         router.push("/")
         return
       }

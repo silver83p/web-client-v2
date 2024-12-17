@@ -8,7 +8,7 @@ import { useApp } from '@/app/AppContext'
 
 export default function UsernamePage() {
   const router = useRouter()
-  const { dispatch } = useApp()
+  const { authActions } = useApp()
   const [username, setUsername] = useState('')
   const [availability, setAvailability] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
@@ -94,8 +94,8 @@ export default function UsernamePage() {
           if (fetchedAddress !== existingWallet.entry.address) {
             setAvailability('Username is on another network.')
           } else {
-            dispatch({ type: 'AUTH', action: { type: 'SAVE_CREDENTIALS', payload: { username, walletEntry: existingWallet.entry } }})
-            dispatch({ type: 'AUTH', action: { type: 'LOGIN' }})
+            authActions.saveCredentials(username, existingWallet.entry)
+            authActions.login(existingWallet.entry.address)
             router.push('/')
           }
         } else {
@@ -126,7 +126,7 @@ export default function UsernamePage() {
         if (isAccountCreated) {
           if (address === wallet.entry.address) {
             saveWallet(wallet)
-            dispatch({ type: 'AUTH', action: { type: 'SAVE_CREDENTIALS', payload: { username, walletEntry: wallet.entry } }})
+            authActions.saveCredentials(username, wallet.entry)
             router.push('/auth/recovery')
           } else {
             setAvailability('Account creation failed with the specified username. Please try again.')
