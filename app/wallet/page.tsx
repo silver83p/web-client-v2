@@ -23,15 +23,15 @@ export default function WalletPage() {
                   className="object-cover"
                 />
               </Avatar>
-              <h2 className="text-xl font-semibold">Ingamells</h2>
-              <p className="text-gray-500">@ingamells</p>
+              <h2 className="text-xl font-semibold">{state.auth.username}</h2>
+              <p className="text-gray-500">{state.auth.username}</p>
               <button className="mt-4 text-gray-600 bg-gray-100 px-8 py-2 rounded-lg">Copy</button>
             </div>
           </header>
 
           <div className="px-4">
             <WalletTabs />
-            <TokenBalance symbol="LIB" amount={state.auth.accountData.data.balance.toString()} usdValue="15.88" percentageChange="1.59" />
+            <TokenBalance symbol="LIB" amount={state.auth.accountData?.data?.balance?.toString()} usdValue="15.88" percentageChange="1.59" />
             <WalletActions />
           </div>
         </div>

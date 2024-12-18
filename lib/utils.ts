@@ -39,10 +39,7 @@ export type WalletInfo = {
 }
 
 let host: string
-const defaultSeedNode = `${config.archiver.ip}:${config.archiver.port}`
-console.log("defaultSeedNode", defaultSeedNode)
-const storedSeedNode = localStorage.getItem("seednode")
-const seedNodeHost = storedSeedNode || defaultSeedNode
+const seedNodeHost =`${config.archiver.ip}:${config.archiver.port}`
 const walletEntries: { [handle: string]: WalletEntry } = {}
 const network = "0".repeat(64)
 const verboseLogs = false
@@ -157,7 +154,6 @@ const getRandomHost = async () => {
 
 const updateSeedNodeHostLocally = async (ip: string, port: string) => {
   const seedNodeHost = `${ip}:${port}`
-  // eslint-disable-next-line no-undef
   localStorage.setItem("seednode", seedNodeHost)
 }
 
@@ -244,7 +240,7 @@ const signObj = async (tx: object, source: WalletEntry) => {
   }
 }
 
-const signEthereumTx = async (tx: object & { sign: { owner: string; sig: string } }, source: WalletEntry) => {
+const signEthereumTx = async (tx: any , source: WalletEntry) => {
   console.log(`signEthereumTx`, source)
   if (source == null || source.keys == null) {
     throw new Error("Keys are required for signing")
@@ -294,7 +290,6 @@ export const saveWallet = (newWalletEntry: WalletInfo) => {
 
 export const loadWallet = (username: string): WalletInfo | undefined => {
   try {
-    // eslint-disable-next-line no-undef
     const loadedEntries = localStorage.getItem("wallets")
     if (loadedEntries === null) {
       return undefined
@@ -308,9 +303,12 @@ export const loadWallet = (username: string): WalletInfo | undefined => {
 
 const loadLastMessage = (username: string) => {
   try {
-    // eslint-disable-next-line no-undef
+
     const loadedEntries = localStorage.getItem("lastMessage")
-    const lastMessage = crypto.safeJsonParse(loadedEntries)
+    if (loadedEntries === null) {
+      return null
+    }
+    const lastMessage = crypto.safeJsonParse(loadedEntries) as any
     return lastMessage[username]
   } catch (e) {
     return null
@@ -319,9 +317,12 @@ const loadLastMessage = (username: string) => {
 
 const loadLastTx = (username: string) => {
   try {
-    // eslint-disable-next-line no-undef
+
     const loadedEntries = localStorage.getItem("lastTx")
-    const lastTx = crypto.safeJsonParse(loadedEntries)
+    if (loadedEntries === null) {
+      return null
+    }
+    const lastTx = crypto.safeJsonParse(loadedEntries) as any
     return lastTx[username]
   } catch (e) {
     return null
@@ -358,14 +359,25 @@ const postJSON = async (url: string, obj: unknown) => {
   return response.data
 }
 
-const injectTx = async (tx: unknown) => {
+const injectTx = async (tx: unknown) : Promise< { result?: any, error?: any }> => {
   try {
     const data = crypto.safeStringify(tx)
     const res = await makeJsonRpcRequest(LIB_RRC_METHODS.SEND_TRANSACTION, [data])
     return { result: res }
-  } catch (err: unknown) {
+  } catch (err) {
     console.warn(err)
-    return err.message
+    return { error: err }
+  }
+}
+
+const newInjectTx = async (tx: unknown) : Promise< { success: boolean, result?: any, error?: any }> => {
+  try {
+    const data = crypto.safeStringify(tx)
+    const res = await makeJsonRpcRequest(LIB_RRC_METHODS.SEND_TRANSACTION, [data])
+    return { success: true, result: res }
+  } catch (err) {
+    console.warn(err)
+    return { success: false, error: err }
   }
 }
 
@@ -378,16 +390,20 @@ export const getAccountData = async (id: string) => {
     const accountData = await getJSON(getAccountUrl(id))
     return accountData
   } catch (err) {
-    return err.message
+    console.log(err)
+    return null
   }
 }
 
 const getToll = async (friendId: string, yourId: string): Promise<bigint> => {
   try {
-    const { toll } = await getJSON(getProxyUrl(`/account/${friendId}/${yourId}/toll`))
+    const { toll } = await getJSON(getProxyUrl(`/account/${friendId}/${yourId}/toll`)) as {
+      toll: bigint
+    }
     return toll || BigInt(0)
   } catch (err) {
-    return err.message
+    console.log(err)
+    return BigInt(0)
   }
 }
 
@@ -397,7 +413,7 @@ export const getAddress = async (handle: string): Promise<string | null> => {
     const randomUrl = await getProxyUrlWithRandomHost(`/address/${crypto.hash(handle)}`)
     const data = await getJSON(randomUrl)
     console.log("getAddress", randomUrl, data)
-    const { address, error } = data
+    const { address, error } = data as { address: string; error: string }
     if (error) {
       console.log(error)
       console.log(`Error while getting address for ${handle}`)
@@ -412,11 +428,11 @@ export const getAddress = async (handle: string): Promise<string | null> => {
 
 const getAccountPublicKey = async (address: string): Promise<string | null> => {
   try {
-    const account = await getAccountData(address)
+    const account = await getAccountData(address) as any
     console.log(`getAccountPublicKey`, account)
-    return account.account.publicKey
+    return account?.account?.publicKey
   } catch (e) {
-    console.log(`Error while getting public key for ${address}`, e.message)
+    console.log(`Error while getting public key for ${address}`, e)
     return null
   }
 }
@@ -449,6 +465,7 @@ const makeJsonRpcRequest = async (method: string, params: unknown[] = []) => {
       headers: {
         "Access-Control-Allow-Origin": "*",
       },
+      timeout: 5000,
     })
     const responseData = response.data
 
@@ -461,17 +478,18 @@ const makeJsonRpcRequest = async (method: string, params: unknown[] = []) => {
     }
   } catch (error) {
     console.error("makeJsonRpcRequest Error:", method, error)
-    throw new Error(error)
+    throw new Error(`makeJsonRpcRequest Error: ${error instanceof Error ? error.message : error}`)
   }
 }
 
 const pollMessages = async (from: string, to: string, timestamp: number) => {
   try {
     const url = getProxyUrl(`/messages/${to}/${from}`)
-    const { messages } = await getJSON(url)
+    const { messages } = await getJSON(url) as { messages: string[] }
     return messages
   } catch (err) {
-    return err.message
+    console.log(err)
+    return []
   }
 }
 
@@ -529,9 +547,9 @@ export const importWallet = async (sk: string): Promise<{ handle: string; entry:
 const listWallet = (name: string): void => {
   const wallet = walletEntries[name]
   if (typeof wallet !== "undefined" && wallet !== null) {
-    console.log(`${crypto.safeStringify(wallet, null, 2)}`)
+    console.log(`${crypto.safeStringify(wallet)}`)
   } else {
-    console.log(`${crypto.safeStringify(walletEntries, null, 2)}`)
+    console.log(`${crypto.safeStringify(walletEntries)}`)
   }
 }
 
@@ -797,7 +815,7 @@ export const getHandle = async (address: string): Promise<string | null> => {
   }
 
   const url = getProxyUrl(`/account/${address}/alias`)
-  const { handle } = await getJSON(url)
+  const { handle } = await getJSON(url) as { handle: string }
   console.log("getHandle", handle)
   return handle
 }
@@ -824,32 +842,32 @@ const queryAccount = async (handle: string) => {
 }
 
 const queryProposals = async () => {
-  const { proposals } = await getJSON(getProxyUrl("/proposals"))
+  const { proposals } = await getJSON(getProxyUrl("/proposals")) as { proposals: any[] }
   return proposals
 }
 
 const queryDevProposals = async () => {
-  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev"))
+  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev")) as { devProposals: any[] }
   return devProposals
 }
 
 const queryLatestProposals = async () => {
-  const { proposals } = await getJSON(getProxyUrl("/proposals/latest"))
+  const { proposals } = await getJSON(getProxyUrl("/proposals/latest")) as { proposals: any[] }
   return proposals
 }
 
 const queryLatestDevProposals = async () => {
-  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev/latest"))
+  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev/latest")) as { devProposals: any[] }
   return devProposals
 }
 
 const getProposalCount = async (): Promise<number> => {
-  const { count } = await getJSON(getProxyUrl("/proposals/count"))
+  const { count } = await getJSON(getProxyUrl("/proposals/count")) as { count: number }
   return count ? count : 0
 }
 
 const getDevProposalCount = async (): Promise<number> => {
-  const { count } = await getJSON(getProxyUrl("/proposals/dev/count"))
+  const { count } = await getJSON(getProxyUrl("/proposals/dev/count")) as { count: number }
   return count ? count : 0
 }
 
@@ -907,8 +925,24 @@ function isIosSafari() {
   return iOSSafari
 }
 
-const queryParameters = async () => {
-  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters"))
+export const queryParameters = async () => {
+  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters")) as {
+    parameters: any
+    error: string
+  }
+  console.log("parameters", parameters)
+  if (error) {
+    console.log(error)
+    return null
+  }
+  return parameters
+}
+
+const queryNodeParameters = async () => {
+  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters/node")) as {
+    parameters: any
+    error: string
+  }
   console.log("parameters", parameters)
   if (error) {
     return error
@@ -917,48 +951,39 @@ const queryParameters = async () => {
   }
 }
 
-const queryNodeParameters = async () => {
-  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters/node"))
-  if (error) {
-    return error
-  } else {
-    return parameters
-  }
-}
-
 const queryIssues = async () => {
-  const { issues } = await getJSON(getProxyUrl("/issues"))
+  const { issues } = await getJSON(getProxyUrl("/issues")) as { issues: any[] }
   return issues
 }
 
 const queryDevIssues = async () => {
-  const { devIssues } = await getJSON(getProxyUrl("/issues/dev"))
+  const { devIssues } = await getJSON(getProxyUrl("/issues/dev")) as { devIssues: any[] }
   return devIssues
 }
 
 const queryLatestIssue = async () => {
-  const { issue } = await getJSON(getProxyUrl("/issues/latest"))
+  const { issue } = await getJSON(getProxyUrl("/issues/latest")) as { issue: any }
   return issue
 }
 
 const queryLatestDevIssue = async () => {
-  const { devIssue } = await getJSON(getProxyUrl("/issues/dev/latest"))
+  const { devIssue } = await getJSON(getProxyUrl("/issues/dev/latest")) as { devIssue: any }
   return devIssue
 }
 
 const getIssueCount = async () => {
-  const { count } = await getJSON(getProxyUrl("/issues/count"))
+  const { count } = await getJSON(getProxyUrl("/issues/count")) as { count: number }
   return count ? count : 0
 }
 
 const getDevIssueCount = async () => {
-  const { count } = await getJSON(getProxyUrl("/issues/dev/count"))
+  const { count } = await getJSON(getProxyUrl("/issues/dev/count")) as { count: number }
   // return res.data.devIssueCount
   return count ? count : 0
 }
 
 const iosCopyClipboard = (str: string) => {
-  const el = document.createElement("textarea")
+  const el:any = document.createElement("textarea")
   el.value = str
   el.setAttribute("readonly", "")
   el.style.position = "absolute"
@@ -968,18 +993,163 @@ const iosCopyClipboard = (str: string) => {
   el.readOnly = false
 
   document.body.appendChild(el)
-  const selected = document.getSelection().rangeCount > 0 ? document.getSelection().getRangeAt(0) : false
+  const selection: any = document.getSelection()
+  const selected = selection ? (selection.rangeCount > 0 ? selection.getRangeAt(0) : false) : false
   el.select()
   document.execCommand("copy")
   document.body.removeChild(el)
   if (selected) {
     // If a selection existed before copying
-    document.getSelection().removeAllRanges()
-    document.getSelection().addRange(selected)
+    selection.removeAllRanges()
+    selection.addRange(selected)
   }
 }
 
-const createProposal = async function (source: WalletEntry, newParameters) {
+export const copyTextToClipboard = (text: string) => {
+  if (!navigator.clipboard) {
+    console.log("Navigator.clipboard doesn't exist")
+    fallbackCopyTextToClipboard(text)
+    return
+  }
+  navigator.clipboard.writeText(text).then(
+    function () {
+      console.log("Async: Copying to clipboard was successful!")
+    },
+    function (err) {
+      console.error("Async: Could not copy text: ", err)
+    }
+  )
+}
+
+const fallbackCopyTextToClipboard = (text: string) => {
+  var textArea = document.createElement("textarea")
+  textArea.value = text
+  document.body.appendChild(textArea)
+  textArea.focus()
+  textArea.select()
+
+  try {
+    var successful = document.execCommand("copy")
+    var msg = successful ? "successful" : "unsuccessful"
+    console.log("Fallback: Copying text command was " + msg)
+  } catch (err) {
+    console.error("Fallback: Oops, unable to copy", err)
+  }
+
+  document.body.removeChild(textArea)
+}
+
+const copyToClipboard = (text: string) => {
+  console.log(`is IOS Safari ${isIosSafari()}`)
+  if (isIosSafari()) {
+    iosCopyClipboard(text)
+    return
+  }
+  return copyTextToClipboard(text)
+}
+
+export const transferTokens = async (targetAddress: string, amount: string, fee: bigint, keys: WalletEntry): Promise< { success: boolean, result?: any, error?: any }> => {
+  const tx = {
+    type: "transfer",
+    from: keys.address,
+    to: targetAddress,
+    amount: BigInt(amount),
+    timestamp: Date.now(),
+    network,
+    fee,
+  }
+  await signObj(tx, keys)
+  console.log(tx)
+  return newInjectTx(tx)
+}
+
+const playSoundFile = (soundFile: string) => {
+  const audio = new Audio(soundFile)
+  audio.play()
+}
+
+const updateBadge = (tabName: string, type: string) => {
+  try {
+    const badgeElementList = document.querySelectorAll(".tabbar__badge.notification") as any
+    if (tabName === "home") {
+      if (type === "increase") {
+        const currentBadgeCount = parseInt(badgeElementList[0].innerHTML || 0)
+        badgeElementList[0].innerHTML = currentBadgeCount + 1
+      } else if (type === "reset") {
+        badgeElementList[0].innerHTML = ""
+      }
+    } else if (tabName === "message") {
+      if (type === "increase") {
+        const currentBadgeCount = parseInt(badgeElementList[1].innerHTML || 0)
+        badgeElementList[1].innerHTML = currentBadgeCount + 1
+      } else if (type === "reset") {
+        badgeElementList[1].innerHTML = ""
+      }
+    } else if (tabName === "funding") {
+      if (type === "increase") {
+        const currentBadgeCount = parseInt(badgeElementList[2].innerHTML || 0)
+        badgeElementList[2].innerHTML = currentBadgeCount + 1
+      } else if (type === "reset") {
+        badgeElementList[2].innerHTML = ""
+      }
+    } else if (tabName === "economy") {
+      if (type === "increase") {
+        const currentBadgeCount = parseInt(badgeElementList[3].innerHTML || 0)
+        badgeElementList[3].innerHTML = currentBadgeCount + 1
+      } else if (type === "reset") {
+        badgeElementList[3].innerHTML = ""
+      }
+    }
+  } catch (e) {}
+}
+
+const queryEncryptedChats = async (chatId: string) => {
+  try {
+    const res = await axios.get(getProxyUrl(`/messages/${chatId}`))
+    console.log(res.data)
+    return res.data.messages.map((m: string) => crypto.safeJsonParse(m))
+  } catch (e) {
+    return []
+  }
+}
+
+const isInitiator = (myAddress: string, otherPersonAddress: string) => {
+  console.log("isInitiator", myAddress, otherPersonAddress)
+  if (!myAddress || !otherPersonAddress) throw new Error("Invalid address in isInitiator")
+  if (myAddress.length === 0 || otherPersonAddress.length === 0)
+    throw new Error("Invalid address length in isInitiator")
+  const isInitiator = [myAddress, otherPersonAddress].sort()[0] === myAddress
+  console.log(`isInitiator: ${isInitiator}`)
+  return isInitiator
+}
+
+const calculateWholeCycleDuration = function (window: any, devWindow: any) {
+  if (window.proposalWindow && devWindow.devApplyWindow) {
+    return devWindow.devApplyWindow[1] - window.proposalWindow[0]
+  } else {
+    return 1000 * 60 * 7
+  }
+}
+
+const isNodeOnline = async function () {
+  try {
+    const res = await axios.get(getProxyUrl("/issues/count"))
+    if (res.status === 200) return true
+  } catch (e) {
+    console.warn(e)
+    if (e=== "Network Error") return false
+  }
+}
+
+const bytesArrayToHex = function (bytesArray: Uint8Array) {
+  return bytesArray.reduce((acc, byte) => acc + byte.toString(16).padStart(2, "0"), "")
+}
+
+const aliasId = function (handle: string) {
+  return crypto.hash(handle)
+}
+
+const createProposal = async function (source: WalletEntry, newParameters: any) {
   const issueCount = await getIssueCount()
   const proposalCount = await getProposalCount()
 
@@ -1003,8 +1173,8 @@ const createProposal = async function (source: WalletEntry, newParameters) {
 }
 
 const createDevProposal = async function (source: WalletEntry, proposal: any) {
-  let paymentCount
-  let delay
+  let paymentCount: number
+  let delay: number
 
   if (proposal.paymentType === "multiple") {
     paymentCount = proposal.paymentCount
@@ -1099,7 +1269,7 @@ const verifyEmail = async (code: string, source: WalletEntry) => {
 }
 
 const getDifferentParameter = async (newParameters: any, currentParameters: any) => {
-  const obj = {}
+  const obj: any = {}
   const excludeKeys = ["hash", "id", "timestamp"]
   for (const key in newParameters) {
     if (excludeKeys.indexOf(key) >= 0) continue
@@ -1161,157 +1331,4 @@ const submitVote = async (tx: unknown) => {
       else resolve(false)
     })
   })
-}
-
-const fallbackCopyTextToClipboard = (text: string) => {
-  var textArea = document.createElement("textarea")
-  textArea.value = text
-  document.body.appendChild(textArea)
-  textArea.focus()
-  textArea.select()
-
-  try {
-    var successful = document.execCommand("copy")
-    var msg = successful ? "successful" : "unsuccessful"
-    console.log("Fallback: Copying text command was " + msg)
-  } catch (err) {
-    console.error("Fallback: Oops, unable to copy", err)
-  }
-
-  document.body.removeChild(textArea)
-}
-
-export const copyTextToClipboard = (text: string) => {
-  if (!navigator.clipboard) {
-    console.log("Navigator.clipboard doesn't exist")
-    fallbackCopyTextToClipboard(text)
-    return
-  }
-  navigator.clipboard.writeText(text).then(
-    function () {
-      console.log("Async: Copying to clipboard was successful!")
-    },
-    function (err) {
-      console.error("Async: Could not copy text: ", err)
-    }
-  )
-}
-
-const copyToClipboard = (text: string) => {
-  console.log(`is IOS Safari ${isIosSafari()}`)
-  if (isIosSafari()) {
-    iosCopyClipboard(text)
-    return
-  }
-  return copyTextToClipboard(text)
-}
-
-const transferTokens = async (tgtHandle: string, amount: number, keys: WalletEntry) => {
-  const targetAddress = await getAddress(tgtHandle)
-  const parameters = await queryParameters()
-  const tx = {
-    type: "transfer",
-    from: keys.address,
-    to: targetAddress,
-    amount: BigInt(amount),
-    timestamp: Date.now(),
-    network,
-    fee: parameters.current.transactionFee || BigInt(1),
-  }
-  await signObj(tx, keys)
-  console.log(tx)
-  return new Promise((resolve) => {
-    injectTx(tx).then((res) => {
-      console.log(res)
-      if (res.result.success) resolve(true)
-      else resolve(false)
-    })
-  })
-}
-
-const playSoundFile = (soundFile: string) => {
-  // eslint-disable-next-line no-undef
-  const audio = new Audio(soundFile)
-  audio.play()
-}
-
-const updateBadge = (tabName: string, type: string) => {
-  try {
-    const badgeElementList = document.querySelectorAll(".tabbar__badge.notification")
-    if (tabName === "home") {
-      if (type === "increase") {
-        const currentBadgeCount = parseInt(badgeElementList[0].innerHTML || 0)
-        badgeElementList[0].innerHTML = currentBadgeCount + 1
-      } else if (type === "reset") {
-        badgeElementList[0].innerHTML = ""
-      }
-    } else if (tabName === "message") {
-      if (type === "increase") {
-        const currentBadgeCount = parseInt(badgeElementList[1].innerHTML || 0)
-        badgeElementList[1].innerHTML = currentBadgeCount + 1
-      } else if (type === "reset") {
-        badgeElementList[1].innerHTML = ""
-      }
-    } else if (tabName === "funding") {
-      if (type === "increase") {
-        const currentBadgeCount = parseInt(badgeElementList[2].innerHTML || 0)
-        badgeElementList[2].innerHTML = currentBadgeCount + 1
-      } else if (type === "reset") {
-        badgeElementList[2].innerHTML = ""
-      }
-    } else if (tabName === "economy") {
-      if (type === "increase") {
-        const currentBadgeCount = parseInt(badgeElementList[3].innerHTML || 0)
-        badgeElementList[3].innerHTML = currentBadgeCount + 1
-      } else if (type === "reset") {
-        badgeElementList[3].innerHTML = ""
-      }
-    }
-  } catch (e) {}
-}
-
-const queryEncryptedChats = async (chatId: string) => {
-  try {
-    const res = await axios.get(getProxyUrl(`/messages/${chatId}`))
-    console.log(res.data)
-    return res.data.messages.map((m: string) => crypto.safeJsonParse(m))
-  } catch (e) {
-    return []
-  }
-}
-
-const isInitiator = (myAddress: string, otherPersonAddress: string) => {
-  console.log("isInitiator", myAddress, otherPersonAddress)
-  if (!myAddress || !otherPersonAddress) throw new Error("Invalid address in isInitiator")
-  if (myAddress.length === 0 || otherPersonAddress.length === 0)
-    throw new Error("Invalid address length in isInitiator")
-  const isInitiator = [myAddress, otherPersonAddress].sort()[0] === myAddress
-  console.log(`isInitiator: ${isInitiator}`)
-  return isInitiator
-}
-
-const calculateWholeCycleDuration = function (window: any, devWindow: any) {
-  if (window.proposalWindow && devWindow.devApplyWindow) {
-    return devWindow.devApplyWindow[1] - window.proposalWindow[0]
-  } else {
-    return 1000 * 60 * 7
-  }
-}
-
-const isNodeOnline = async function () {
-  try {
-    const res = await axios.get(getProxyUrl("/issues/count"))
-    if (res.status === 200) return true
-  } catch (e) {
-    console.warn(e.message)
-    if (e.message === "Network Error") return false
-  }
-}
-
-const bytesArrayToHex = function (bytesArray: Uint8Array) {
-  return bytesArray.reduce((acc, byte) => acc + byte.toString(16).padStart(2, "0"), "")
-}
-
-const aliasId = function (handle: string) {
-  return crypto.hash(handle)
 }

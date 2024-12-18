@@ -55,7 +55,7 @@ export default function RecoveryPage() {
           </p>
         ))} */}
         <p className="text-center text-gray-800 my-1 break-all">
-            {getPrivateKeyHex(state.auth.walletEntry.keys.privateKey)}
+            {state.auth.walletEntry?.keys?.privateKey ? getPrivateKeyHex(state.auth.walletEntry?.keys?.privateKey) : ''}
           </p>
       </div>
 

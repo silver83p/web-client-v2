@@ -1,4 +1,4 @@
-import { getAccountData, getAddress, WalletEntry } from "@/lib/utils";
+import { WalletEntry } from "@/lib/utils";
 
 export type AuthState = {
     isLoggedIn: boolean;
@@ -29,6 +29,7 @@ export type AuthState = {
           case 'LOGOUT':
             return { ...initialAuthState };
           case 'SAVE_ACCOUNT_DATA':
+            console.log("action.payload", action.payload, state)
             return { ...state, accountData: action.payload };
           default:
             return state;
