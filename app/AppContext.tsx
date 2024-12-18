@@ -9,7 +9,7 @@ import { authActions } from '@/store/actions/authActions';
 import { messageActions } from '@/store/actions/messageActions';
 import { networkParamsActions } from '@/store/actions/networkParamsActions';
 
-import { initializeShardusCrypto, loadWallet } from "@/lib/utils"
+import { getPrivateKeyHex, initializeShardusCrypto, loadWallet } from "@/lib/utils"
 
 
 export type AppState = {

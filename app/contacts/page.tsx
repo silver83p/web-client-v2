@@ -1,9 +1,17 @@
+'use client'
+
 import { SearchBar } from '@/components/search-bar'
 import { ContactList } from '@/components/contact-list'
 import { AddFriendButton } from '@/components/add-friend-button'
 import { BottomNav } from '@/components/bottom-nav'
+import { useRouter } from 'next/navigation'
 
 export default function ContactsPage() {
+  const router = useRouter()
+  const addFriend = () => {
+    router.push('/contacts/friend')
+  }
+
   return (
     <>
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden scrollbar-thin">
@@ -28,7 +36,7 @@ export default function ContactsPage() {
           </header>
           <ContactList />
           <div className="absolute bottom-24 right-5">
-            <AddFriendButton />
+            <AddFriendButton onClick={addFriend} />
           </div>
         </div>
       </div>

@@ -232,15 +232,21 @@ const toShardusAddress = (addressStr: string) => {
   return addressStr.slice(2).toLowerCase() + "0".repeat(24)
 }
 
-const signObj = async (tx: object, source: WalletEntry) => {
+export const toEthereumAddress = (addressStr: string) => {
+  //  change this: 665eab3be2472e83e3100b4233952a16eed20c76000000000000000000000000
+  //  to this: 0x665eab3be2472e83e3100b4233952a16eed20c76
+  return "0x" + addressStr.slice(0, 40)
+}
+
+const signObj = (tx: object, source: WalletEntry) => {
   if (config.useEthereumAddress) {
-    await signEthereumTx(tx, source)
+    signEthereumTx(tx, source)
   } else {
     crypto.signObj(tx, source.keys.privateKey as string, source.keys.publicKey as string)
   }
 }
 
-const signEthereumTx = async (tx: any , source: WalletEntry) => {
+const signEthereumTx = (tx: any , source: WalletEntry) => {
   console.log(`signEthereumTx`, source)
   if (source == null || source.keys == null) {
     throw new Error("Keys are required for signing")
@@ -254,7 +260,7 @@ const signEthereumTx = async (tx: any , source: WalletEntry) => {
     const wallet = new ethers.Wallet(getPrivateKeyHex(source.keys.privateKey as string))
 
     // Sign the message
-    const signature = await wallet.signMessage(message)
+    const signature = wallet.signMessageSync(message)
 
     // Add signature to transaction
     tx.sign = {
@@ -562,7 +568,7 @@ export const registerAlias = async (handle: string, source: WalletEntry) => {
     publicKey: ethers.hexlify(source.keys.publicKey).slice(2),
     timestamp: Date.now(),
   }
-  await signObj(tx, source)
+  signObj(tx, source)
   console.log("register tx", tx)
   return new Promise((resolve) => {
     injectTx(tx)
@@ -581,33 +587,17 @@ export const registerAlias = async (handle: string, source: WalletEntry) => {
   })
 }
 
-const addFriend = async (tgt: string, keys: WalletEntry) => {
-  console.log(tgt)
-  const targetAddress = await getAddress(tgt)
-  if (targetAddress === undefined || targetAddress === null) {
-    console.log("Target account doesn't exist for: ", tgt)
-    return
-  }
+export const addFriend = async (targetUsername: string, targetAddress: string, keys: WalletEntry): Promise< { success: boolean, result?: any, error?: any }> => {
   const tx = {
     type: "friend",
     network,
-    alias: tgt,
+    alias: targetUsername,
     from: keys.address,
     to: targetAddress,
-    amount: BigInt(1),
     timestamp: Date.now(),
   }
-  await signObj(tx, keys)
-  return new Promise((resolve) => {
-    injectTx(tx).then((res) => {
-      console.log(res)
-      if (res.result.success) {
-        resolve(true)
-      } else {
-        resolve(false)
-      }
-    })
-  })
+  signObj(tx, keys)
+  return newInjectTx(tx)
 }
 
 const removeFriend = async (tgt: string, keys: WalletEntry) => {
@@ -625,7 +615,7 @@ const removeFriend = async (tgt: string, keys: WalletEntry) => {
     amount: BigInt(1),
     timestamp: Date.now(),
   }
-  await signObj(tx, keys)
+  signObj(tx, keys)
   return new Promise((resolve) => {
     injectTx(tx).then((res) => {
       console.log(res)
@@ -645,7 +635,7 @@ const claimTokens = async (keys: WalletEntry) => {
     srcAcc: keys.address,
     timestamp: Date.now(),
   }
-  await signObj(tx, keys)
+  signObj(tx, keys)
   return new Promise((resolve) => {
     injectTx(tx).then((res) => {
       console.log(res)
@@ -666,7 +656,7 @@ const setToll = async (toll: number, keys: WalletEntry) => {
     toll: BigInt(toll),
     timestamp: Date.now(),
   }
-  await signObj(tx, keys)
+  signObj(tx, keys)
   console.log(tx)
   return new Promise((resolve) => {
     injectTx(tx).then((res) => {
@@ -690,7 +680,7 @@ const depositStake = async (nominee: string, stake: number, keys: WalletEntry) =
     timestamp: Date.now(),
   }
   console.log(tx)
-  await signObj(tx, keys)
+  signObj(tx, keys)
   return new Promise((resolve) => {
     injectTx(tx).then((res) => {
       console.log(res)
@@ -711,7 +701,7 @@ const withdrawStake = async (nominee: string, force: boolean, keys: WalletEntry)
     force,
     timestamp: Date.now(),
   }
-  await signObj(tx, keys)
+  signObj(tx, keys)
   console.log(tx)
   return new Promise((resolve) => {
     injectTx(tx).then((res) => {
@@ -754,7 +744,7 @@ const sendMessage = async (payload: object, sourceAcc: WalletInfo, targetHandle:
     timestamp: messageTimestamp,
   }
   console.log(`unsigned tx`, tx, source.keys)
-  await signObj(tx, source)
+  signObj(tx, source)
   console.log(`signed message`, tx)
   console.log(`signed message`, crypto.safeStringify(tx))
   return new Promise((resolve) => {
@@ -801,7 +791,7 @@ const broadcastMessage = async (text: string, source: WalletEntry, recipients: s
     amount: requiredAmount,
     timestamp: Date.now(),
   }
-  await signObj(tx, source)
+  signObj(tx, source)
   injectTx(tx).then((res) => {
     console.log(res)
   })
@@ -1058,7 +1048,7 @@ export const transferTokens = async (targetAddress: string, amount: string, fee:
     network,
     fee,
   }
-  await signObj(tx, keys)
+  signObj(tx, keys)
   console.log(tx)
   return newInjectTx(tx)
 }
@@ -1164,7 +1154,7 @@ const createProposal = async function (source: WalletEntry, newParameters: any) 
       description: newParameters.description || "",
       timestamp: Date.now(),
     }
-    await signObj(proposalTx, source)
+    signObj(proposalTx, source)
     return proposalTx
   } else {
     if (!issueCount) throw new Error("Unable to get issue count")
@@ -1208,7 +1198,7 @@ const createDevProposal = async function (source: WalletEntry, proposal: any) {
       payAddress: source.address,
       timestamp: Date.now(),
     }
-    await signObj(tx, source)
+    signObj(tx, source)
     return tx
   } else {
     if (!issueCount) throw new Error("Unable to get issue count")
@@ -1223,7 +1213,7 @@ const createEmailTx = async (email: string, source: WalletEntry) => {
     emailHash: crypto.hash(email),
     from: source.address,
   }
-  await signObj(signedTx, source)
+  signObj(signedTx, source)
   const tx = {
     type: "email",
     network,
@@ -1242,7 +1232,7 @@ const createVerifyTx = async (code: string, source: WalletEntry) => {
     code: code,
     timestamp: Date.now(),
   }
-  await signObj(tx, source)
+  signObj(tx, source)
   return tx
 }
 
@@ -1303,7 +1293,7 @@ const createVote = async (source: WalletEntry, proposalNumber = 1, approve = tru
     amount: BigInt(amount),
     timestamp: Date.now(),
   }
-  await signObj(tx, source)
+  signObj(tx, source)
   return tx
 }
 
@@ -1319,7 +1309,7 @@ const createDevVote = async (source: WalletEntry, proposalNumber = 1, amount = 5
     approve,
     timestamp: Date.now(),
   }
-  await signObj(tx, source)
+  signObj(tx, source)
   return tx
 }
 

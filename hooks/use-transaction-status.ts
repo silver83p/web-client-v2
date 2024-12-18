@@ -46,7 +46,7 @@ export function useTransactionStatus(): UseTransactionStatus {
         // Simulate transaction delay
         //   await new Promise((resolve) => setTimeout(resolve, 5000));
 
-        const { success, result, error } = await fn1()
+        const { success, error } = await fn1()
         if (!success) {
           setState({
             isLoading: false,
@@ -74,7 +74,7 @@ export function useTransactionStatus(): UseTransactionStatus {
         // Update state on success
         setState({
           isLoading: false,
-          message: "Transaction is successful!",
+          message: result2,
           showDialog: true,
         })
       } catch (error) {

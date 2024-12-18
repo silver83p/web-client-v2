@@ -7,7 +7,7 @@ export function WalletActions() {
   return (
     <div className="grid grid-cols-2 gap-4 mt-6">
       <button className="bg-indigo-600 text-white rounded-lg py-3 px-4"
-        onClick={() => router.push('/send')}
+        onClick={() => router.push('/wallet/send')}
       >
         Send
       </button>
