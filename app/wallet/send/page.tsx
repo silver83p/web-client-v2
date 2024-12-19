@@ -63,7 +63,7 @@ export default function SendPage() {
             state.networkParams.parameters.current.transactionFee,
             state.auth.walletEntry
           ),
-        checkBalanceChange,
+        checkBalanceChange
       )
     }
   }
@@ -218,9 +218,9 @@ export default function SendPage() {
               Send
             </button>
           </div>
+          <TransactionDialog loading={isLoading} message={message} open={showDialog} onClose={closeDialog} />
         </div>
       </div>
-      <TransactionDialog loading={isLoading} message={message} open={showDialog} onClose={closeDialog} />
     </div>
   )
 }

@@ -1,15 +1,15 @@
-'use client'
+"use client"
 
-import { useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
-import { getAddress, createWallet, registerAlias, saveWallet, loadWallet } from '@/lib/utils'
-import { useApp } from '@/app/AppContext'
+import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { Input } from "@/components/ui/input"
+import { getAddress, createWallet, registerAlias, saveWallet, loadWallet } from "@/lib/utils"
+import { useApp } from "@/app/AppContext"
 
 export default function UsernamePage() {
   const router = useRouter()
   const { authActions } = useApp()
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState("")
   const [availability, setAvailability] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
@@ -46,11 +46,11 @@ export default function UsernamePage() {
     const debounceCheck = setTimeout(async () => {
       if (username) {
         if (username.length < 3) {
-          setAvailability('Username must be at least 3 characters long.')
+          setAvailability("Username must be at least 3 characters long.")
           return
         }
         if (!/^[a-zA-Z0-9]*$/.test(username)) {
-          setAvailability('Username can contain only alphabets and numeric characters.')
+          setAvailability("Username can contain only alphabets and numeric characters.")
           return
         }
         setIsChecking(true)
@@ -59,13 +59,13 @@ export default function UsernamePage() {
           const existingWallet = loadWallet(username)
           if (existingWallet) {
             if (address !== existingWallet.entry.address) {
-              setAvailability('Username is on another network.')
+              setAvailability("Username is on another network.")
             } else {
-              setAvailability('Valid account found in the local wallet.')
+              setAvailability("Valid account found in the local wallet.")
             }
-          } else setAvailability('Username is already taken.')
+          } else setAvailability("Username is already taken.")
         } else {
-          setAvailability('Username is available!')
+          setAvailability("Username is available!")
         }
         setIsChecking(false)
       } else {
@@ -80,11 +80,11 @@ export default function UsernamePage() {
     e.preventDefault()
     if (username.trim()) {
       if (username.length < 3) {
-        setAvailability('Username must be at least 3 characters long.')
+        setAvailability("Username must be at least 3 characters long.")
         return
       }
       if (!/^[a-zA-Z0-9]*$/.test(username)) {
-        setAvailability('Username can contain only alphabets and numeric characters.')
+        setAvailability("Username can contain only alphabets and numeric characters.")
         return
       }
       const fetchedAddress = await getAddress(username)
@@ -92,52 +92,52 @@ export default function UsernamePage() {
         const existingWallet = loadWallet(username)
         if (existingWallet) {
           if (fetchedAddress !== existingWallet.entry.address) {
-            setAvailability('Username is on another network.')
+            setAvailability("Username is on another network.")
           } else {
             authActions.saveCredentials(username, existingWallet.entry)
             authActions.login(existingWallet.entry.address)
-            router.push('/')
+            router.push("/")
           }
         } else {
-          setAvailability('Username is already taken.')
+          setAvailability("Username is already taken.")
         }
         return
       }
 
-        setIsCreatingAccount(true)
-        let wallet = null
-        let entry = createWallet(username.toLowerCase())
-        console.log(entry)
+      setIsCreatingAccount(true)
+      let wallet = null
+      let entry = createWallet(username.toLowerCase())
+      console.log(entry)
 
-        wallet = {
-          handle: username.toLowerCase(),
-          entry,
-        }
+      wallet = {
+        handle: username.toLowerCase(),
+        entry,
+      }
 
-        let isSubmitted = await registerAlias(wallet.handle, wallet.entry)
-        if (!isSubmitted) {
-          setAvailability('Error creating account. Please try again.')
-          setIsCreatingAccount(false)
-          return
-        }
-
-        const { success: isAccountCreated, address } = await checkAccountCreation(username)
+      let isSubmitted = await registerAlias(wallet.handle, wallet.entry)
+      if (!isSubmitted) {
+        setAvailability("Error creating account. Please try again.")
         setIsCreatingAccount(false)
-        if (isAccountCreated) {
-          if (address === wallet.entry.address) {
-            saveWallet(wallet)
-            authActions.saveCredentials(username, wallet.entry)
-            router.push('/auth/recovery')
-          } else {
-            setAvailability('Account creation failed with the specified username. Please try again.')
-          }
+        return
+      }
+
+      const { success: isAccountCreated, address } = await checkAccountCreation(username)
+      setIsCreatingAccount(false)
+      if (isAccountCreated) {
+        if (address === wallet.entry.address) {
+          saveWallet(wallet)
+          authActions.saveCredentials(username, wallet.entry)
+          router.push("/auth/recovery")
         } else {
-          setAvailability('Error creating account. Please try again.')
+          setAvailability("Account creation failed with the specified username. Please try again.")
         }
       } else {
-        setAvailability('Username is already taken.')
+        setAvailability("Error creating account. Please try again.")
       }
+    } else {
+      setAvailability("Username is already taken.")
     }
+  }
 
   return (
     <div className="flex flex-col items-center px-4 pt-12">
@@ -174,7 +174,9 @@ export default function UsernamePage() {
           <p className="mt-2 text-gray-600">Checking username...</p>
         ) : (
           availability && (
-            <p className={`mt-2 ${availability.includes('available') || availability.includes('Valid') ? 'text-green-600' : 'text-red-600'}`}>
+            <p
+              className={`mt-2 ${availability.includes("available") || availability.includes("Valid") ? "text-green-600" : "text-red-600"}`}
+            >
               {availability}
             </p>
           )
@@ -191,7 +193,7 @@ export default function UsernamePage() {
             </>
           ) : (
             <>
-              <span>Create Account</span>
+              <span>{availability && availability.includes("Valid") ? "Sign In" : "Create Account"}</span>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"

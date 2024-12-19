@@ -1,32 +1,27 @@
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2 } from "lucide-react"
 
 interface TransactionDialogProps {
-  loading: boolean;
-  message: string;
-  open: boolean;
-  onClose?: () => void;
+  loading: boolean
+  message: string
+  open: boolean
+  onClose?: () => void
 }
 
-export function TransactionDialog({
-  loading,
-  message,
-  open,
-  onClose,
-}: TransactionDialogProps) {
-  if (!open) return null;
+export function TransactionDialog({ loading, message, open, onClose }: TransactionDialogProps) {
+  if (!open) return null
 
   const getStatusStyles = () => {
-    if (loading) return 'text-indigo-600 border-indigo-100';
-    return message.includes('success')
-      ? 'border-green-100 bg-green-50'
-      : 'text-red-600 border-red-100 bg-red-50';
-  };
+    if (loading) return "text-indigo-600 border-indigo-100"
+    return message.includes("success")
+      ? "border-green-100 bg-green-50"
+      : "text-red-600 border-red-100 bg-red-50"
+  }
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-white/50" />
       <div
-        className={`relative z-50 w-full rounded-lg bg-white p-6 shadow-lg mx-2 border ${getStatusStyles()}`}
+        className={`relative z-50 w-[85%] max-w-md rounded-lg bg-white p-6 shadow-lg border ${getStatusStyles()}`}
       >
         <div className="flex flex-col">
           {loading ? (
@@ -36,15 +31,19 @@ export function TransactionDialog({
             </div>
           ) : (
             <div className="flex flex-col items-center">
-              <span className="text-md font-small mb-4 text-center">
-                {message}
-              </span>
+              <span className="text-md font-small mb-4 text-center">{message}</span>
               <div className="flex justify-center">
-                <button
+                {/* <button
                   onClick={onClose}
                   className="rounded-full p-1 hover:bg-indigo-200 transition-colors duration-200"
                 >
                   <X className="h-4 w-4 text-gray-600 hover:text-blue-600" />
+                </button> */}
+                <button
+                  onClick={onClose}
+                  className="p-2 flex rounded-sm bg-indigo-600 py-2.5 text-white text-sm font-small hover:bg-indigo-700"
+                >
+                  Close
                 </button>
               </div>
             </div>
@@ -52,5 +51,5 @@ export function TransactionDialog({
         </div>
       </div>
     </div>
-  );
+  )
 }

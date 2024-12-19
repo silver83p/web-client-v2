@@ -39,7 +39,7 @@ export type WalletInfo = {
 }
 
 let host: string
-const seedNodeHost =`${config.archiver.ip}:${config.archiver.port}`
+const seedNodeHost = `${config.archiver.ip}:${config.archiver.port}`
 const walletEntries: { [handle: string]: WalletEntry } = {}
 const network = "0".repeat(64)
 const verboseLogs = false
@@ -246,7 +246,7 @@ const signObj = (tx: object, source: WalletEntry) => {
   }
 }
 
-const signEthereumTx = (tx: any , source: WalletEntry) => {
+const signEthereumTx = (tx: any, source: WalletEntry) => {
   console.log(`signEthereumTx`, source)
   if (source == null || source.keys == null) {
     throw new Error("Keys are required for signing")
@@ -309,7 +309,6 @@ export const loadWallet = (username: string): WalletInfo | undefined => {
 
 const loadLastMessage = (username: string) => {
   try {
-
     const loadedEntries = localStorage.getItem("lastMessage")
     if (loadedEntries === null) {
       return null
@@ -323,7 +322,6 @@ const loadLastMessage = (username: string) => {
 
 const loadLastTx = (username: string) => {
   try {
-
     const loadedEntries = localStorage.getItem("lastTx")
     if (loadedEntries === null) {
       return null
@@ -365,7 +363,7 @@ const postJSON = async (url: string, obj: unknown) => {
   return response.data
 }
 
-const injectTx = async (tx: unknown) : Promise< { result?: any, error?: any }> => {
+const injectTx = async (tx: unknown): Promise<{ result?: any; error?: any }> => {
   try {
     const data = crypto.safeStringify(tx)
     const res = await makeJsonRpcRequest(LIB_RRC_METHODS.SEND_TRANSACTION, [data])
@@ -376,7 +374,7 @@ const injectTx = async (tx: unknown) : Promise< { result?: any, error?: any }> =
   }
 }
 
-const newInjectTx = async (tx: unknown) : Promise< { success: boolean, result?: any, error?: any }> => {
+const newInjectTx = async (tx: unknown): Promise<{ success: boolean; result?: any; error?: any }> => {
   try {
     const data = crypto.safeStringify(tx)
     const res = await makeJsonRpcRequest(LIB_RRC_METHODS.SEND_TRANSACTION, [data])
@@ -403,7 +401,7 @@ export const getAccountData = async (id: string) => {
 
 const getToll = async (friendId: string, yourId: string): Promise<bigint> => {
   try {
-    const { toll } = await getJSON(getProxyUrl(`/account/${friendId}/${yourId}/toll`)) as {
+    const { toll } = (await getJSON(getProxyUrl(`/account/${friendId}/${yourId}/toll`))) as {
       toll: bigint
     }
     return toll || BigInt(0)
@@ -434,7 +432,7 @@ export const getAddress = async (handle: string): Promise<string | null> => {
 
 const getAccountPublicKey = async (address: string): Promise<string | null> => {
   try {
-    const account = await getAccountData(address) as any
+    const account = (await getAccountData(address)) as any
     console.log(`getAccountPublicKey`, account)
     return account?.account?.publicKey
   } catch (e) {
@@ -491,7 +489,7 @@ const makeJsonRpcRequest = async (method: string, params: unknown[] = []) => {
 const pollMessages = async (from: string, to: string, timestamp: number) => {
   try {
     const url = getProxyUrl(`/messages/${to}/${from}`)
-    const { messages } = await getJSON(url) as { messages: string[] }
+    const { messages } = (await getJSON(url)) as { messages: string[] }
     return messages
   } catch (err) {
     console.log(err)
@@ -587,7 +585,11 @@ export const registerAlias = async (handle: string, source: WalletEntry) => {
   })
 }
 
-export const addFriend = async (targetUsername: string, targetAddress: string, keys: WalletEntry): Promise< { success: boolean, result?: any, error?: any }> => {
+export const addFriend = async (
+  targetUsername: string,
+  targetAddress: string,
+  keys: WalletEntry
+): Promise<{ success: boolean; result?: any; error?: any }> => {
   const tx = {
     type: "friend",
     network,
@@ -805,7 +807,7 @@ export const getHandle = async (address: string): Promise<string | null> => {
   }
 
   const url = getProxyUrl(`/account/${address}/alias`)
-  const { handle } = await getJSON(url) as { handle: string }
+  const { handle } = (await getJSON(url)) as { handle: string }
   console.log("getHandle", handle)
   return handle
 }
@@ -832,32 +834,32 @@ const queryAccount = async (handle: string) => {
 }
 
 const queryProposals = async () => {
-  const { proposals } = await getJSON(getProxyUrl("/proposals")) as { proposals: any[] }
+  const { proposals } = (await getJSON(getProxyUrl("/proposals"))) as { proposals: any[] }
   return proposals
 }
 
 const queryDevProposals = async () => {
-  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev")) as { devProposals: any[] }
+  const { devProposals } = (await getJSON(getProxyUrl("/proposals/dev"))) as { devProposals: any[] }
   return devProposals
 }
 
 const queryLatestProposals = async () => {
-  const { proposals } = await getJSON(getProxyUrl("/proposals/latest")) as { proposals: any[] }
+  const { proposals } = (await getJSON(getProxyUrl("/proposals/latest"))) as { proposals: any[] }
   return proposals
 }
 
 const queryLatestDevProposals = async () => {
-  const { devProposals } = await getJSON(getProxyUrl("/proposals/dev/latest")) as { devProposals: any[] }
+  const { devProposals } = (await getJSON(getProxyUrl("/proposals/dev/latest"))) as { devProposals: any[] }
   return devProposals
 }
 
 const getProposalCount = async (): Promise<number> => {
-  const { count } = await getJSON(getProxyUrl("/proposals/count")) as { count: number }
+  const { count } = (await getJSON(getProxyUrl("/proposals/count"))) as { count: number }
   return count ? count : 0
 }
 
 const getDevProposalCount = async (): Promise<number> => {
-  const { count } = await getJSON(getProxyUrl("/proposals/dev/count")) as { count: number }
+  const { count } = (await getJSON(getProxyUrl("/proposals/dev/count"))) as { count: number }
   return count ? count : 0
 }
 
@@ -916,7 +918,7 @@ function isIosSafari() {
 }
 
 export const queryParameters = async () => {
-  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters")) as {
+  const { parameters, error } = (await getJSON(getProxyUrl("/network/parameters"))) as {
     parameters: any
     error: string
   }
@@ -929,7 +931,7 @@ export const queryParameters = async () => {
 }
 
 const queryNodeParameters = async () => {
-  const { parameters, error } = await getJSON(getProxyUrl("/network/parameters/node")) as {
+  const { parameters, error } = (await getJSON(getProxyUrl("/network/parameters/node"))) as {
     parameters: any
     error: string
   }
@@ -942,38 +944,38 @@ const queryNodeParameters = async () => {
 }
 
 const queryIssues = async () => {
-  const { issues } = await getJSON(getProxyUrl("/issues")) as { issues: any[] }
+  const { issues } = (await getJSON(getProxyUrl("/issues"))) as { issues: any[] }
   return issues
 }
 
 const queryDevIssues = async () => {
-  const { devIssues } = await getJSON(getProxyUrl("/issues/dev")) as { devIssues: any[] }
+  const { devIssues } = (await getJSON(getProxyUrl("/issues/dev"))) as { devIssues: any[] }
   return devIssues
 }
 
 const queryLatestIssue = async () => {
-  const { issue } = await getJSON(getProxyUrl("/issues/latest")) as { issue: any }
+  const { issue } = (await getJSON(getProxyUrl("/issues/latest"))) as { issue: any }
   return issue
 }
 
 const queryLatestDevIssue = async () => {
-  const { devIssue } = await getJSON(getProxyUrl("/issues/dev/latest")) as { devIssue: any }
+  const { devIssue } = (await getJSON(getProxyUrl("/issues/dev/latest"))) as { devIssue: any }
   return devIssue
 }
 
 const getIssueCount = async () => {
-  const { count } = await getJSON(getProxyUrl("/issues/count")) as { count: number }
+  const { count } = (await getJSON(getProxyUrl("/issues/count"))) as { count: number }
   return count ? count : 0
 }
 
 const getDevIssueCount = async () => {
-  const { count } = await getJSON(getProxyUrl("/issues/dev/count")) as { count: number }
+  const { count } = (await getJSON(getProxyUrl("/issues/dev/count"))) as { count: number }
   // return res.data.devIssueCount
   return count ? count : 0
 }
 
 const iosCopyClipboard = (str: string) => {
-  const el:any = document.createElement("textarea")
+  const el: any = document.createElement("textarea")
   el.value = str
   el.setAttribute("readonly", "")
   el.style.position = "absolute"
@@ -1038,7 +1040,12 @@ const copyToClipboard = (text: string) => {
   return copyTextToClipboard(text)
 }
 
-export const transferTokens = async (targetAddress: string, amount: string, fee: bigint, keys: WalletEntry): Promise< { success: boolean, result?: any, error?: any }> => {
+export const transferTokens = async (
+  targetAddress: string,
+  amount: string,
+  fee: bigint,
+  keys: WalletEntry
+): Promise<{ success: boolean; result?: any; error?: any }> => {
   const tx = {
     type: "transfer",
     from: keys.address,
@@ -1127,7 +1134,7 @@ const isNodeOnline = async function () {
     if (res.status === 200) return true
   } catch (e) {
     console.warn(e)
-    if (e=== "Network Error") return false
+    if (e === "Network Error") return false
   }
 }
 

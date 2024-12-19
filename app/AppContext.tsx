@@ -83,16 +83,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const networkParamsActionCreators = createNetworkParamsActions(dispatch);
 
   useEffect(() => {
-    const username = 'jai2'
-    const wallet = loadWallet(username);
-    console.log(wallet)
-    if (wallet) {
-      authActionCreators.saveCredentials(username, wallet.entry)
-      authActionCreators.login(wallet.entry.address)
-    }
-  }, [])
-
-  useEffect(() => {
     initializeShardusCrypto()
     if (state.auth.isLoggedIn) {
       router.push("/")
