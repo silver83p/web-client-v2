@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Liberdus</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+    <link rel="stylesheet" href="/css/chat/chat-list.css" />
+    <link rel="stylesheet" href="/css/chat/chat-view.css" />
+    <link rel="stylesheet" href="/css/contact/contact-list.css" />
+    <link rel="stylesheet" href="/css/auth/auth.css" />
+    <link rel="stylesheet" href="/css/auth/auth-pages.css" />
+    <link rel="stylesheet" href="/css/auth/sign-in.css" />
+    <link rel="stylesheet" href="/css/auth/recovery-key.css" />
+    <link rel="stylesheet" href="/css/auth/import.css" />
+    <link rel="stylesheet" href="/css/wallet/wallet.css" />
+    <link rel="stylesheet" href="/css/wallet/send.css" />
+    <link rel="stylesheet" href="/css/account/account.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-container">
+      <div id="root" class="content-container"></div>
+      <nav class="bottom-nav">
+        <a class="nav-item" data-page="chats">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+            />
+          </svg>
+          <span>Chats</span>
+        </a>
+        <a class="nav-item" data-page="contacts">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path d="M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          <span>Contacts</span>
+        </a>
+        <a class="nav-item" data-page="wallet">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M19 5H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V7a2 2 0 00-2-2z"
+            />
+            <path d="M3 7l9 6 9-6" />
+          </svg>
+          <span>Wallet</span>
+        </a>
+        <a class="nav-item" data-page="account">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span>Account</span>
+        </a>
+      </nav>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/js/state.js"></script>
+    <script src="/js/components/auth/auth.js"></script>
+    <script src="/js/components/auth/sign-in.js"></script>
+    <script src="/js/components/auth/recovery-key.js"></script>
+    <script src="/js/components/auth/import.js"></script>
+    <script src="/js/components/chat/chat-list.js"></script>
+    <script src="/js/components/chat/chat-view.js"></script>
+    <script src="/js/components/contact/contact-list.js"></script>
+    <script src="/js/components/wallet/wallet-view.js"></script>
+    <script src="/js/components/wallet/send-page.js"></script>
+    <script src="/js/components/account/account-view.js"></script>
+    <script src="/js/app.js"></script>
+  </body>
+</html>
