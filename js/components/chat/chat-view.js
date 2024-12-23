@@ -133,6 +133,8 @@ function renderChatView(chatId) {
           </div>
         </div>
       </div>
+      </br>
+      </br>
   
       <div class="chat-input">
         <div class="message-box">
@@ -152,6 +154,6 @@ function renderChatView(chatId) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-const showChats = function() {
+const showChats = function () {
   state.navigate("chats");
 }
