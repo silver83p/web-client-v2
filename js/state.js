@@ -1,48 +1,20 @@
 class State {
   constructor() {
     this.state = {
-      isAuthenticated: localStorage.getItem('authenticated') === 'true',
-      currentPage: 'chats',
+      isAuthenticated: localStorage.getItem("authenticated") === "true",
+      currentPage: "chats",
       currentChatId: null,
-      chats: [
-        {
-          id: 1,
-          name: 'Omar Syed',
-          message: 'I will send you the NFT today',
-          time: 'Just now',
-          unread: 1,
-          status: 'online'
-        },
-        {
-          id: 2,
-          name: 'Thant',
-          message: "Sure, what's the latest?",
-          time: '2:00 PM',
-          status: 'offline'
-        },
-        {
-          id: 3,
-          name: 'Jai',
-          message: 'Hi, can we discuss the tokenomics?',
-          time: '1:00 PM',
-          unread: 3,
-          status: 'offline'
-        }
-      ],
-      contacts: [
-        {
-          id: 1,
-          name: 'Kaung',
-          status: 'Online',
-          lastSeen: 'online'
-        },
-        {
-          id: 2,
-          name: 'Thant',
-          status: 'Last seen 2h ago',
-          lastSeen: 'offline'
-        }
-      ]
+      timestamp: "2024-12-23T02:33:44.512Z",
+      account: {},
+      network: {},
+      wallet: {},
+      contacts: {},
+      chats: [],
+      unread: 0,
+      settings: {
+        toll: true,
+        encrypt: true,
+      },
     };
   }
 
@@ -50,10 +22,25 @@ class State {
     return this.state;
   }
 
+  updateState(newState) {
+    // console.log("Existing state:", this.state);
+    // console.log("Updating state:", newState);
+    this.state = {
+      ...this.state,
+      ...newState,
+      currentPage: this.state.currentPage,
+      currentChatId: this.state.currentChatId,
+      isAuthenticated: this.state.isAuthenticated,
+    };
+    // console.log("Updated state:", this.state);
+
+    this.render();
+  }
+
   navigate(page) {
-    if (page.startsWith('/chats/')) {
-      this.state.currentChatId = parseInt(page.split('/')[2]);
-      this.state.currentPage = 'chat-view';
+    if (page.startsWith("/chats/")) {
+      this.state.currentChatId = parseInt(page.split("/")[2]);
+      this.state.currentPage = "chat-view";
     } else {
       this.state.currentPage = page;
       this.state.currentChatId = null;
@@ -63,29 +50,28 @@ class State {
 
   authenticate() {
     this.state.isAuthenticated = true;
-    localStorage.setItem('authenticated', 'true');
-    this.navigate('chats');
+    localStorage.setItem("authenticated", "true");
+    this.navigate("chats");
   }
 
   logout() {
     this.state.isAuthenticated = false;
-    localStorage.removeItem('authenticated');
-    this.navigate('auth');
+    localStorage.removeItem("authenticated");
+    this.navigate("auth");
   }
 
   render() {
-    const root = document.getElementById('root');
-
+    const root = document.getElementById("root");
 
     if (!this.state.isAuthenticated) {
       switch (this.state.currentPage) {
-        case 'sign-in':
+        case "sign-in":
           renderCreateAccount();
           break;
-        case 'recovery-key':
+        case "recovery-key":
           renderRecoveryKey();
           break;
-        case 'import':
+        case "import":
           renderImportAccount();
           break;
         default:
@@ -97,48 +83,54 @@ class State {
     }
 
     switch (this.state.currentPage) {
-      case 'chats':
+      case "chats":
         renderChats();
         this.showBottomNav();
         break;
-      case 'chat-view':
+      case "chat-view":
         renderChatView(this.state.currentChatId);
         this.hideBottomNav();
         break;
-      case 'contacts':
+      case "contacts":
         renderContacts();
         this.showBottomNav();
         break;
-      case 'wallet':
+      case "wallet":
         renderWallet();
         this.showBottomNav();
         break;
-      case 'send':
+      case "send":
         renderSendPage();
         this.hideBottomNav();
         break;
-      case 'account':
+      case "account":
         renderAccount();
         this.showBottomNav();
         break;
+      case "import":
+        renderImportPage();
+        this.hideBottomNav();
+        break;
       default:
         renderChats();
+        this.showBottomNav();
+        break;
     }
 
     // Update active nav item
-    document.querySelectorAll('.nav-item').forEach(item => {
-      const page = item.getAttribute('data-page');
-      item.classList.toggle('active', page === this.state.currentPage);
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      const page = item.getAttribute("data-page");
+      item.classList.toggle("active", page === this.state.currentPage);
     });
   }
 
   hideBottomNav() {
-    const bottomNav = document.querySelector('.bottom-nav');
-    bottomNav.classList.add('hidden');
+    const bottomNav = document.querySelector(".bottom-nav");
+    bottomNav.classList.add("hidden");
   }
 
   showBottomNav() {
-    const bottomNav = document.querySelector('.bottom-nav');
-    bottomNav.classList.remove('hidden');
+    const bottomNav = document.querySelector(".bottom-nav");
+    bottomNav.classList.remove("hidden");
   }
 }

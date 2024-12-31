@@ -3,7 +3,14 @@ function renderWallet() {
 
   root.innerHTML = `
     <header class="header">
-      <h1>Wallet</h1>
+      <div class="flex-between">
+        <h1>Wallet</h1>
+        <button class="menu-button" onclick="toggleMenu()">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
       <div class="profile-section">
         <div class="avatar large">
           <span>I</span>
@@ -20,19 +27,19 @@ function renderWallet() {
       <button class="tab-button">Governance</button>
     </div>
 
-        <div class="balance">
-          <h2>Balance</h2>
-          <div class="balance-info">
-            <div class="balance-header">
-              <div class="token-info">
-                <span class="token-symbol">LIB</span>
-                <span class="percentage-change positive">1.59%</span>
-              </div>
-              <span class="usd-value">15.88 USD</span>
-            </div>
-            <div class="token-amount">87.041 LIB</div>
+    <div class="balance">
+      <h2>Balance</h2>
+      <div class="balance-info">
+        <div class="balance-header">
+          <div class="token-info">
+            <span class="token-symbol">LIB</span>
+            <span class="percentage-change positive">1.59%</span>
           </div>
+          <span class="usd-value">15.88 USD</span>
         </div>
+        <div class="token-amount">87.041 LIB</div>
+      </div>
+    </div>
 
     <div class="wallet-actions">
       <button class="action-button primary" onclick="showSendView()">Send</button>

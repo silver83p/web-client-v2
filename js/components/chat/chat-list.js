@@ -1,7 +1,7 @@
 function renderChats() {
-  const root = document.getElementById('root');
+  const root = document.getElementById("root");
   const chats = state.getState().chats;
-  
+
   root.innerHTML = `
     <header class="header">
       <div class="flex-between">
@@ -23,24 +23,32 @@ function renderChats() {
     </header>
     
     <div class="chat-list">
-      ${chats.map(chat => `
-        <div class="chat-item" data-id="${chat.id}">
+      ${Object.values(chats)
+      .map(
+        (chat) => `
+        <div class="chat-item" data-id="${chat.chat_id}">
           <div class="avatar">
             <span>${chat.name[0]}</span>
-            <span class="status-indicator ${chat.status === 'online' ? 'status-online' : 'status-offline'}"></span>
+            <!-- <span class="status-indicator ${chat.status === "online" ? "status-online" : "status-offline"
+          }"></span> -->
           </div>
           <div class="chat-content">
             <div class="chat-header">
               <span class="chat-name">${chat.name}</span>
-              <span class="chat-time">${chat.time}</span>
+              <span class="chat-time">${utils.formatTime(chat.timestamp)}</span>
             </div>
             <p class="chat-message">${chat.message}</p>
           </div>
-          ${chat.unread ? `
+          ${chat.unread
+            ? `
             <div class="unread-badge">${chat.unread}</div>
-          ` : ''}
+          `
+            : ""
+          }
         </div>
-      `).join('')}
+      `
+      )
+      .join("")}
     </div>
     
     <button class="floating-button">
@@ -50,9 +58,9 @@ function renderChats() {
   `;
 
   // Add event listeners
-  document.querySelectorAll('.chat-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const chatId = item.getAttribute('data-id');
+  document.querySelectorAll(".chat-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      const chatId = item.getAttribute("data-id");
       state.navigate(`/chats/${chatId}`);
     });
   });

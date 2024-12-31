@@ -23,21 +23,23 @@ function renderContacts() {
     </header>
     
     <div class="contact-list">
-      ${contacts.map(contact => `
+      ${Object.values(contacts).map(contact => `
         <div class="contact-item">
           <div class="avatar">
-            <span>${contact.name[0]}</span>
-            <span class="status-indicator ${contact.lastSeen === 'online' ? 'status-online' : 'status-offline'}"></span>
+            <span>${contact.username ? contact.username[0].toUpperCase() : contact.address[0]}</span>
+            <!-- <span class="status-indicator ${contact.lastSeen === 'online' ? 'status-online' : 'status-offline'}"></span> -->
           </div>
           <div class="contact-content">
-            <div class="contact-name">${contact.name}</div>
-            <div class="contact-status">${contact.status}</div>
+            <div class="contact-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
+            <div class="contact-status">${contact.email || contact.x || contact.phone || contact.address}</div>
           </div>
+          <!--
           <button class="contact-actions">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </button>
+          -->
         </div>
       `).join('')}
     </div>

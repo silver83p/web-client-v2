@@ -1,4 +1,5 @@
 const state = new State();
+const utils = new Utils();
 
 // Initialize navigation
 document.querySelectorAll('.nav-item').forEach(item => {

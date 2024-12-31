@@ -6,6 +6,7 @@
   z-index: 100;
   align-items: center;
   /* gap: 1rem; */
+  padding-top: 1rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid hsl(var(--border));
 }
@@ -40,6 +41,7 @@
   flex: 1;
   padding: 1rem 0;
   overflow-y: auto;
+  margin-bottom: 5rem;
 }
 
 .date-separator {

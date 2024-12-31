@@ -1,5 +1,9 @@
 function renderChatView(chatId) {
-  const chat = state.getState().chats.find((c) => c.id === chatId);
+  const chat = state.getState().chats.filter((m) => m.chat_id === chatId);
+  const contact = state.getState().contacts[chat[0]?.address];
+  console.log("chat", chat);
+  console.log("contact", contact);
+  const chatMessages = contact?.messages || [];
   const root = document.getElementById("root");
 
   root.innerHTML = `
@@ -11,9 +15,9 @@ function renderChatView(chatId) {
         </button>
         <div class="chat-title">
           <div class="avatar">
-            <span>${chat.name[0]}</span>
+            <span>${contact?.name[0]}</span>
           </div>
-          <h1>${chat.name}</h1>
+          <h1>${contact?.name}</h1>
         </div>
         <button class="back-button">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -26,116 +30,33 @@ function renderChatView(chatId) {
       </div>
   
       <div class="chat-messages">
-        <div class="date-separator">Today</div>
+        <!-- <div class="date-separator">Today</div> -->
         
-        <div class="message-group received">
-          <div class="avatar">
-            <span>${chat.name[0]}</span>
-          </div>
-          <div class="message-content">
-            <div class="message">I will send you the NFT today. What is your address?</div>
-            <div class="message-info">
-              <span>${chat.name}</span>
-              <span>12:00pm</span>
+        ${chatMessages
+      .map(
+        (message) => `
+          <div class="message-group ${message.my === true ? "sent" : "received"
+          }">
+            ${message.my === true
+            ? ""
+            : `
+            <div class="avatar">
+              <span>${contact?.name[0]}</span>
+            </div>
+            `
+          }
+            <div class="message-content">
+              <div class="message">${message.message}</div>
+              <div class="message-info">
+                <span>${contact?.name}</span>
+                <span>${utils.formatTime(message.timestamp)}</span>
+              </div>
             </div>
           </div>
-        </div>
-  
-        <div class="message-group received">
-          <div class="avatar">
-            <span>${chat.name[0]}</span>
-          </div>
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>${chat.name}</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group sent">
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>Daniel</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group received">
-          <div class="avatar">
-            <span>${chat.name[0]}</span>
-          </div>
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>${chat.name}</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group sent">
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>Daniel</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group sent">
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>Daniel</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group received">
-          <div class="avatar">
-            <span>${chat.name[0]}</span>
-          </div>
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>${chat.name}</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group received">
-          <div class="avatar">
-            <span>${chat.name[0]}</span>
-          </div>
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>${chat.name}</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-  
-        <div class="message-group sent">
-          <div class="message-content">
-            <div class="message">I will send you the NFT today</div>
-            <div class="message-info">
-              <span>Daniel</span>
-              <span>12:00pm</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      </br>
-      </br>
-  
+        `
+      )
+      .join("")}
+
       <div class="chat-input">
         <div class="message-box">
           <input type="text" class="message-input" placeholder="Message Omar">
@@ -156,4 +77,4 @@ function renderChatView(chatId) {
 
 const showChats = function () {
   state.navigate("chats");
-}
+};
