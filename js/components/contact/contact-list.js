@@ -1,7 +1,7 @@
 function renderContacts() {
-  const root = document.getElementById('root');
+  const root = document.getElementById("root");
   const contacts = state.getState().contacts;
-  
+
   root.innerHTML = `
     <header class="header">
       <div class="flex-between">
@@ -23,15 +23,36 @@ function renderContacts() {
     </header>
     
     <div class="contact-list">
-      ${Object.values(contacts).map(contact => `
+    ${
+      Object.values(contacts).length === 0
+        ? `
+      <div class="no-messages">
+        No Contacts Yet
+      </div>
+    `
+        : Object.values(contacts)
+            .map(
+              (contact) => `
         <div class="contact-item">
           <div class="avatar">
-            <span>${contact.username ? contact.username[0].toUpperCase() : contact.address[0]}</span>
-            <!-- <span class="status-indicator ${contact.lastSeen === 'online' ? 'status-online' : 'status-offline'}"></span> -->
+            <span>${
+              contact.username
+                ? contact.username[0].toUpperCase()
+                : contact.address[0]
+            }</span>
+            <!-- <span class="status-indicator ${
+              contact.lastSeen === "online" ? "status-online" : "status-offline"
+            }"></span> -->
           </div>
           <div class="contact-content">
-            <div class="contact-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
-            <div class="contact-status">${contact.email || contact.x || contact.phone || contact.address}</div>
+            <div class="contact-name">${
+              contact.name ||
+              contact.username ||
+              `${contact.address.slice(0, 8)}...${contact.address.slice(-6)}`
+            }</div>
+            <div class="contact-status">${
+              contact.email || contact.x || contact.phone || contact.address
+            }</div>
           </div>
           <!--
           <button class="contact-actions">
@@ -41,7 +62,10 @@ function renderContacts() {
           </button>
           -->
         </div>
-      `).join('')}
+      `
+            )
+            .join("")
+    }
     </div>
     
     <button class="floating-button">

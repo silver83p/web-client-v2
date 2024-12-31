@@ -23,32 +23,44 @@ function renderChats() {
     </header>
     
     <div class="chat-list">
-      ${Object.values(chats)
-      .map(
-        (chat) => `
-        <div class="chat-item" data-id="${chat.chat_id}">
-          <div class="avatar">
-            <span>${chat.name[0]}</span>
-            <!-- <span class="status-indicator ${chat.status === "online" ? "status-online" : "status-offline"
-          }"></span> -->
-          </div>
-          <div class="chat-content">
-            <div class="chat-header">
-              <span class="chat-name">${chat.name}</span>
-              <span class="chat-time">${utils.formatTime(chat.timestamp)}</span>
-            </div>
-            <p class="chat-message">${chat.message}</p>
-          </div>
-          ${chat.unread
-            ? `
-            <div class="unread-badge">${chat.unread}</div>
-          `
-            : ""
-          }
+      ${
+        chats.length === 0
+          ? `
+        <div class="no-messages">
+          No Messages Yet
         </div>
       `
-      )
-      .join("")}
+          : Object.values(chats)
+              .map(
+                (chat) => `
+            <div class="chat-item" data-id="${chat.address}">
+              <div class="avatar">
+                <span>${chat.name[0]}</span>
+                <!-- <span class="status-indicator ${
+                  chat.status === "online" ? "status-online" : "status-offline"
+                }"></span> -->
+              </div>
+              <div class="chat-content">
+                <div class="chat-header">
+                  <span class="chat-name">${chat.name}</span>
+                  <span class="chat-time">${utils.formatTime(
+                    chat.timestamp
+                  )}</span>
+                </div>
+                <p class="chat-message">${chat.message}</p>
+              </div>
+              ${
+                chat.unread
+                  ? `
+                <div class="unread-badge">${chat.unread}</div>
+              `
+                  : ""
+              }
+            </div>
+          `
+              )
+              .join("")
+      }
     </div>
     
     <button class="floating-button">
@@ -60,8 +72,8 @@ function renderChats() {
   // Add event listeners
   document.querySelectorAll(".chat-item").forEach((item) => {
     item.addEventListener("click", () => {
-      const chatId = item.getAttribute("data-id");
-      state.navigate(`/chats/${chatId}`);
+      const address = item.getAttribute("data-id");
+      state.navigate(`/chats/${address}`);
     });
   });
 }

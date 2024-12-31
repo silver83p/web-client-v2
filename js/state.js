@@ -3,7 +3,7 @@ class State {
     this.state = {
       isAuthenticated: localStorage.getItem("authenticated") === "true",
       currentPage: "chats",
-      currentChatId: null,
+      currentAddress: null,
       timestamp: "2024-12-23T02:33:44.512Z",
       account: {},
       network: {},
@@ -29,7 +29,7 @@ class State {
       ...this.state,
       ...newState,
       currentPage: this.state.currentPage,
-      currentChatId: this.state.currentChatId,
+      currentAddress: this.state.currentAddress,
       isAuthenticated: this.state.isAuthenticated,
     };
     // console.log("Updated state:", this.state);
@@ -39,11 +39,11 @@ class State {
 
   navigate(page) {
     if (page.startsWith("/chats/")) {
-      this.state.currentChatId = parseInt(page.split("/")[2]);
+      this.state.currentAddress = page.split("/")[2];
       this.state.currentPage = "chat-view";
     } else {
       this.state.currentPage = page;
-      this.state.currentChatId = null;
+      this.state.currentAddress = null;
     }
     this.render();
   }
@@ -88,7 +88,7 @@ class State {
         this.showBottomNav();
         break;
       case "chat-view":
-        renderChatView(this.state.currentChatId);
+        renderChatView(this.state.currentAddress);
         this.hideBottomNav();
         break;
       case "contacts":

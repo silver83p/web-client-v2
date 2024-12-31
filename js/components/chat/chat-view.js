@@ -1,7 +1,6 @@
-function renderChatView(chatId) {
-  const chat = state.getState().chats.filter((m) => m.chat_id === chatId);
-  const contact = state.getState().contacts[chat[0]?.address];
-  console.log("chat", chat);
+function renderChatView(address) {
+  console.log("renderChatView", address);
+  const contact = state.getState().contacts[address];
   console.log("contact", contact);
   const chatMessages = contact?.messages || [];
   const root = document.getElementById("root");
