@@ -23,8 +23,8 @@ function toggleMenu() {
         <a class="menu-item" onclick="handleMenuNavigation('account')">Account</a>
         <a class="menu-item">Network</a>
         <a class="menu-item">Settings</a>
-        <a class="menu-item" onclick="handleMenuNavigation('import')">Import</a>
-        <a class="menu-item">Export</a>
+        <a class="menu-item" onclick="handleMenuNavigation('import-data')">Import</a>
+        <a class="menu-item" onclick="handleMenuNavigation('export-data')">Export</a>
         <a class="menu-item danger" onclick="handleSignOut()">Sign Out</a>
       </div>
     </div>

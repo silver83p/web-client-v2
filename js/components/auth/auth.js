@@ -17,5 +17,5 @@ function handleSignIn() {
 }
 
 function handleImport() {
-  state.navigate('import');
+  state.navigate('import-account');
 }

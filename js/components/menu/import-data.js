@@ -1,7 +1,5 @@
 function renderImportPage() {
   const root = document.getElementById("root");
-  // const chats = state.getState().chats;
-
 
   root.innerHTML = `
     <div class="import-page">

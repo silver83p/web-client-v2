@@ -35,14 +35,14 @@ function renderChats() {
                 (chat) => `
             <div class="chat-item" data-id="${chat.address}">
               <div class="avatar">
-                <span>${chat.name[0]}</span>
+                <span>${chat.name ? chat.name[0] : ""}</span>
                 <!-- <span class="status-indicator ${
                   chat.status === "online" ? "status-online" : "status-offline"
                 }"></span> -->
               </div>
               <div class="chat-content">
                 <div class="chat-header">
-                  <span class="chat-name">${chat.name}</span>
+                  <span class="chat-name">${chat.name || chat.username || `${chat.address.slice(0,8)}...${chat.address.slice(-6)}`}</span>
                   <span class="chat-time">${utils.formatTime(
                     chat.timestamp
                   )}</span>

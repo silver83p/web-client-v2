@@ -71,7 +71,7 @@ class State {
         case "recovery-key":
           renderRecoveryKey();
           break;
-        case "import":
+        case "import-account":
           renderImportAccount();
           break;
         default:
@@ -107,8 +107,12 @@ class State {
         renderAccount();
         this.showBottomNav();
         break;
-      case "import":
+      case "import-data":
         renderImportPage();
+        this.hideBottomNav();
+        break;
+      case "export-data":
+        renderExportPage();
         this.hideBottomNav();
         break;
       default:
