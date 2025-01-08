@@ -23,8 +23,6 @@ class State {
   }
 
   updateState(newState) {
-    // console.log("Existing state:", this.state);
-    // console.log("Updating state:", newState);
     this.state = {
       ...this.state,
       ...newState,
@@ -32,8 +30,6 @@ class State {
       currentAddress: this.state.currentAddress,
       isAuthenticated: this.state.isAuthenticated,
     };
-    // console.log("Updated state:", this.state);
-
     this.render();
   }
 
@@ -100,7 +96,15 @@ class State {
         this.showBottomNav();
         break;
       case "send":
-        renderSendPage();
+        renderSendView();
+        this.hideBottomNav();
+        break;
+      case "receive":
+        renderReceive();
+        this.hideBottomNav();
+        break;
+      case "history":
+        renderHistory();
         this.hideBottomNav();
         break;
       case "account":
@@ -121,7 +125,6 @@ class State {
         break;
     }
 
-    // Update active nav item
     document.querySelectorAll(".nav-item").forEach((item) => {
       const page = item.getAttribute("data-page");
       item.classList.toggle("active", page === this.state.currentPage);

@@ -66,12 +66,12 @@
   border: none;
   padding: 0.25rem;
   border-radius: 9999px;
-  color: #6b7280;
+  color: hsl(var(--gray-500));
   cursor: pointer;
 }
 
 .input-icon:hover {
-  background-color: #f3f4f6;
+  background-color: hsl(var(--gray-100));
 }
 
 .info-icon {
