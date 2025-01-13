@@ -1,5 +1,5 @@
 function renderGetStarted() {
-  const root = document.getElementById('root');
+  const root = document.getElementById("root");
 
   root.innerHTML = `
     <div class="auth-container">
@@ -13,9 +13,9 @@ function renderGetStarted() {
   `;
 }
 function handleSignIn() {
-  state.navigate('sign-in');
+  state.navigate("sign-in");
 }
 
 function handleImport() {
-  state.navigate('import-account');
+  state.navigate("import-account");
 }

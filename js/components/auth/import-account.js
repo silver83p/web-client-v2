@@ -33,7 +33,7 @@ function renderImportAccount() {
           </button>
         </div>
   
-        <button class="auth-button primary" onclick="continueApp()">
+        <button class="auth-button primary" onclick="handleImportAccount()">
           Continue
         </button>
   
@@ -49,7 +49,7 @@ function handleScanQR() {
   console.log("QR scanner clicked");
 }
 
-function continueApp() {
+function handleImportAccount() {
   // Import account functionality
   state.authenticate();
 }

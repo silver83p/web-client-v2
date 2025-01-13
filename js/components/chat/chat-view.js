@@ -48,7 +48,7 @@ function renderChatView(address) {
               <div class="message">${message.message}</div>
               <div class="message-info">
                 <span>${contact?.name}</span>
-                <span>${utils.formatTime(message.timestamp)}</span>
+                <span>${AppUtils.formatTime(message.timestamp)}</span>
               </div>
             </div>
           </div>

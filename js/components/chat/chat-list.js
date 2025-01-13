@@ -43,7 +43,7 @@ function renderChats() {
               <div class="chat-content">
                 <div class="chat-header">
                   <span class="chat-name">${chat.name || chat.username || `${chat.address.slice(0,8)}...${chat.address.slice(-6)}`}</span>
-                  <span class="chat-time">${utils.formatTime(
+                  <span class="chat-time">${AppUtils.formatTime(
                     chat.timestamp
                   )}</span>
                 </div>

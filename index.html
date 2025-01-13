@@ -10,7 +10,7 @@
     <link rel="manifest" href="./manifest.json" />
     <link rel="stylesheet" href="./css/main.css" />
     <link rel="stylesheet" href="./css/components.css" />
-    <link rel="stylesheet" href="./css/components/dropdown.css" />
+    <link rel="stylesheet" href="./css/dropdown.css" />
     <link rel="stylesheet" href="./css/chat/chat-list.css" />
     <link rel="stylesheet" href="./css/chat/chat-view.css" />
     <link rel="stylesheet" href="./css/contact/contact-list.css" />
@@ -69,11 +69,20 @@
 
     <!-- Utils -->
     <script src="./js/utils/dropdown.js"></script>
-    <script src="./js/utils/transactions.js"></script>
-    <script src="./js/utils.js"></script>
-    
+
     <!-- Core -->
     <script src="./js/state.js"></script>
+
+    <!-- Network config -->
+    <script src="./js/network.js"></script>
+
+    <!-- Libs -->
+    <script src="./js/libs/qrcode.js"></script>
+    <script type="module" src="./js/libs/noble-secp256k1.js"></script>
+    <!-- <script src="./js/libs/stringify-fastest.js"></script> -->
+    <!-- <script src="./js/libs/blake2b.js" type="module"></script>
+    <script src="./js/libs/keccak256.js" type="module"></script>
+    <script src="./js/libs/noble-secp256k1.js" type="module"></script> -->
     
     <!-- Components -->
     <script src="./js/components/auth/auth.js"></script>
@@ -93,6 +102,7 @@
     <script src="./js/components/account/account-view.js"></script>
     
     <!-- Initialize App -->
-    <script src="./js/app.js"></script>
+    <!-- <script src="./js/app.js"></script> -->
+    <script src="./js/app.js" type="module"></script>
   </body>
 </html>

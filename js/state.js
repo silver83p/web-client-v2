@@ -141,3 +141,19 @@ class State {
     bottomNav.classList.remove("hidden");
   }
 }
+
+// Initialize state management
+const state = new State();
+
+// Wait for DOM to be fully loaded before initializing
+document.addEventListener("DOMContentLoaded", () => {
+  // Initialize navigation
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      state.navigate(item.getAttribute("data-page"));
+    });
+  });
+
+  // Initial render
+  state.render();
+});
