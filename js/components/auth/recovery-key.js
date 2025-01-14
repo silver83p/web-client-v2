@@ -1,8 +1,8 @@
 function renderRecoveryKey() {
-    const root = document.getElementById('root');
-    const privateKey = generatePrivateKey();
+  const root = document.getElementById("root");
+  const privateKey = getPrivateKey();
 
-    root.innerHTML = `
+  root.innerHTML = `
       <div class="recovery-key-page">
       <header class="send-header">
         <button class="back-button" onclick="state.navigate('sign-in')">
@@ -35,14 +35,14 @@ function renderRecoveryKey() {
     `;
 }
 
-function generatePrivateKey() {
-    return '0xd866be488f00188c02c85b63a809f54527a24b52327933beedecca85a76d2a5b';
+function getPrivateKey() {
+  return state.getState().wallet.keys[state.getState().currentAddress].secret;
 }
 
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text);
+  navigator.clipboard.writeText(text);
 }
 
 function handleContinue() {
-    state.authenticate();
+  state.authenticate();
 }

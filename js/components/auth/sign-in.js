@@ -14,9 +14,18 @@ function renderCreateAccount() {
         
         <img src="./public/icon-512x512.png" class="auth-logo" alt="Liberdus logo">
         
-        <p class="auth-description">Pick a unique username or display name.</p>
-        
+        ${renderUsernameInput(false, "Pick a unique username or display name.")}
+        <p class="auth-terms">
+          By using this service, you agree to our Terms of Service and Privacy Policy
+        </p>
+      </div>
+    `;
+}
+
+function renderUsernameInput(isImport = false, label = "") {
+  return `
         <div class="auth-form">
+          <p class="auth-description">${label}</p>
           <label class="input-label">Username or display name</label>
           <input 
             type="text" 
@@ -26,18 +35,18 @@ function renderCreateAccount() {
             oninput="checkUsername(this.value)"
           >
           <span class="input-status" id="username-status"></span>
+
+          ${
+            isImport
+              ? `<button class="auth-button primary" id="create-button" onclick="handleAppLogin()" disabled>`
+              : `<button class="auth-button primary" id="create-button" onclick="handleAppLogin()" disabled>`
+          }
           
-          <button class="auth-button primary" id="create-button" onclick="handleAppLogin()" disabled>
             <span id="button-text">Create Account</span>
             <span id="button-loader" class="hidden">Creating Account...</span>
           </button>
         </div>
-  
-        <p class="auth-terms">
-          By using this service, you agree to our Terms of Service and Privacy Policy
-        </p>
-      </div>
-    `;
+      `;
 }
 
 let checkUsernameTimeout;
@@ -88,12 +97,16 @@ async function checkUsername(username) {
     try {
       // Simulate API call with random response
       // await new Promise((resolve) => setTimeout(resolve, 500));
-      // const isAvailable = Math.random() > 0.3; // 70% chance username is available
+      // const taken = Math.random() > 0.3; // 70% chance username is available
 
-      const { taken, localWallet } =
+      const { taken, localWallet, error } =
         await AppActions.handleUsernameAvailability(username);
       console.log(taken, localWallet);
-
+      if (error) {
+        status.textContent = error;
+        status.className = "input-status error";
+        return;
+      }
       if (localWallet) {
         status.textContent = "Found username in local wallet";
         status.className = "input-status success";
@@ -117,11 +130,17 @@ async function checkUsername(username) {
   }, 500);
 }
 
+
+// handleAppLogin is used in both sign-in and import-account
 async function handleAppLogin() {
   const username = document.getElementById("username").value;
   const buttonText = document.getElementById("button-text");
   const buttonLoader = document.getElementById("button-loader");
   const createButton = document.getElementById("create-button");
+
+  // From import-account page
+  const seedPhrase = document.querySelector(".sk-input")?.value;
+  console.log("seedPhrase", seedPhrase);
 
   // Prevent submission if still checking username
   if (isCheckingUsername) {
@@ -134,18 +153,19 @@ async function handleAppLogin() {
 
   // Simulate account creation
   // await new Promise((resolve) => setTimeout(resolve, 1000));
-  const { success, error } = await AppActions.handleSignIn(username);
+  const { success, error, existingWallet } = await AppActions.handleSignIn(
+    username, seedPhrase
+  );
   if (success) {
     buttonText.classList.remove("hidden");
     buttonLoader.classList.add("hidden");
     createButton.disabled = false;
-    state.navigate("wallet");
+    if (existingWallet || seedPhrase) state.authenticate();
+    else state.navigate("recovery-key");
   } else {
     buttonText.classList.remove("hidden");
     buttonLoader.classList.add("hidden");
     createButton.disabled = false;
     alert(error);
   }
-
-  // state.navigate("recovery-key");
 }

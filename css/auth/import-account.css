@@ -3,12 +3,12 @@
   padding: 2rem 1rem;
 }
 
-.seed-input-container {
+.sk-input-container {
   position: relative;
   margin: 1.5rem 0;
 }
 
-.seed-input {
+.sk-input {
   width: 100%;
   min-height: 120px;
   padding: 1rem;

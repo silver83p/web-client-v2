@@ -9,18 +9,21 @@ function renderImportAccount() {
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h1>Enter Seed Phrase</h1>
+        <h1>Import Account</h1>
       </header>
         
         <img src="./public/icon-512x512.png" class="auth-logo" alt="Liberdus logo">
+
+
+        <div class="seed-phrase-box">
         
         <p class="auth-description">
           Enter your 12-word seed phrase to recover your account.
         </p>
         
-        <div class="seed-input-container">
+        <div class="sk-input-container">
           <textarea 
-            class="seed-input" 
+            class="sk-input"  
             placeholder="Enter your seed phrase"
             rows="4"
           ></textarea>
@@ -33,15 +36,25 @@ function renderImportAccount() {
           </button>
         </div>
   
-        <button class="auth-button primary" onclick="handleImportAccount()">
-          Continue
+        <button class="auth-button primary" onclick="importPrivateKey()">
+          Import
         </button>
+        </div>
+        ${renderUsernameInput(
+          true,
+          "Register a username for your account.",
+          true
+        )}
   
         <p class="auth-terms">
           By using this service, you agree to our Terms of Service and Privacy Policy
         </p>
       </div>
     `;
+
+  const usernameInputBox = document.querySelector(".auth-form");
+  usernameInputBox.classList.add("hidden");
+
 }
 
 function handleScanQR() {
@@ -49,7 +62,30 @@ function handleScanQR() {
   console.log("QR scanner clicked");
 }
 
-function handleImportAccount() {
-  // Import account functionality
-  state.authenticate();
+async function importPrivateKey() {
+  const seedPhrase = document.querySelector(".sk-input").value;
+  console.log("Importing account with seed phrase:", seedPhrase);
+  const { success, error, newAccount } =
+    await AppActions.handleImportAccount(seedPhrase);
+
+  console.log("importPrivateKey", success, error, newAccount);
+
+  if (!success) {
+    console.log('importPrivateKey error', error);
+    // alert(error);
+  }
+  if (!newAccount) state.authenticate();
+  else {
+    // Show username input box
+    const usernameInputBox = document.querySelector(".auth-form");
+    console.log(usernameInputBox);
+    usernameInputBox.classList.remove("hidden");
+    console.log(usernameInputBox);
+
+
+    // Hide seed input box
+    const seedInputBox = document.querySelector(".seed-phrase-box");
+    seedInputBox.classList.add("hidden");
+    console.log(seedInputBox);
+  }
 }

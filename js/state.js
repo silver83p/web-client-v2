@@ -4,6 +4,7 @@ class State {
       isAuthenticated: localStorage.getItem("authenticated") === "true",
       currentPage: "chats",
       currentAddress: null,
+      chatAddress: null,
       timestamp: "2024-12-23T02:33:44.512Z",
       account: {},
       network: {},
@@ -23,23 +24,21 @@ class State {
   }
 
   updateState(newState) {
+    console.log(newState);
     this.state = {
       ...this.state,
-      ...newState,
-      currentPage: this.state.currentPage,
-      currentAddress: this.state.currentAddress,
-      isAuthenticated: this.state.isAuthenticated,
+      ...newState
     };
+    console.log(this.state);
     this.render();
   }
 
   navigate(page) {
     if (page.startsWith("/chats/")) {
-      this.state.currentAddress = page.split("/")[2];
+      this.state.chatAddress = page.split("/")[2];
       this.state.currentPage = "chat-view";
     } else {
       this.state.currentPage = page;
-      this.state.currentAddress = null;
     }
     this.render();
   }
@@ -84,7 +83,7 @@ class State {
         this.showBottomNav();
         break;
       case "chat-view":
-        renderChatView(this.state.currentAddress);
+        renderChatView();
         this.hideBottomNav();
         break;
       case "contacts":

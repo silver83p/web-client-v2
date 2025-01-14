@@ -1,6 +1,6 @@
-function renderChatView(address) {
-  console.log("renderChatView", address);
-  const contact = state.getState().contacts[address];
+function renderChatView() {
+  const chatAddress = state.getState().chatAddress;
+  const contact = state.getState().contacts[chatAddress];
   console.log("contact", contact);
   const chatMessages = contact?.messages || [];
   const root = document.getElementById("root");

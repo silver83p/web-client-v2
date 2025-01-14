@@ -7,7 +7,7 @@ const myHashKey = hex2bin(
   "69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc"
 );
 
-async function checkUsernameAvailability(username) {
+async function getAddress(username) {
   // Get random gateway
   const randomGateway =
     network.gateways[Math.floor(Math.random() * network.gateways.length)];
@@ -18,13 +18,25 @@ async function checkUsernameAvailability(username) {
       `http://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`
     );
     const data = await response.json();
-
-    console.log("data", data);
-
-    // If we get an address back, username is taken
-    return data.address
+    return data.address;
   } catch (error) {
-    console.error("Error checking username:", error);
+    console.error("Error getting address:", error);
+    return null; // Assume available if request fails
+  }
+}
+
+async function getAccountData(address) {
+  // Get random gateway
+  const randomGateway =
+    network.gateways[Math.floor(Math.random() * network.gateways.length)];
+  try {
+    const response = await fetch(
+      `http://${randomGateway.host}:${randomGateway.port}/account/${address}`
+    );
+    const data = await response.json();
+    return data.account;
+  } catch (error) {
+    console.error("Error getting account:", error);
     return null; // Assume available if request fails
   }
 }
@@ -39,6 +51,28 @@ async function handleUsernameAvailability(username) {
 
   // Check if username exists in local wallet
   if (netidWallets?.usernames && netidWallets.usernames[username]) {
+    const address = await getAddress(username);
+    console.log("address", address);
+    if (!address) {
+      return {
+        taken: false,
+        localWallet: true,
+        error:
+          "Username wallet is found in local wallet, but the account does not exist on the network",
+      };
+    }
+
+    if (
+      address !==
+      toShardusAddress(netidWallets.usernames[username].keys.address)
+    ) {
+      return {
+        taken: true,
+        localWallet: true,
+        error:
+          "Username wallet is found in local wallet, but the local address does not match the network address",
+      };
+    }
     return {
       taken: true,
       localWallet: true,
@@ -46,8 +80,9 @@ async function handleUsernameAvailability(username) {
   }
 
   // Check if username exists on network
-  const taken = await checkUsernameAvailability(username);
-  if (taken) {
+  // If we get an address back, username is taken
+  const address = await getAddress(username);
+  if (address) {
     return {
       taken: true,
       localWallet: false,
@@ -60,7 +95,7 @@ async function handleUsernameAvailability(username) {
   }
 }
 
-async function handleSignIn(username) {
+async function handleSignIn(username, privateKey) {
   const { netid } = network;
   // Get existing wallets or create new structure
   const existingWallets = JSON.parse(
@@ -80,12 +115,133 @@ async function handleSignIn(username) {
   if (existingWallets.netids[netid].usernames[username]) {
     // Use existing wallet
     myWallet = existingWallets.netids[netid].usernames[username];
+    console.log("myWallet", myWallet);
+    await updateAccountStateData(myWallet);
+    return { success: true, existingWallet: true };
+  } else if (privateKey) {
+    // Use imported private key
+    const keys = deriveKeys(hex2bin(privateKey));
+    const { addressHex, publicKeyHex, privateKeyHex } = keys;
+    myWallet = {
+      netid,
+      username,
+      keys: {
+        address: addressHex,
+        public: publicKeyHex,
+        secret: privateKeyHex,
+      },
+    };
+    console.log("myWallet", myWallet);
   } else {
     // Generate new key pair using secp256k1
-    // const privateKey = secp.utils.randomPrivateKey();
-    const privateKey = hex2bin(
-      "8f0116a9c812c3b6d4e1513cd9339b59476efba2475d0795971006020e50e89d"
-    );
+    const privateKey = secp.utils.randomPrivateKey();
+    const keys = deriveKeys(privateKey);
+    if (!keys) {
+      return {
+        success: false,
+        error: "Error generating keys. Please try again.",
+      };
+    }
+    const { addressHex, publicKeyHex, privateKeyHex } = keys;
+    // Create new wallet entry
+    myWallet = {
+      netid,
+      username,
+      keys: {
+        address: addressHex,
+        public: publicKeyHex,
+        secret: privateKeyHex,
+      },
+    };
+    console.log("myWallet", myWallet);
+  }
+  const res = await submitRegisterAlias(username, myWallet.keys);
+  console.log("response", res);
+  //                statusOfTxid(txid, "Register alias")
+
+  if (!res || res.error || !res.result.success) {
+    return {
+      success: false,
+      error: !res ? "Unknown error" : res.error ? res.error : res.result.error,
+    };
+  }
+
+  // Check if username exists on network
+  const { success: isAccountCreated, address } = await checkAccountCreation(
+    username
+  );
+  if (isAccountCreated) {
+    if (address === toShardusAddress(myWallet.keys.address)) {
+      existingWallets.netids[netid].usernames[username] = myWallet;
+      localStorage.setItem("wallets", JSON.stringify(existingWallets));
+      await updateAccountStateData(myWallet);
+      return { success: true, existingWallet: false };
+    } else {
+      return {
+        success: false,
+        error:
+          "Account creation failed with the specified username. Please try again.",
+      };
+    }
+  } else {
+    return {
+      success: false,
+      error: "Error creating account. Please try again.",
+    };
+  }
+}
+
+const handleImportAccount = async (pk) => {
+  const privateKey = hex2bin(pk);
+  const keys = deriveKeys(privateKey);
+  if (!keys) {
+    return {
+      success: false,
+      error: "Failed to import private key. Please try again.",
+    };
+  }
+  const { addressHex, publicKeyHex, privateKeyHex } = keys;
+  const account = await getAccountData(toShardusAddress(addressHex));
+  console.log("account", account);
+  if (!account || !account.alias) {
+    return {
+      success: true,
+      newAccount: true,
+    };
+  }
+
+  const username = account.alias;
+  const { netid } = network;
+  // Get existing wallets or create new structure
+  const existingWallets = JSON.parse(
+    localStorage.getItem("wallets") || '{"netids":{}}'
+  );
+
+  console.log("existingWallets", existingWallets);
+
+  // Ensure netid and usernames objects exist
+  if (!existingWallets.netids[netid]) {
+    existingWallets.netids[netid] = { usernames: {} };
+  }
+
+  const myWallet = {
+    netid,
+    username,
+    keys: {
+      address: addressHex,
+      public: publicKeyHex,
+      secret: privateKeyHex,
+    },
+  };
+
+  existingWallets.netids[netid].usernames[username] = myWallet;
+  localStorage.setItem("wallets", JSON.stringify(existingWallets));
+  await updateAccountStateData(myWallet, account);
+  return { success: true, newAccount: false };
+};
+
+const deriveKeys = (privateKey) => {
+  try {
     const privateKeyHex = bin2hex(privateKey); // Array.from(privateKey).map(b => b.toString(16).padStart(2, '0')).join('');
 
     // Generate uncompressed and compressed public key using secp256k1
@@ -104,63 +260,70 @@ async function handleSignIn(username) {
     const address = keccak(publicKey.slice(1)).slice(-20);
     const addressHex = bin2hex(address); // Array.from(address).map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // Create new wallet entry
-    myWallet = {
-      netid,
-      username,
+    return {addressHex, publicKeyHex, privateKeyHex};
+  } catch (error) {
+    console.error("Failed to derive keys", error);
+    return null;
+  }
+};
+
+const updateAccountStateData = async (myWallet, account) => {
+  console.log("updateAccountStateData", myWallet);
+
+  let accountData = account
+  if (!account) {
+    accountData = await getAccountData(toShardusAddress(myWallet.keys.address));
+  }
+
+  state.updateState({
+    currentAddress: toEthereumAddress(myWallet.keys.address),
+    account: {
+      name: myWallet.username,
+      phone: "",
+      gender: "",
+      bio: "",
+    },
+    wallet: {
+      balance: 0,
+      assets: [
+        {
+          id: "liberdus",
+          name: "Liberdus",
+          symbol: "LIB",
+          img: "images/lib.png",
+          chainid: 2220,
+          contract: "",
+          price: 0.032,
+          balance: 0,
+          addresses: [
+            {
+              address: toEthereumAddress(myWallet.keys.address),
+              balance: 0,
+              history: [],
+            },
+          ],
+        },
+      ],
       keys: {
-        address: addressHex,
-        public: publicKeyHex,
-        secret: privateKeyHex,
+        [toEthereumAddress(myWallet.keys.address)]: {
+          public: myWallet.keys.public,
+          secret: myWallet.keys.secret,
+          type: "secp256k1",
+        },
       },
-    };
-  }
-  console.log("myWallet", myWallet);
-  const res = await submitRegisterAlias(username, myWallet.keys);
-  console.log("response", res);
-  //                statusOfTxid(txid, "Register alias")
-
-  if (!res || res.error || !res.result.success) {
-    return {
-      success: false,
-      error: !res ? "Unknown error" : res.error ? res.error : res.result.error,
-    };
-  }
-
-  const { success: isAccountCreated, address } = await checkAccountCreation(
-    username
-  );
-  if (isAccountCreated) {
-    if (address === myWallet.keys.address) {
-      // Check if username exists on network
-      // Store updated wallets back in localStorage
-      existingWallets.netids[netid].usernames[username] = myWallet;
-      localStorage.setItem("wallets", JSON.stringify(existingWallets));
-      return { success: true, wallet: myWallet };
-    } else {
-      return {
-        success: false,
-        error:
-          "Account creation failed with the specified username. Please try again.",
-      };
-    }
-  } else {
-    return {
-      success: false,
-      error: "Error creating account. Please try again.",
-    };
-  }
-}
+    },
+  });
+};
 
 const checkAccountCreation = async (username) => {
-  console.log('checkAccountCreation', username);
+  console.log("checkAccountCreation", username);
   let retries = 0;
   const maxRetries = 20;
   let created = false;
   let address = null;
 
   while (retries < maxRetries) {
-    address = await checkUsernameAvailability(username);
+    address = await getAddress(username);
     console.log(retries, address);
     if (address === undefined || address === null) {
       created = false;
@@ -180,14 +343,21 @@ const checkAccountCreation = async (username) => {
   };
 };
 
+const toShardusAddress = (address) => {
+  return address + "0".repeat(24);
+};
+
+const toEthereumAddress = (address) => {
+  return "0x" + address;
+};
+
 async function submitRegisterAlias(alias, keys) {
   const aliasBytes = utf82bin(alias);
   const aliasHash = blake.blake2bHex(aliasBytes, myHashKey, 32);
   const tx = {
     type: "register",
     aliasHash: aliasHash,
-    from: keys.address + "0".repeat(24),
-    // from: keys.public,
+    from: toShardusAddress(keys.address),
     alias: alias,
     publicKey: keys.public,
     timestamp: Date.now(),
@@ -323,8 +493,11 @@ function formatTime(timestamp) {
 window.AppActions = {
   handleSignIn,
   handleUsernameAvailability,
+  handleImportAccount,
 };
 
 window.AppUtils = {
   formatTime,
+  toShardusAddress,
+  toEthereumAddress,
 };
