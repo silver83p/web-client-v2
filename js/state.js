@@ -1,9 +1,9 @@
 class State {
   constructor() {
     this.state = {
-      isAuthenticated: localStorage.getItem("authenticated") === "true",
-      currentPage: "chats",
-      currentAddress: null,
+      isAuthenticated: localStorage.getItem("authenticated") ? true : false,
+      currentPage: "wallet",
+      currentAddress: localStorage.getItem("authenticated"),
       chatAddress: null,
       timestamp: "2024-12-23T02:33:44.512Z",
       account: {},
@@ -16,6 +16,7 @@ class State {
         toll: true,
         encrypt: true,
       },
+      networkParams: {}
     };
   }
 
@@ -27,13 +28,24 @@ class State {
     console.log(newState);
     this.state = {
       ...this.state,
-      ...newState
+      ...newState,
     };
     console.log(this.state);
     this.render();
   }
 
+  updateStateWithoutRender(newState) {
+    console.log(newState);
+    this.state = {
+      ...this.state,
+      ...newState,
+    };
+    console.log(this.state);
+  }
+
   navigate(page) {
+    if (this.state.currentAddress)
+      AppUtils.updateAccountStateData(this.state.currentAddress);
     if (page.startsWith("/chats/")) {
       this.state.chatAddress = page.split("/")[2];
       this.state.currentPage = "chat-view";
@@ -45,7 +57,7 @@ class State {
 
   authenticate() {
     this.state.isAuthenticated = true;
-    localStorage.setItem("authenticated", "true");
+    localStorage.setItem("authenticated", this.state.currentAddress);
     this.navigate("chats");
   }
 
@@ -153,6 +165,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+
+
   // Initial render
-  state.render();
+  state.navigate(state.state.currentPage);
 });

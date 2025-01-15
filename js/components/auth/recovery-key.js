@@ -24,8 +24,8 @@ function renderRecoveryKey() {
         <div class="recovery-key">${privateKey}</div>
         
         <div class="auth-actions">
-          <button class="auth-button primary" onclick="handleContinue()">Continue</button>
-          <button class="auth-button secondary" onclick="copyToClipboard('${privateKey}')">Copy</button>
+          <button class="action-button primary" onclick="handleContinue()">Continue</button>
+          <button class="action-button secondary" onclick="copyToClipboard('${privateKey}')">Copy</button>
         </div>
   
         <p class="auth-terms">

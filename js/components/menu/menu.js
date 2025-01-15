@@ -37,3 +37,8 @@ function handleMenuNavigation(page) {
   toggleMenu();
   state.navigate(page);
 }
+
+function handleSignOut() {
+  toggleMenu();
+  state.logout();
+}

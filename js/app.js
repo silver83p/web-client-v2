@@ -1,11 +1,23 @@
 import * as secp from "./libs/noble-secp256k1.js";
 import keccak from "./libs/keccak256.js";
 import blake from "./libs/blake2b.js";
-import { safeStringify } from "./libs/stringify-fastest.js";
+import { safeStringify, safeJsonParse } from "./libs/stringify-fastest.js";
 
 const myHashKey = hex2bin(
   "69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc"
 );
+
+const networkAddress = '0'.repeat(64);
+
+const LIB_RRC_METHODS = {
+  SEND_TRANSACTION: "lib_sendTransaction",
+  GET_ACCOUNT: "lib_getAccount",
+  GET_TRANSACTION_RECEIPT: "lib_getTransactionReceipt",
+  GET_TRANSACTION_HISTORY: "lib_getTransactionHistory",
+  GET_MESSAGES: "lib_getMessages",
+  SUBSCRIBE: "lib_subscribe",
+  UNSUBSCRIBE: "lib_unsubscribe",
+};
 
 async function getAddress(username) {
   // Get random gateway
@@ -34,6 +46,11 @@ async function getAccountData(address) {
       `http://${randomGateway.host}:${randomGateway.port}/account/${address}`
     );
     const data = await response.json();
+    if (data.account) {
+      const account = safeJsonParse(safeStringify(data.account));
+      console.log("account", account);
+      return account;
+    }
     return data.account;
   } catch (error) {
     console.error("Error getting account:", error);
@@ -50,7 +67,7 @@ async function handleUsernameAvailability(username) {
   const netidWallets = existingWallets.netids[netid];
 
   // Check if username exists in local wallet
-  if (netidWallets?.usernames && netidWallets.usernames[username]) {
+  if (netidWallets?.usernames?.[username]) {
     const address = await getAddress(username);
     console.log("address", address);
     if (!address) {
@@ -116,7 +133,8 @@ async function handleSignIn(username, privateKey) {
     // Use existing wallet
     myWallet = existingWallets.netids[netid].usernames[username];
     console.log("myWallet", myWallet);
-    await updateAccountStateData(myWallet);
+    initializeAccountState(myWallet.keys.address);
+    await updateAccountStateData(myWallet.keys.address);
     return { success: true, existingWallet: true };
   } else if (privateKey) {
     // Use imported private key
@@ -126,7 +144,7 @@ async function handleSignIn(username, privateKey) {
       netid,
       username,
       keys: {
-        address: addressHex,
+        address: toEthereumAddress(addressHex),
         public: publicKeyHex,
         secret: privateKeyHex,
       },
@@ -148,7 +166,7 @@ async function handleSignIn(username, privateKey) {
       netid,
       username,
       keys: {
-        address: addressHex,
+        address: toEthereumAddress(addressHex),
         public: publicKeyHex,
         secret: privateKeyHex,
       },
@@ -157,7 +175,6 @@ async function handleSignIn(username, privateKey) {
   }
   const res = await submitRegisterAlias(username, myWallet.keys);
   console.log("response", res);
-  //                statusOfTxid(txid, "Register alias")
 
   if (!res || res.error || !res.result.success) {
     return {
@@ -167,14 +184,14 @@ async function handleSignIn(username, privateKey) {
   }
 
   // Check if username exists on network
-  const { success: isAccountCreated, address } = await checkAccountCreation(
-    username
-  );
+  const { success: isAccountCreated, address } =
+    await checkAccountCreation(username);
   if (isAccountCreated) {
     if (address === toShardusAddress(myWallet.keys.address)) {
       existingWallets.netids[netid].usernames[username] = myWallet;
       localStorage.setItem("wallets", JSON.stringify(existingWallets));
-      await updateAccountStateData(myWallet);
+      initializeAccountState(myWallet.keys.address);
+      await updateAccountStateData(myWallet.keys.address);
       return { success: true, existingWallet: false };
     } else {
       return {
@@ -228,7 +245,7 @@ const handleImportAccount = async (pk) => {
     netid,
     username,
     keys: {
-      address: addressHex,
+      address: toEthereumAddress(addressHex),
       public: publicKeyHex,
       secret: privateKeyHex,
     },
@@ -236,7 +253,8 @@ const handleImportAccount = async (pk) => {
 
   existingWallets.netids[netid].usernames[username] = myWallet;
   localStorage.setItem("wallets", JSON.stringify(existingWallets));
-  await updateAccountStateData(myWallet, account);
+  initializeAccountState(myWallet.keys.address);
+  await updateAccountStateData(myWallet.keys.address);
   return { success: true, newAccount: false };
 };
 
@@ -260,31 +278,25 @@ const deriveKeys = (privateKey) => {
     const address = keccak(publicKey.slice(1)).slice(-20);
     const addressHex = bin2hex(address); // Array.from(address).map(b => b.toString(16).padStart(2, '0')).join('');
 
-    return {addressHex, publicKeyHex, privateKeyHex};
+    return { addressHex, publicKeyHex, privateKeyHex };
   } catch (error) {
     console.error("Failed to derive keys", error);
     return null;
   }
 };
 
-const updateAccountStateData = async (myWallet, account) => {
-  console.log("updateAccountStateData", myWallet);
+const updateAccountStateData = async (address) => {
+  console.log("updateAccountStateData", address);
 
-  let accountData = account
-  if (!account) {
-    accountData = await getAccountData(toShardusAddress(myWallet.keys.address));
+  if (state.getState().currentAddress && !state.getState().wallet.keys) {
+    initializeAccountState(address);
   }
-
+  const account = await getAccountData(toShardusAddress(address));
+  const networkParams = await getAccountData(networkAddress);
+  console.log("networkParams", networkParams);
   state.updateState({
-    currentAddress: toEthereumAddress(myWallet.keys.address),
-    account: {
-      name: myWallet.username,
-      phone: "",
-      gender: "",
-      bio: "",
-    },
     wallet: {
-      balance: 0,
+      balance: account.data.balance,
       assets: [
         {
           id: "liberdus",
@@ -294,18 +306,46 @@ const updateAccountStateData = async (myWallet, account) => {
           chainid: 2220,
           contract: "",
           price: 0.032,
-          balance: 0,
+          balance: account.data.balance,
           addresses: [
             {
-              address: toEthereumAddress(myWallet.keys.address),
+              address,
               balance: 0,
               history: [],
             },
           ],
         },
       ],
+      keys: state.getState().wallet.keys,
+    },
+    networkParams
+  });
+};
+
+const initializeAccountState = async (address) => {
+  console.log("initializeAccountState", address);
+  // Get existing wallets
+  const { netid } = network;
+  const existingWallets = JSON.parse(
+    localStorage.getItem("wallets") || '{"netids":{}}'
+  );
+  const netidWallets = existingWallets.netids[netid];
+
+  if (!netidWallets) return;
+
+  const myWallet = Object.values(netidWallets.usernames).find(
+    (wallet) => wallet.keys.address === address
+  );
+
+  const username = myWallet.username;
+  state.updateState({
+    currentAddress: myWallet.keys.address,
+    account: {
+      name: username,
+    },
+    wallet: {
       keys: {
-        [toEthereumAddress(myWallet.keys.address)]: {
+        [myWallet.keys.address]: {
           public: myWallet.keys.public,
           secret: myWallet.keys.secret,
           type: "secp256k1",
@@ -343,12 +383,16 @@ const checkAccountCreation = async (username) => {
   };
 };
 
-const toShardusAddress = (address) => {
-  return address + "0".repeat(24);
+const toShardusAddress = (addressStr) => {
+  //  change this: 0x665eab3be2472e83e3100b4233952a16eed20c76
+  //  to this: 665eab3be2472e83e3100b4233952a16eed20c76000000000000000000000000
+  return addressStr.slice(2).toLowerCase() + "0".repeat(24);
 };
 
-const toEthereumAddress = (address) => {
-  return "0x" + address;
+export const toEthereumAddress = (addressStr) => {
+  //  change this: 665eab3be2472e83e3100b4233952a16eed20c76000000000000000000000000
+  //  to this: 0x665eab3be2472e83e3100b4233952a16eed20c76
+  return "0x" + addressStr.slice(0, 40);
 };
 
 async function submitRegisterAlias(alias, keys) {
@@ -490,14 +534,143 @@ function formatTime(timestamp) {
   }
 }
 
+async function handleTransferTransaction(targetAddress, amount) {
+  const keys = state.getState().wallet.keys[state.getState().currentAddress];
+  console.log("keys", keys);
+  const fee = state.getState().networkParams.current.transactionFee
+  const tx = {
+    type: "transfer",
+    from: toShardusAddress(state.getState().currentAddress),
+    to: targetAddress,
+    amount: BigInt(amount),
+    timestamp: Date.now(),
+    network,
+    fee,
+  }
+  console.log("tx", tx);
+  const res = await injectTx(tx, keys);
+  if (!res || res.error || !res.result.success) {
+    return {
+      success: false,
+      error: !res ? "Unknown error" : res.error ? res.error : res.result.error,
+    };
+  }
+
+  // Check balance change
+  const { success, result, error } = await checkBalanceChange(
+    state.getState().currentAddress);
+  console.log("checkBalanceChange", success, result, error);
+  return { success, error, result };
+}
+
+async function checkBalanceChange(address) {
+  console.log("checkBalanceChange", address);
+  let retries = 0;
+  const maxRetries = 20;
+  let success = false;
+  let result = null;
+
+  // Get initial balance from current state
+  const beforeBalance = state.getState().wallet.balance;
+  let afterBalance = beforeBalance;
+
+  while (retries < maxRetries) {
+    // Fetch latest account data
+    const account = await getAccountData(toShardusAddress(address));
+    console.log("Balance check attempt", retries, account);
+
+    if (account && account.data) {
+      afterBalance = account.data.balance;
+    }
+
+    // Check if balance has changed
+    if (afterBalance !== beforeBalance) {
+      success = true;
+      result = "The coin is sent successfully!";
+      break;
+    }
+
+    // Wait before next retry
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    retries++;
+  }
+
+  return {
+    success,
+    result,
+    error: !success ? "The account balance has not changed!" : null,
+  };
+}
+
+async function verifyUser(username) {
+  // Check if username exists on network
+  // If we get an address back, username is taken
+  const address = await getAddress(username);
+  if (address) {
+    return {
+      isUserFound: true,
+      address: address,
+    };
+  }
+  return {
+    isUserFound: false,
+  };
+}
+
+async function makeJsonRpcRequest(method, params = []) {
+  const { rpc_server } = network;
+
+  const requestBody = {
+    jsonrpc: "2.0",
+    method,
+    params,
+    id: 1,
+  };
+
+  const options = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  };
+
+  try {
+    const response = await fetch(
+      `http://${rpc_server.host}:${rpc_server.port}`,
+      options
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+      console.error("RPC Error:", method, data.error);
+      throw new Error(data.error.message || "Unknown RPC error");
+    }
+
+    console.log("RPC Result:", method, data.result);
+    return data.result;
+  } catch (error) {
+    console.error("RPC Request failed:", method, error);
+    throw new Error(`RPC Request Error: ${error.message}`);
+  }
+}
+
 window.AppActions = {
   handleSignIn,
   handleUsernameAvailability,
   handleImportAccount,
+  verifyUser,
+  handleTransferTransaction,
 };
 
 window.AppUtils = {
   formatTime,
   toShardusAddress,
   toEthereumAddress,
+  updateAccountStateData,
 };

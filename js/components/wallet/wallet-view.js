@@ -1,5 +1,7 @@
 function renderWallet() {
   const root = document.getElementById("root");
+  const wallet = state.getState().wallet;
+  
 
   root.innerHTML = `
     <header class="header">
@@ -14,7 +16,7 @@ function renderWallet() {
     </header>
     <div class="balance-info">
       <div class="total-balance-label">Total Balance</div>
-      <div class="total-balance">$4384.28</div>
+      <div class="total-balance">${wallet.balance}</div>
     </div>
 
     <div class="wallet-actions">
@@ -41,14 +43,16 @@ function renderWallet() {
 
     <div class="assets-section">
       <h2 class="assets-title">Assets</h2>
-      <div class="asset-item">
-        <div class="asset-icon">L</div>
-        <div class="asset-details">
-          <div class="asset-name">Liberdus</div>
-          <div class="asset-symbol">LIB</div>
+      ${wallet.assets.map(asset => `
+        <div class="asset-item">
+          <div class="asset-icon">${asset.symbol.charAt(0)}</div>
+          <div class="asset-details">
+            <div class="asset-name">${asset.name}</div>
+            <div class="asset-symbol">${asset.symbol}</div>
+          </div>
+          <div class="asset-balance">${asset.balance}</div>
         </div>
-        <div class="asset-balance">28.40</div>
-      </div>
+        `).join('')}
     </div>
   `;
 }

@@ -47,14 +47,14 @@ function renderAccount() {
       <div class="form-group">
         <label>Toll</label>
       </div>
-      <input type="text" placeholder="Enter USD value" class="input">
+      <input type="text" placeholder="Enter USD value" class="toll-input">
 
-      <button class="sign-out-button">Sign Out</button>
+      <button class="action-button primary" id="sign-out-button">Sign Out</button>
     </div>
   `;
 
   // Add event listener for sign out
-  document.querySelector('.sign-out-button').addEventListener('click', () => {
+  document.getElementById("sign-out-button").addEventListener('click', () => {
     state.logout();
   });
 }

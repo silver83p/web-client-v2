@@ -36,15 +36,11 @@ function renderImportAccount() {
           </button>
         </div>
   
-        <button class="auth-button primary" onclick="importPrivateKey()">
+        <button class="action-button primary" onclick="importPrivateKey()">
           Import
         </button>
         </div>
-        ${renderUsernameInput(
-          true,
-          "Register a username for your account.",
-          true
-        )}
+        ${renderUsernameInput("Register a username for your account.")}
   
         <p class="auth-terms">
           By using this service, you agree to our Terms of Service and Privacy Policy
@@ -54,7 +50,6 @@ function renderImportAccount() {
 
   const usernameInputBox = document.querySelector(".auth-form");
   usernameInputBox.classList.add("hidden");
-
 }
 
 function handleScanQR() {
@@ -71,7 +66,7 @@ async function importPrivateKey() {
   console.log("importPrivateKey", success, error, newAccount);
 
   if (!success) {
-    console.log('importPrivateKey error', error);
+    console.log("importPrivateKey error", error);
     // alert(error);
   }
   if (!newAccount) state.authenticate();
@@ -81,7 +76,6 @@ async function importPrivateKey() {
     console.log(usernameInputBox);
     usernameInputBox.classList.remove("hidden");
     console.log(usernameInputBox);
-
 
     // Hide seed input box
     const seedInputBox = document.querySelector(".seed-phrase-box");

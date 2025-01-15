@@ -14,7 +14,7 @@ function renderCreateAccount() {
         
         <img src="./public/icon-512x512.png" class="auth-logo" alt="Liberdus logo">
         
-        ${renderUsernameInput(false, "Pick a unique username or display name.")}
+        ${renderUsernameInput("Pick a unique username or display name.")}
         <p class="auth-terms">
           By using this service, you agree to our Terms of Service and Privacy Policy
         </p>
@@ -22,7 +22,7 @@ function renderCreateAccount() {
     `;
 }
 
-function renderUsernameInput(isImport = false, label = "") {
+function renderUsernameInput(label = "") {
   return `
         <div class="auth-form">
           <p class="auth-description">${label}</p>
@@ -35,13 +35,7 @@ function renderUsernameInput(isImport = false, label = "") {
             oninput="checkUsername(this.value)"
           >
           <span class="input-status" id="username-status"></span>
-
-          ${
-            isImport
-              ? `<button class="auth-button primary" id="create-button" onclick="handleAppLogin()" disabled>`
-              : `<button class="auth-button primary" id="create-button" onclick="handleAppLogin()" disabled>`
-          }
-          
+          <button class="action-button primary" id="create-button" onclick="handleAppLogin()" disabled>
             <span id="button-text">Create Account</span>
             <span id="button-loader" class="hidden">Creating Account...</span>
           </button>
