@@ -28,6 +28,7 @@
           src="./liberdus_logo_250.png"
           alt="Liberdus Logo"
           style="margin-bottom: 20px"
+          class="welcome-logo"
         />
         <h1>Liberdus</h1>
         <div class="welcome-buttons">
@@ -66,7 +67,7 @@
               ></label>
               <input type="text" id="recipient" class="form-control" required />
             </div>
-            <button type="submit" class="update-button">Continue</button>
+            <button type="submit" class="primary-button">Continue</button>
           </form>
         </div>
       </div>
@@ -106,11 +107,50 @@
       </div>
 
       <footer class="footer" id="footer">
-        <div class="nav-buttons">
-          <button class="nav-button" id="switchToChats">Chats</button>
-          <button class="nav-button" id="switchToContacts">Contacts</button>
-          <button class="nav-button" id="switchToWallet">Wallet</button>
-        </div>
+        <a class="nav-item" id="switchToChats" data-page="chats">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+            />
+          </svg>
+          <span>Chats</span>
+        </a>
+        <a class="nav-item" id="switchToContacts" data-page="contacts">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path d="M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          <span>Contacts</span>
+        </a>
+        <a class="nav-item" id="switchToWallet" data-page="wallet">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M19 5H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V7a2 2 0 00-2-2z"
+            />
+            <path d="M3 7l9 6 9-6" />
+          </svg>
+          <span>Wallet</span>
+        </a>
       </footer>
 
       <!-- Menu Modal -->
@@ -143,7 +183,7 @@
               <label for="username">Select Account</label>
               <select id="username" class="form-control" required></select>
             </div>
-            <button type="submit" class="update-button" disabled>
+            <button type="submit" class="primary-button" disabled>
               Sign In
             </button>
           </form>
@@ -153,7 +193,18 @@
       <!-- Create Account Modal -->
       <div class="modal" id="createAccountModal">
         <div class="modal-header">
-          <button class="back-button" id="closeCreateAccountModal">←</button>
+          <button class="back-button" id="closeCreateAccountModal">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
           <div class="modal-title">Create Account</div>
         </div>
         <div class="form-container">
@@ -186,7 +237,7 @@
                 placeholder="Enter private key in hex format"
               />
             </div>
-            <button type="submit" class="update-button" disabled>
+            <button type="submit" class="primary-button" disabled>
               Create Account
             </button>
           </form>
@@ -223,7 +274,7 @@
               <label for="bio">Bio</label>
               <textarea id="bio" class="form-control"></textarea>
             </div>
-            <button type="submit" class="update-button">Update Profile</button>
+            <button type="submit" class="primary-button">Update Profile</button>
             <div id="successMessage" class="success-message">
               Profile updated successfully!
             </div>
@@ -258,7 +309,7 @@
                 placeholder="Enter password for encrypted files"
               />
             </div>
-            <button type="submit" class="update-button">Load Account</button>
+            <button type="submit" class="primary-button">Load Account</button>
             <div id="importMessage" class="success-message">
               Account imported successfully!
             </div>
@@ -396,7 +447,7 @@
               <label for="sendMemo">Memo (Optional)</label>
               <textarea id="sendMemo" class="form-control"></textarea>
             </div>
-            <button type="submit" class="update-button">Send</button>
+            <button type="submit" class="primary-button">Send</button>
           </form>
         </div>
       </div>
@@ -439,7 +490,7 @@
                 placeholder="Leave empty for unencrypted export"
               />
             </div>
-            <button type="submit" class="update-button">Download Data</button>
+            <button type="submit" class="primary-button">Download Data</button>
           </form>
         </div>
       </div>

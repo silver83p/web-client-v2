@@ -819,6 +819,12 @@ async function updateWalletBalances() {
 }
 
 function switchView(view) {
+  // Add active class to selected nav item
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    if (item.textContent.trim().toLowerCase().trim() === view) item.classList.toggle("active", true);
+    else item.classList.toggle("active", false);
+  });
+
   // Hide all screens
   document.querySelectorAll(".app-screen").forEach((screen) => {
     screen.classList.remove("active");
