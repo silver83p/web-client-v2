@@ -36,6 +36,16 @@ let parameters = {
   },
 };
 
+const LIB_RRC_METHODS = {
+  SEND_TRANSACTION: "lib_sendTransaction",
+  GET_ACCOUNT: "lib_getAccount",
+  GET_TRANSACTION_RECEIPT: "lib_getTransactionReceipt",
+  GET_TRANSACTION_HISTORY: "lib_getTransactionHistory",
+  GET_MESSAGES: "lib_getMessages",
+  SUBSCRIBE: "lib_subscribe",
+  UNSUBSCRIBE: "lib_unsubscribe",
+};
+
 async function checkOnlineStatus() {
   try {
     const url = new URL(window.location.origin);
@@ -267,6 +277,26 @@ async function handleCreateAccount(event) {
   const res = await postRegisterAlias(username, myAccount.keys);
 
   if (res && (res.error || !res.result.success)) {
+    showToast("Failed to create account. Please try again.", res.result);
+    return;
+  }
+
+  // Change create account button to Creating Account...
+  const createAccountButton = document.querySelector(
+    '#createAccountForm button[type="submit"]'
+  );
+  createAccountButton.textContent = "Creating Account...";
+  createAccountButton.disabled = true;
+
+  // Wait for 5 seconds
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+
+  const created = await checkAccountCreation(username);
+
+  if (!created) {
+    createAccountButton.textContent = "Create Account";
+    createAccountButton.disabled = false;
+    showToast("Failed to create account. Please try again.");
     return;
   }
 
@@ -281,6 +311,7 @@ async function handleCreateAccount(event) {
   closeCreateAccountModal();
   document.getElementById("welcomeScreen").style.display = "none";
   switchView("chats"); // Default view
+  await updateWalletBalances();
 }
 
 async function handleSignIn(event) {
@@ -764,6 +795,25 @@ function loadAccountFormData() {
   document.getElementById("bio").value = savedData.bio || "";
 }
 
+const checkAccountCreation = async (username) => {
+  let retries = 0;
+  const maxRetries = 20;
+  let created = false;
+
+  while (retries < maxRetries) {
+    const res = await checkUsernameAvailability(username);
+    if (res == "taken") {
+      created = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    retries++;
+  }
+  return created;
+};
+
+cons;
+
 async function updateWalletBalances() {
   if (!myAccount || !myData || !myData.wallet || !myData.wallet.assets) {
     console.error("No wallet data available");
@@ -821,7 +871,8 @@ async function updateWalletBalances() {
 function switchView(view) {
   // Add active class to selected nav item
   document.querySelectorAll(".nav-item").forEach((item) => {
-    if (item.textContent.trim().toLowerCase().trim() === view) item.classList.toggle("active", true);
+    if (item.textContent.trim().toLowerCase().trim() === view)
+      item.classList.toggle("active", true);
     else item.classList.toggle("active", false);
   });
 
@@ -844,7 +895,21 @@ function switchView(view) {
   // Update header with username if signed in
   const appName = document.querySelector(".app-name");
   if (myAccount && myAccount.username) {
-    appName.textContent = `Liberdus - ${myAccount.username}`;
+    // appName.textContent = `Liberdus - ${myAccount.username}`;
+    // Display the view name, Make sure to display the 1st letter in uppercase
+    appName.textContent = view.charAt(0).toUpperCase() + view.slice(1);
+
+    if (view === "chats" || view === "contacts") {
+      // Make the search bar visible
+      document.getElementById("searchBar").style.display = "flex";
+      const searchInput = document.getElementById("searchInput");
+      searchInput.placeholder = `Search ${
+        view === "chats" ? "messages" : "contacts"
+      }...`;
+    } else {
+      // Hide the search bar
+      document.getElementById("searchBar").style.display = "none";
+    }
   } else {
     appName.textContent = "Liberdus";
   }
@@ -873,6 +938,34 @@ function switchView(view) {
       button.classList.add("active");
     }
   });
+}
+
+// Toast notification function
+function showToast(message, duration = 3000) {
+  // Remove existing toast if any
+  const existingToast = document.querySelector(".toast");
+  if (existingToast) {
+    existingToast.remove();
+  }
+
+  // Create new toast
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  // Show toast
+  setTimeout(() => {
+    toast.classList.add("show");
+  }, 100);
+
+  // Hide and remove toast after duration
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+  }, duration);
 }
 
 // Update contacts list UI
@@ -1709,12 +1802,24 @@ async function handleSend(event) {
     return;
   }
 
+  // Change Send button text to "Sending..."
+  const sendButton = document.querySelector(
+    '#sendForm button[type="submit"]'
+  )
+  sendButton.textContent = "Sending...";
+  sendButton.disabled = true;
+
   try {
     // Send the transaction using postTransferAsset
     const response = await postTransferAsset(toAddress, amount, memo, keys);
 
     if (!response || !response.result || !response.result.success) {
-      alert("Transaction failed: " + response.result.reason);
+      console.error("Transaction failed:", response.result.reason);
+      sendButton.textContent = "Send";
+      sendButton.disabled = false;
+      showToast("Transaction failed. Please try again.");
+      // alert("Transaction failed: " + response.result.reason);
+
       return;
     }
 
@@ -1728,10 +1833,16 @@ async function handleSend(event) {
                 // Update wallet view and close modal
                 updateWalletView();
 */
+    showToast("Transaction submitted, waiting it to be processed");
+    sendButton.textContent = "Send";
+    sendButton.disabled = false;
     closeSendModal();
   } catch (error) {
     console.error("Transaction error:", error);
-    alert("Transaction failed. Please try again.");
+    sendButton.textContent = "Send";
+    sendButton.disabled = false;
+    showToast("Transaction failed. Please try again.");
+    // alert("Transaction failed. Please try again.");
   }
 }
 
@@ -1954,7 +2065,7 @@ function closeHistoryModal() {
   document.getElementById("historyModal").classList.remove("active");
 }
 
-function updateHistoryAddresses() {
+async function updateHistoryAddresses() {
   //                    const walletData = JSON.parse(localStorage.getItem('walletData') || '{"assets":[]}');
   const walletData = myData.wallet;
 
@@ -1965,7 +2076,7 @@ function updateHistoryAddresses() {
   if (!walletData.assets || walletData.assets.length === 0) {
     addressSelect.innerHTML =
       '<option value="">No addresses available</option>';
-    updateTransactionHistory();
+    await updateTransactionHistory();
     return;
   }
 
@@ -1975,7 +2086,7 @@ function updateHistoryAddresses() {
   if (!asset || !asset.addresses || asset.addresses.length === 0) {
     addressSelect.innerHTML =
       '<option value="">No addresses available</option>';
-    updateTransactionHistory();
+    await updateTransactionHistory();
     return;
   }
 
@@ -1985,10 +2096,10 @@ function updateHistoryAddresses() {
     .join("");
 
   // Update transaction history
-  updateTransactionHistory();
+  await updateTransactionHistory();
 }
 
-function updateTransactionHistory() {
+async function updateTransactionHistory() {
   //                    const walletData = JSON.parse(localStorage.getItem('walletData') || '{"assets":[]}');
   const walletData = myData.wallet;
 
@@ -2021,6 +2132,26 @@ function updateTransactionHistory() {
   }
 
   const address = asset.addresses[addressIndex];
+
+  // Fetch transaction history for the selected address
+  const result = await makeJsonRpcRequest(
+    LIB_RRC_METHODS.GET_TRANSACTION_HISTORY,
+    [longAddress(address.address)]
+  );
+
+  if (result && result.transactions && result.transactions.length > 0) {
+    address.history = result.transactions.map((tx) => {
+      return {
+        txid: tx.txId,
+        amount: Number(tx.amount),
+        sign: tx.from === longAddress(address.address) ? -1 : 1,
+        timestamp: tx.timestamp,
+        address: tx.from === longAddress(address.address) ? tx.to : tx.from,
+        memo: tx.memo,
+      };
+    });
+  }
+
   if (!address || !address.history || address.history.length === 0) {
     transactionList.innerHTML = `
                             <div class="empty-state">
@@ -2458,4 +2589,49 @@ function bigxnum2num(bigIntNum, floatNum) {
   }
 
   return result;
+}
+
+async function makeJsonRpcRequest(method, params = []) {
+  const requestBody = {
+    jsonrpc: "2.0",
+    method,
+    params,
+    id: 1,
+  };
+
+  const options = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  };
+
+  const randomRPCServer =
+    network.rpc_server[Math.floor(Math.random() * network.rpc_server.length)];
+  const url = `${randomRPCServer.protocol}://${randomRPCServer.host}:${randomRPCServer.port}`;
+
+  console.log("RPC Request:", url, method, params);
+
+  try {
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      console.log(`HTTP error! status: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+      console.error("RPC Error:", method, data.error);
+      return null;
+    }
+
+    console.log("RPC Result:", method, data.result);
+    return parse(stringify(data.result));
+  } catch (error) {
+    console.error("RPC Request failed:", method, error);
+    return null;
+  }
 }

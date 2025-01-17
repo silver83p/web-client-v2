@@ -23,6 +23,25 @@
         </div>
       </header>
 
+      <div class="search-container" id="searchBar">
+        <svg
+          class="search-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input
+          type="text"
+          class="search-input"
+          id="searchInput"
+          placeholder="Search..."
+        />
+      </div>
+
       <div class="welcome-screen" id="welcomeScreen">
         <img
           src="./liberdus_logo_250.png"
@@ -96,7 +115,12 @@
             <span class="action-label">Receive</span>
           </button>
           <button class="wallet-action-button" id="openHistoryModal">
-            <span class="action-icon">⌚</span>
+            <span class="action-icon">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </span>
             <span class="action-label">History</span>
           </button>
         </div>

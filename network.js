@@ -7,4 +7,11 @@ const network = {
       port: 9001,
     },
   ],
+  rpc_server: [
+    {
+      protocol: "http",
+      host: "127.0.0.1",
+      port: 8545,
+    },
+  ],
 };
