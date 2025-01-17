@@ -209,6 +209,35 @@ function closeCreateAccountModal() {
   document.getElementById("createAccountModal").classList.remove("active");
 }
 
+// Modal management functions at the top with other modal functions
+function openAccountCreatedModal(privateKey) {
+  const modal = document.getElementById("accountCreatedModal");
+  const privateKeyDisplay = document.getElementById("privateKeyDisplay");
+  privateKeyDisplay.textContent = privateKey;
+  modal.classList.add("active");
+}
+
+function closeAccountCreatedModal() {
+  document.getElementById("accountCreatedModal").classList.remove("active");
+}
+
+function proceedToApp() {
+  closeAccountCreatedModal();
+  document.getElementById("welcomeScreen").style.display = "none";
+  switchView("chats");
+  updateWalletBalances();
+}
+
+async function copyPrivateKey() {
+  const privateKey = document.getElementById("privateKeyDisplay").textContent;
+  try {
+    await navigator.clipboard.writeText(privateKey);
+    showToast("Private key copied to clipboard");
+  } catch (err) {
+    showToast("Failed to copy private key");
+  }
+}
+
 async function handleCreateAccount(event) {
   event.preventDefault();
   const username = document.getElementById("newUsername").value;
@@ -305,11 +334,9 @@ async function handleCreateAccount(event) {
   // Store the account data in localStorage
   localStorage.setItem(`${username}_${netid}`, stringify(myData));
 
-  // Close modal and proceed to app
+  // Close create account modal and show account created modal
   closeCreateAccountModal();
-  document.getElementById("welcomeScreen").style.display = "none";
-  switchView("chats"); // Default view
-  await updateWalletBalances();
+  openAccountCreatedModal(privateKeyHex);
 }
 
 async function handleSignIn(event) {
@@ -686,6 +713,11 @@ document.addEventListener("DOMContentLoaded", () => {
       this.style.height = "44px";
       this.style.height = Math.min(this.scrollHeight, 120) + "px";
     });
+
+  // Account Created Modal event listeners
+  document.getElementById("closeAccountCreatedModal").addEventListener("click", proceedToApp);
+  document.getElementById("copyPrivateKey").addEventListener("click", copyPrivateKey);
+  document.getElementById("continueToApp").addEventListener("click", proceedToApp);
 });
 
 // Format timestamp to relative time

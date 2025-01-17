@@ -116,9 +116,15 @@
           </button>
           <button class="wallet-action-button" id="openHistoryModal">
             <span class="action-icon">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
+              <svg
+                class="icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
               </svg>
             </span>
             <span class="action-label">History</span>
@@ -528,6 +534,54 @@
             <button type="submit" class="primary-button">Download Data</button>
           </form>
         </div>
+      </div>
+
+      <!-- Account Created Modal -->
+      <div class="modal" id="accountCreatedModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeAccountCreatedModal">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <div class="modal-title">Account Created</div>
+        </div>
+
+        <div class="modal-content">
+          <!-- Using the same logo -->
+          <img
+            src="./liberdus_logo_250.png"
+            alt="Liberdus Logo"
+            class="welcome-logo"
+          />
+
+          <div class="recovery-message">
+            Use your recovery privateKey to access your account on new devices.
+            Keep it safe and secure, as your account cannot be recovered without
+            it. Do not share it with anyone.
+          </div>
+
+          <div class="private-key-container">
+            <code id="privateKeyDisplay"></code>
+          </div>
+
+          <div class="button-container">
+            <button class="primary-button" id="continueToApp">Continue</button>
+            <button class="secondary-button" id="copyPrivateKey">Copy</button>
+          </div>
+        </div>
+
+        <p class="auth-terms">
+          By using this service, you agree to our Terms of Service and Privacy
+          Policy
+        </p>
       </div>
     </div>
 
