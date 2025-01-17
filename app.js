@@ -36,7 +36,7 @@ let parameters = {
   },
 };
 
-const LIB_RRC_METHODS = {
+const LIB_RPC_METHODS = {
   SEND_TRANSACTION: "lib_sendTransaction",
   GET_ACCOUNT: "lib_getAccount",
   GET_TRANSACTION_RECEIPT: "lib_getTransactionReceipt",
@@ -276,8 +276,9 @@ async function handleCreateAccount(event) {
   myData = newDataRecord(myAccount);
   const res = await postRegisterAlias(username, myAccount.keys);
 
-  if (res && (res.error || !res.result.success)) {
-    showToast("Failed to create account. Please try again.", res.result);
+  // Update this check to match the RPC response format
+  if (!res || !res.success) {
+    showToast("Failed to create account. Please try again.", res?.reason);
     return;
   }
 
@@ -1813,8 +1814,9 @@ async function handleSend(event) {
     // Send the transaction using postTransferAsset
     const response = await postTransferAsset(toAddress, amount, memo, keys);
 
-    if (!response || !response.result || !response.result.success) {
-      console.error("Transaction failed:", response.result.reason);
+    // Update this check to match the RPC response format
+    if (!response || !response.success) {
+      console.error("Transaction failed:", response?.reason);
       sendButton.textContent = "Send";
       sendButton.disabled = false;
       showToast("Transaction failed. Please try again.");
@@ -1842,7 +1844,6 @@ async function handleSend(event) {
     sendButton.textContent = "Send";
     sendButton.disabled = false;
     showToast("Transaction failed. Please try again.");
-    // alert("Transaction failed. Please try again.");
   }
 }
 
@@ -1920,10 +1921,10 @@ async function handleSendMessage() {
     // Send the message transaction using postSendMessage with default toll of 1
     const response = await postSendMessage(currentAddress, payload, 1, keys);
 
-    if (!response || !response.result || !response.result.success) {
+    if (!response || !response.success) {
       alert(
         "Message failed to send: " +
-          (response.result?.reason || "Unknown error")
+          (response?.reason || "Unknown error")
       );
       return;
     }
@@ -2135,7 +2136,7 @@ async function updateTransactionHistory() {
 
   // Fetch transaction history for the selected address
   const result = await makeJsonRpcRequest(
-    LIB_RRC_METHODS.GET_TRANSACTION_HISTORY,
+    LIB_RPC_METHODS.GET_TRANSACTION_HISTORY,
     [longAddress(address.address)]
   );
 
@@ -2440,24 +2441,17 @@ function longAddress(address) {
 
 async function injectTx(tx, keys) {
   const txid = await signObj(tx, keys); // add the sign obj to tx
-  // Get random gateway
-  const randomGateway =
-    network.gateways[Math.floor(Math.random() * network.gateways.length)];
-  const options = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: stringify({ tx: stringify(tx) }),
-  };
+  
   try {
-    const response = await fetch(
-      `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/inject`,
-      options
+    const response = await makeJsonRpcRequest(
+      LIB_RPC_METHODS.SEND_TRANSACTION,
+      [stringify(tx)]
     );
-    const data = await response.json();
-    data.txid = txid;
-    return data;
+    
+    if (response) {
+      response.txid = txid;
+    }
+    return response;
   } catch (error) {
     console.error("Error injecting tx:", error, tx);
     return error;
