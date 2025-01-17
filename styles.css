@@ -355,6 +355,7 @@ button:hover {
   display: flex;
   align-items: center;
   padding: 1rem;
+  border-bottom: none;
 }
 
 .back-button {
@@ -401,8 +402,8 @@ button:hover {
 
 /* Account Form Styles */
 .form-container {
-  padding: 1.5rem;
-  overflow-y: auto;
+  padding: 0 1.5rem;
+  text-align: center;
 }
 
 .form-group {
@@ -415,6 +416,12 @@ button:hover {
   margin-bottom: 0.5rem;
   color: #495057;
   font-weight: 500;
+}
+
+.form-description {
+  color: #6c757d;
+  margin-bottom: 3rem;
+  text-align: center;
 }
 
 .form-control {
@@ -833,4 +840,91 @@ textarea.form-control {
 .toast.show {
   opacity: 1;
   visibility: visible;
+}
+
+/* Add logo styling */
+.modal .welcome-logo {
+  width: 150px;
+  height: 150px;
+  margin: 10px auto;
+  border-radius: 50%;
+  display: block;
+}
+
+/* Add terms styling */
+.auth-terms {
+  color: #6c757d;
+  font-size: 0.875rem;
+  text-align: center;
+  margin-top: 2rem;
+  padding: 0 1.5rem;
+}
+
+.input-status-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-status-container .form-control {
+  margin-bottom: 0;
+}
+
+#createAccountForm .form-group {
+  margin-bottom: 0.5rem;
+}
+
+/* Modal Typography and Spacing */
+.modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.form-description {
+  color: #6c757d;
+  font-size: 1.1rem;
+  font-weight: 400;
+  margin-bottom: 2rem;
+}
+
+.form-group label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.primary-button {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.auth-terms {
+  margin-top: auto;
+  padding-bottom: 1rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #6c757d;
+}
+
+#newUsernameAvailable {
+  color: #28a745;
+  visibility: hidden;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  text-align: left;
+  height: 1.25rem;
+}
+
+/* Update existing modal class */
+.modal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Add container for scrollable content */
+.modal-content {
+  flex: 1;
+  overflow-y: auto;
 }

@@ -231,41 +231,52 @@
           </button>
           <div class="modal-title">Create Account</div>
         </div>
-        <div class="form-container">
-          <form id="createAccountForm">
-            <div class="form-group">
-              <label for="newUsername"
-                >Username
-                <span
-                  id="newUsernameAvailable"
-                  style="color: #28a745; display: none"
-                  >available</span
-                ></label
-              >
-              <div style="position: relative">
+
+        <div class="modal-content">
+          <img
+            src="./liberdus_logo_250.png"
+            alt="Liberdus Logo"
+            class="welcome-logo"
+          />
+
+          <div class="form-container">
+            <p class="form-description">
+              Pick a unique username or display name.
+            </p>
+            <form id="createAccountForm">
+              <div class="form-group">
+                <label for="newUsername">Username or display name</label>
+                <div class="input-status-container">
+                  <input
+                    type="text"
+                    id="newUsername"
+                    class="form-control"
+                    placeholder="Enter your username"
+                    required
+                  />
+                  <span id="newUsernameAvailable">placeholder</span>
+                </div>
+              </div>
+              <div class="form-group" style="display: none">
+                <label for="newPrivateKey">Private Key (hex, optional)</label>
                 <input
                   type="text"
-                  id="newUsername"
+                  id="newPrivateKey"
                   class="form-control"
-                  placeholder="Select a username"
-                  required
+                  placeholder="Enter private key in hex format"
                 />
               </div>
-            </div>
-            <div class="form-group">
-              <label for="newPrivateKey">Private Key (hex, optional)</label>
-              <input
-                type="text"
-                id="newPrivateKey"
-                class="form-control"
-                placeholder="Enter private key in hex format"
-              />
-            </div>
-            <button type="submit" class="primary-button" disabled>
-              Create Account
-            </button>
-          </form>
+              <button type="submit" class="primary-button" disabled>
+                Create Account
+              </button>
+            </form>
+          </div>
         </div>
+
+        <p class="auth-terms">
+          By using this service, you agree to our Terms of Service and Privacy
+          Policy
+        </p>
       </div>
 
       <!-- Account Form Modal -->

@@ -171,14 +171,14 @@ function openCreateAccountModal() {
     }
 
     // Reset display
-    usernameAvailable.style.display = "none";
+    usernameAvailable.style.visibility = "hidden";
     submitButton.disabled = true;
 
     // Check if username is too short
     if (username.length < 3) {
       usernameAvailable.textContent = "too short";
       usernameAvailable.style.color = "#dc3545";
-      usernameAvailable.style.display = "inline";
+      usernameAvailable.style.visibility = "visible";
       return;
     }
 
@@ -188,17 +188,17 @@ function openCreateAccountModal() {
       if (taken == "taken") {
         usernameAvailable.textContent = "taken";
         usernameAvailable.style.color = "#dc3545";
-        usernameAvailable.style.display = "inline";
+        usernameAvailable.style.visibility = "visible";
         submitButton.disabled = true;
       } else if (taken == "available") {
         usernameAvailable.textContent = "available";
         usernameAvailable.style.color = "#28a745";
-        usernameAvailable.style.display = "inline";
+        usernameAvailable.style.visibility = "visible";
         submitButton.disabled = false;
       } else {
         usernameAvailable.textContent = "network error";
         usernameAvailable.style.color = "#dc3545";
-        usernameAvailable.style.display = "inline";
+        usernameAvailable.style.visibility = "visible";
         submitButton.disabled = true;
       }
     }, 1000);
