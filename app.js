@@ -65,17 +65,14 @@ async function checkUsernameAvailability(username) {
   try {
     const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [usernameHash]);
     
-    if (!accountData) {
-      return "error";
-    }
-    
     // If we get account data with an address field, username is taken
-    if (accountData.address) {
+    if (accountData && accountData.address) {
       return "taken";
     }
     
-    // If we get account data but no address, username is available
+    // If we get null (account not found) or account data without address, username is available
     return "available";
+    
   } catch (error) {
     console.log("Error checking username:", error);
     return "error2";
@@ -2600,6 +2597,11 @@ async function makeJsonRpcRequest(method, params = []) {
     const data = await response.json();
 
     if (data.error) {
+      // Special handling for "Account not found" error
+      if (data.error.code === -32600 && data.error.message.includes("Account not found")) {
+        console.warn("Account not found");
+        return null;  // Return null for non-existent accounts
+      }
       console.error("RPC Error:", method, data.error);
       return null;
     }
