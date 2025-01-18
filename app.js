@@ -58,23 +58,23 @@ async function checkOnlineStatus() {
 }
 
 async function checkUsernameAvailability(username) {
-  // Get random gateway
-  const randomGateway =
-    network.gateways[Math.floor(Math.random() * network.gateways.length)];
   const usernameBytes = utf82bin(username);
   const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32);
   console.log("usernameHash", usernameHash);
+  
   try {
-    const response = await fetch(
-      `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`
-    );
-    const data = await response.json();
-    if (data && data.address) {
-      return "taken";
-    }
-    if (!data) {
+    const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [usernameHash]);
+    
+    if (!accountData) {
       return "error";
     }
+    
+    // If we get account data with an address field, username is taken
+    if (accountData.address) {
+      return "taken";
+    }
+    
+    // If we get account data but no address, username is available
     return "available";
   } catch (error) {
     console.log("Error checking username:", error);
@@ -828,8 +828,6 @@ async function updateWalletBalances() {
   }
 
   let totalWalletBalance = 0;
-  const randomGateway =
-    network.gateways[Math.floor(Math.random() * network.gateways.length)];
 
   // Update balances for each asset and address
   for (const asset of myData.wallet.assets) {
@@ -839,18 +837,16 @@ async function updateWalletBalances() {
     for (const addr of asset.addresses) {
       try {
         const address = longAddress(addr.address);
-        const response = await fetch(
-          `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/account/${address}/balance`
-        );
-        const data = await response.json();
-        console.log("response", response);
-        console.log("response.json", data);
-        // Update address balance
-        addr.balance = hex2big(data.balance.value) || 0;
+        const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [address]);
+        
+        if (accountData && accountData.balance) {
+          // Update address balance
+          addr.balance = hex2big(accountData.balance.value) || 0;
 
-        // Add to asset total (convert to USD using asset price)
-        const balanceUSD = bigxnum2num(addr.balance, asset.price);
-        assetTotalBalance += balanceUSD;
+          // Add to asset total (convert to USD using asset price)
+          const balanceUSD = bigxnum2num(addr.balance, asset.price);
+          assetTotalBalance += balanceUSD;
+        }
       } catch (error) {
         console.error(
           `Error fetching balance for address ${addr.address}:`,
@@ -1406,20 +1402,14 @@ async function handleNewChat(event) {
     const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32);
 
     try {
-      // Get random gateway
-      const randomGateway =
-        network.gateways[Math.floor(Math.random() * network.gateways.length)];
-      const response = await fetch(
-        `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`
-      );
-      const data = await response.json();
+      const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [usernameHash]);
 
-      if (!data || !data.address) {
+      if (!accountData || !accountData.address) {
         showRecipientError("Username not found");
         return;
       }
-      // Normalize address from API if it has 0x prefix or trailing zeros
-      recipientAddress = normalizeAddress(data.address);
+      // Normalize address from account data if it has 0x prefix or trailing zeros
+      recipientAddress = normalizeAddress(accountData.address);
     } catch (error) {
       console.log("Error looking up username:", error);
       showRecipientError("Error looking up username");
@@ -1455,9 +1445,6 @@ async function handleNewChat(event) {
       unread: 0,
     });
   }
-
-  // Save updated data
-  //            localStorage.setItem('chatsData', JSON.stringify(chatsData));
 
   // Close new chat modal and open chat modal
   closeNewChatModal();
@@ -1772,23 +1759,18 @@ async function handleSend(event) {
       return;
     }
 
-    // Look up username on network
+    // Look up username using RPC
     const usernameBytes = utf82bin(recipientInput);
     const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32);
 
     try {
-      const randomGateway =
-        network.gateways[Math.floor(Math.random() * network.gateways.length)];
-      const response = await fetch(
-        `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`
-      );
-      const data = await response.json();
+      const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [usernameHash]);
 
-      if (!data || !data.address) {
+      if (!accountData || !accountData.address) {
         alert("Username not found");
         return;
       }
-      toAddress = normalizeAddress(data.address);
+      toAddress = normalizeAddress(accountData.address);
     } catch (error) {
       console.error("Error looking up username:", error);
       alert("Error looking up username");
