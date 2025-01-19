@@ -480,15 +480,18 @@ textarea.form-control {
 }
 
 /* Floating Button Styles */
-/* Floating Button Styles */
-#chatsScreen {
+#chatsScreen,
+#contactsScreen {
   padding-bottom: 80px;
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .floating-button {
   position: fixed;
-  bottom: 90px;
-  right: 20px;
+  bottom: 75px;
+  right: calc(50% - 28px);
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -505,7 +508,9 @@ textarea.form-control {
   z-index: 1000;
 }
 
-.floating-button.visible {
+.floating-button.visible,
+#contactsScreen.active .floating-button,
+#chatsScreen.active .floating-button {
   display: flex;
 }
 

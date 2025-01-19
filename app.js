@@ -718,7 +718,185 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("closeAccountCreatedModal").addEventListener("click", proceedToApp);
   document.getElementById("copyPrivateKey").addEventListener("click", copyPrivateKey);
   document.getElementById("continueToApp").addEventListener("click", proceedToApp);
+
+  // Add Friend functionality
+  document
+    .getElementById("addFriendButton")
+    .addEventListener("click", openAddFriendModal);
+  document
+    .getElementById("closeAddFriendModal")
+    .addEventListener("click", closeAddFriendModal);
+  document
+    .getElementById("addFriendForm")
+    .addEventListener("submit", handleAddFriend);
+  document
+    .getElementById("friendInput")
+    .addEventListener("blur", handleFriendInputValidation);
 });
+
+function openAddFriendModal() {
+  document.getElementById("addFriendModal").classList.add("active");
+  document.getElementById("addFriendButton").classList.remove("visible");
+}
+
+function closeAddFriendModal() {
+  document.getElementById("addFriendModal").classList.remove("active");
+  document.getElementById("addFriendForm").reset();
+  if (document.getElementById("contactsScreen").classList.contains("active")) {
+    document.getElementById("addFriendButton").classList.add("visible");
+  }
+}
+
+async function handleFriendInputValidation(e) {
+  const input = e.target.value.trim();
+  const errorElement = document.getElementById("friendInputError");
+
+  // Clear previous error
+  errorElement.style.display = "none";
+
+  if (!input) return;
+
+  // Check if input is an Ethereum address
+  if (input.startsWith("0x")) {
+    if (!isValidEthereumAddress(input)) {
+      errorElement.textContent = "Invalid address format";
+      errorElement.style.display = "inline";
+    }
+    return;
+  }
+
+  // If not an address, treat as username
+  if (input.length < 3) {
+    errorElement.textContent = "Username too short";
+    errorElement.style.display = "inline";
+    return;
+  }
+
+  // Check username availability on network
+  const taken = await checkUsernameAvailability(input);
+  if (taken === "taken") {
+    errorElement.textContent = "found";
+    errorElement.style.color = "#28a745"; // Green color for success
+    errorElement.style.display = "inline";
+  } else if (taken === "available") {
+    errorElement.textContent = "not found";
+    errorElement.style.display = "inline";
+  } else {
+    errorElement.textContent = "network error";
+    errorElement.style.display = "inline";
+  }
+}
+
+async function handleAddFriend(event) {
+  event.preventDefault();
+  const input = document.getElementById("friendInput").value.trim();
+  let friendAddress;
+
+  // Hide previous error
+  const errorElement = document.getElementById("friendInputError");
+  errorElement.style.display = "none";
+
+  // Check if input is an Ethereum address
+  if (input.startsWith("0x")) {
+    if (!isValidEthereumAddress(input)) {
+      errorElement.textContent = "Invalid Ethereum address format";
+      errorElement.style.display = "inline";
+      return;
+    }
+    friendAddress = input;
+  } else {
+    if (input.length < 3) {
+      errorElement.textContent = "Username too short";
+      errorElement.style.display = "inline";
+      return;
+    }
+
+    // Lookup username address
+    const usernameBytes = utf82bin(input);
+    const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32);
+
+    try {
+      const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [usernameHash]);
+      if (!accountData || !accountData.address) {
+        errorElement.textContent = "Username not found";
+        errorElement.style.display = "inline";
+        return;
+      }
+      friendAddress = accountData.address;
+    } catch (error) {
+      console.error("Error looking up username:", error);
+      errorElement.textContent = "Error looking up username";
+      errorElement.style.display = "inline";
+      return;
+    }
+  }
+
+  console.log("Friend address before tx:", friendAddress); // Debug log
+
+  // Create friend request transaction
+  try {
+    const tx = {
+      type: "friend",
+      from: longAddress(myAccount.keys.address),
+      to: friendAddress,
+      alias: input.startsWith("0x") ? undefined : input,
+      timestamp: Date.now(),
+    };
+
+    console.log("Transaction object:", tx);
+
+    // Submit friend request transaction with the entire keys object
+    const response = await injectTx(tx, myAccount.keys);
+
+    if (!response || response.error) {
+      throw new Error(response?.error || "Failed to send friend request");
+    }
+
+    // Wait for transaction confirmation
+    let retries = 0;
+    const maxRetries = 20;
+    while (retries < maxRetries) {
+      // Check if friend request was processed - using longAddress format
+      const accountData = await makeJsonRpcRequest(
+        LIB_RPC_METHODS.GET_ACCOUNT, 
+        [longAddress(myAccount.keys.address)] // Added longAddress here
+      );
+      
+      console.log("Polling attempt", retries + 1, "Account data:", accountData);
+
+      if (accountData?.data?.friends?.[friendAddress]) {
+        // Add friend to local contacts
+        if (!myData.contacts) {
+          myData.contacts = {};
+        }
+        myData.contacts[friendAddress] = {
+          address: friendAddress,
+          username: !input.startsWith("0x") ? input : undefined,
+          timestamp: Date.now()
+        };
+        
+        // Save updated data
+        localStorage.setItem(`${myAccount.username}_${network.netid}`, stringify(myData));
+
+        // Close modal and update contacts list
+        closeAddFriendModal();
+        await updateContactsList();
+        showToast("Friend added successfully!");
+        return;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      retries++;
+    }
+    
+    throw new Error("Friend request confirmation timed out");
+    
+  } catch (error) {
+    console.error("Error adding friend:", error);
+    errorElement.textContent = error.message || "Failed to add friend";
+    errorElement.style.display = "inline";
+  }
+}
 
 // Format timestamp to relative time
 function formatTime(timestamp) {
@@ -997,49 +1175,66 @@ function showToast(message, duration = 3000) {
 // Update contacts list UI
 async function updateContactsList() {
   const contactsList = document.getElementById("contactsList");
-  //            const chatsData = JSON.parse(localStorage.getItem('chatsData') || '{"contacts":{}}');
   const chatsData = myData;
-  const contacts = chatsData.contacts;
+  const contacts = chatsData.contacts || {};
 
   if (Object.keys(contacts).length === 0) {
     contactsList.innerHTML = `
-                    <div class="empty-state">
-                        <div style="font-size: 2rem; margin-bottom: 1rem">👥</div>
-                        <div style="font-weight: bold; margin-bottom: 0.5rem">No Contacts Yet</div>
-                        <div>Your contacts will appear here</div>
-                    </div>`;
+      <div class="empty-state">
+        <div style="font-size: 2rem; margin-bottom: 1rem">👥</div>
+        <div style="font-weight: bold; margin-bottom: 0.5rem">No Contacts Yet</div>
+        <div>Your contacts will appear here</div>
+      </div>`;
     return;
   }
 
-  const contactsArray = Object.values(contacts);
+  // Normalize addresses and remove duplicates
+  const normalizedContacts = {};
+  Object.values(contacts).forEach(contact => {
+    // Normalize the address by removing padding zeros
+    const normalizedAddress = contact.address.replace(/0{24}$/, "");
+    
+    // If this normalized address already exists, keep the one with more info
+    if (normalizedContacts[normalizedAddress]) {
+      const existing = normalizedContacts[normalizedAddress];
+      normalizedContacts[normalizedAddress] = {
+        ...contact,
+        address: normalizedAddress,
+        username: contact.username || existing.username,
+        name: contact.name || existing.name,
+        email: contact.email || existing.email,
+        x: contact.x || existing.x,
+        phone: contact.phone || existing.phone
+      };
+    } else {
+      normalizedContacts[normalizedAddress] = {
+        ...contact,
+        address: normalizedAddress
+      };
+    }
+  });
+
+  const contactsArray = Object.values(normalizedContacts);
   const contactItems = await Promise.all(
     contactsArray.map(async (contact) => {
       const identicon = await generateIdenticon(contact.address);
       return `
-                    <li class="chat-item">
-                        <div class="chat-avatar">${identicon}</div>
-                        <div class="chat-content">
-                            <div class="chat-header">
-                                <div class="chat-name">${
-                                  contact.name ||
-                                  contact.username ||
-                                  `${contact.address.slice(
-                                    0,
-                                    8
-                                  )}...${contact.address.slice(-6)}`
-                                }</div>
-                            </div>
-                            <div class="chat-message">
-                                ${
-                                  contact.email ||
-                                  contact.x ||
-                                  contact.phone ||
-                                  contact.address
-                                }
-                            </div>
-                        </div>
-                    </li>
-                `;
+        <li class="chat-item">
+          <div class="chat-avatar">${identicon}</div>
+          <div class="chat-content">
+            <div class="chat-header">
+              <div class="chat-name">${
+                contact.name ||
+                contact.username ||
+                `${contact.address.slice(0, 8)}...${contact.address.slice(-6)}`
+              }</div>
+            </div>
+            <div class="chat-message">
+              ${contact.email || contact.x || contact.phone || contact.address}
+            </div>
+          </div>
+        </li>
+      `;
     })
   );
 

@@ -65,8 +65,9 @@
         <ul class="chat-list" id="chatList">
           <!-- Chat items will be inserted here -->
         </ul>
+        <button class="floating-button" id="newChatButton">+</button>
       </div>
-      <button class="floating-button" id="newChatButton">+</button>
+      
 
       <!-- New Chat Modal -->
       <div class="modal" id="newChatModal">
@@ -95,6 +96,36 @@
         <ul class="chat-list" id="contactsList">
           <!-- Contact items will be inserted here -->
         </ul>
+        <button class="floating-button" id="addFriendButton">+</button>
+      </div>
+
+      <!-- Add Friend Modal -->
+      <div class="modal" id="addFriendModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeAddFriendModal">←</button>
+          <div class="modal-title">Add Friend</div>
+        </div>
+        <div class="form-container">
+          <form id="addFriendForm">
+            <div class="form-group">
+              <label for="friendInput"
+                >Username or Address
+                <span
+                  id="friendInputError"
+                  style="color: #dc3545; display: none"
+                ></span>
+              </label>
+              <input
+                type="text"
+                id="friendInput"
+                class="form-control"
+                placeholder="Enter username or address"
+                required
+              />
+            </div>
+            <button type="submit" class="primary-button">Add Friend</button>
+          </form>
+        </div>
       </div>
 
       <div class="app-screen" id="walletScreen">
