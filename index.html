@@ -18,7 +18,18 @@
       <header class="header" id="header">
         <div class="app-name">Liberdus</div>
         <div class="header-icons">
-          <button class="icon-button" id="search">🔍</button>
+          <button class="icon-button" id="search">
+            <svg
+            class="header-search-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          </button>
           <button class="icon-button" id="toggleMenu">☰</button>
         </div>
       </header>
@@ -65,7 +76,7 @@
         <ul class="chat-list" id="chatList">
           <!-- Chat items will be inserted here -->
         </ul>
-        <button class="floating-button" id="newChatButton">+</button>
+        <button class="floating-button" id="newChatButton">+ Add Chat</button>
       </div>
       
 
@@ -96,7 +107,7 @@
         <ul class="chat-list" id="contactsList">
           <!-- Contact items will be inserted here -->
         </ul>
-        <button class="floating-button" id="addFriendButton">+</button>
+        <button class="floating-button" id="addFriendButton">+ Add Friend</button>
       </div>
 
       <!-- Add Friend Modal -->
@@ -270,19 +281,15 @@
         </div>
 
         <div class="modal-content">
-          <img
-            src="./liberdus_logo_250.png"
-            alt="Liberdus Logo"
-            class="welcome-logo"
-          />
-
           <div class="form-container">
             <p class="form-description">
               Pick a unique username or display name.
             </p>
             <form id="createAccountForm">
               <div class="form-group">
-                <label for="newUsername">Username or display name</label>
+                <label for="newUsername">Username or display name
+                  <span id="newUsernameAvailable">placeholder</span>
+                </label>
                 <div class="input-status-container">
                   <input
                     type="text"
@@ -291,10 +298,10 @@
                     placeholder="Enter your username"
                     required
                   />
-                  <span id="newUsernameAvailable">placeholder</span>
                 </div>
               </div>
-              <div class="form-group" style="display: none">
+
+              <div class="form-group">
                 <label for="newPrivateKey">Private Key (hex, optional)</label>
                 <input
                   type="text"
@@ -303,6 +310,7 @@
                   placeholder="Enter private key in hex format"
                 />
               </div>
+            
               <button type="submit" class="primary-button" disabled>
                 Create Account
               </button>

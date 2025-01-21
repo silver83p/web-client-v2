@@ -316,7 +316,7 @@ async function handleCreateAccount(event) {
   createAccountButton.disabled = true;
 
   // Wait for 5 seconds
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  await sleep(5000);
 
   const created = await checkAccountCreation(username);
 
@@ -1014,13 +1014,11 @@ const checkAccountCreation = async (username) => {
       created = true;
       break;
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(500);
     retries++;
   }
   return created;
 };
-
-cons;
 
 async function updateWalletBalances() {
   if (!myAccount || !myData || !myData.wallet || !myData.wallet.assets) {
@@ -1046,9 +1044,10 @@ async function updateWalletBalances() {
         const address = longAddress(addr.address);
         const accountData = await makeJsonRpcRequest(LIB_RPC_METHODS.GET_ACCOUNT, [address]);
         
-        if (accountData && accountData.balance) {
+        if (accountData?.data) {
           // Update address balance
-          addr.balance = hex2big(accountData.balance.value) || 0;
+          // addr.balance = hex2big(accountData.balance.value) || 0;
+          addr.balance = accountData.data.balance || 0;
 
           // Add to asset total (convert to USD using asset price)
           const balanceUSD = bigxnum2num(addr.balance, asset.price);
@@ -2172,11 +2171,17 @@ async function handleSendMessage() {
     messagesList.insertAdjacentHTML(
       "beforeend",
       `
-                    <div class="message sent">
+                    <div class="new-message">
+                      <div class="message sent" >
                         <div class="message-content" style="white-space: pre-wrap">${message}</div>
                         <div class="message-time">${formatTime(
                           newMessage.timestamp
                         )}</div>
+                      </div>
+                      <span class="new-message-status">
+                          Pending
+                          <span class="loading-dots">...</span>
+                      </span>
                     </div>
                 `
     );
@@ -2188,6 +2193,30 @@ async function handleSendMessage() {
     // Scroll to bottom
     messagesList.parentElement.scrollTop =
       messagesList.parentElement.scrollHeight;
+
+    // Add loading dots animation
+    const loadingDots = document.querySelector(".loading-dots");
+    let dots = 0;
+    const loadingInterval = setInterval(() => {
+      dots = (dots + 1) % 4;
+      loadingDots.textContent = ".".repeat(dots || 3);
+    }, 500);
+
+    // Wait for 5 seconds
+    await sleep(5000);
+
+    clearInterval(loadingInterval);
+    // Remove loading dots div from DOM
+    loadingDots.parentElement.removeChild(loadingDots);
+
+    const statusElement = document.querySelector(".new-message-status");
+    statusElement.textContent = "Sent";
+
+    setTimeout(() => {
+      statusElement.textContent = "";
+      // Remove status element from DOM
+      statusElement.parentElement.removeChild(statusElement);
+    }, 3000);
 
     // Update chat list if visible
     if (document.getElementById("chatsScreen").classList.contains("active")) {
@@ -2840,3 +2869,5 @@ async function makeJsonRpcRequest(method, params = []) {
     return null;
   }
 }
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

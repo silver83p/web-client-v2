@@ -95,14 +95,22 @@ body {
 
 .header-icons {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
+}
+
+.header-search-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  font-weight: bolder;
+  color: black;
+  cursor: pointer;
 }
 
 .icon-button {
   background: none;
   border: none;
   color: black;
-  font-size: 1.2rem;
+  font-size: 1.85rem;
   cursor: pointer;
   padding: 0.25rem;
 }
@@ -292,7 +300,6 @@ button:hover {
   background-color: transparent;
   color: #999;
   border: 1px solid #ccc;
-  margin-top: 20px;
 }
 
 .secondary-button:hover {
@@ -482,22 +489,17 @@ textarea.form-control {
 /* Floating Button Styles */
 #chatsScreen,
 #contactsScreen {
-  padding-bottom: 80px;
-  position: relative;
-  flex: 1;
-  overflow-y: auto;
+  padding-bottom: 10px;
 }
 
 .floating-button {
-  position: fixed;
-  bottom: 75px;
-  right: calc(50% - 28px);
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
+  position: absolute;
+  right: 20px;
+  bottom: 50px;
+  border-radius: 9999px;
   background-color: #007bff;
   color: white;
-  font-size: 24px;
+  font-size: 16px;
   border: none;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   cursor: pointer;
@@ -518,7 +520,7 @@ textarea.form-control {
   .floating-button {
     position: absolute;
     right: 20px;
-    bottom: 90px;
+    bottom: 40px;
   }
 }
 .floating-button:hover {
@@ -631,6 +633,27 @@ textarea.form-control {
   text-align: left;
 }
 
+.new-message {
+  align-self: flex-end;
+}
+
+.new-message .message {
+  max-width: 100%;
+}
+
+.loading-dots {
+  display: inline-block;
+  min-width: 1.5em;
+}
+
+.new-message-status {
+  align-items: flex-end;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-top: 0.25rem;
+  text-align: right;
+}
+
 .chat-user-info {
   display: flex;
   align-items: center;
@@ -688,8 +711,7 @@ textarea.form-control {
 .wallet-actions {
   display: flex;
   justify-content: space-around;
-  padding: 1rem;
-  background-color: white;
+  padding: 1rem 0;
   border-bottom: 1px solid #dee2e6;
 }
 
@@ -703,6 +725,10 @@ textarea.form-control {
   padding: 0.5rem;
   font-size: 1rem;
   cursor: pointer;
+}
+
+.wallet-action-button:hover {
+  background-color: #f8f9fa;
 }
 
 .action-icon {
@@ -870,37 +896,7 @@ textarea.form-control {
 }
 
 .input-status-container .form-control {
-  margin-bottom: 0;
-}
-
-#createAccountForm .form-group {
   margin-bottom: 0.5rem;
-}
-
-/* Modal Typography and Spacing */
-.modal-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-}
-
-.form-description {
-  color: #6c757d;
-  font-size: 1.1rem;
-  font-weight: 400;
-  margin-bottom: 2rem;
-}
-
-.form-group label {
-  font-size: 1rem;
-  font-weight: 500;
-  color: #495057;
-  margin-bottom: 0.75rem;
-  display: block;
-}
-
-.primary-button {
-  font-size: 1.1rem;
-  font-weight: 500;
 }
 
 .auth-terms {
@@ -914,10 +910,6 @@ textarea.form-control {
 #newUsernameAvailable {
   color: #28a745;
   visibility: hidden;
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  text-align: left;
-  height: 1.25rem;
 }
 
 /* Update existing modal class */
@@ -943,7 +935,7 @@ textarea.form-control {
   color: #4a5568;
   margin: 2rem;
   line-height: 1.5;
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .private-key-container {
@@ -965,34 +957,9 @@ textarea.form-control {
 
 .button-container {
   display: flex;
+  flex-direction: row;
   gap: 1rem;
-  padding: 1rem 2rem;
-}
-
-.button-container button {
-  flex: 1;
-  height: 56px;
-  border-radius: 8px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  margin: 0;
-  border: none;
-}
-
-.button-container .primary-button {
-  background: #4299e1;
-  color: white;
-}
-
-.button-container .secondary-button {
-  background: #f1f5f9;
-  color: #4a5568;
-  border: none;
+  padding: 2rem 2rem;
 }
 
 .auth-terms {
@@ -1001,17 +968,4 @@ textarea.form-control {
   padding: 1rem 2rem;
   margin-top: auto;
   font-size: 0.9rem;
-}
-
-/* Ensure the modal content is properly spaced */
-#accountCreatedModal .modal-content {
-  display: flex;
-  flex-direction: column;
-  padding: 1rem 0;
-}
-
-#accountCreatedModal .welcome-logo {
-  width: 80px;
-  height: 80px;
-  margin: 2rem auto;
 }
