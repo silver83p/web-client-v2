@@ -574,6 +574,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     checkVersion()
     document.getElementById('versionDisplay').textContent = myVersion + ' '+version;
+    document.getElementById('networkNameDisplay').textContent = network.name;
 
     // Initialize service worker first
     if ('serviceWorker' in navigator) {
