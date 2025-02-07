@@ -1,6 +1,6 @@
 // Check if there is a newer version and load that using a new random url to avoid cache hits
 //   Versions should be YYYY.MM.DD.HH.mm like 2025.01.25.10.05
-const version = 'p'   // Also increment this when you increment version.html
+const version = 's'   // Also increment this when you increment version.html
 let myVersion = '0'
 async function checkVersion(){
     myVersion = localStorage.getItem('version') || '0';
@@ -21,7 +21,7 @@ console.log(parseInt(myVersion.replace(/\D/g, '')), parseInt(newVersion.replace(
             alert('Updating to new version: ' + newVersion)
         }
         localStorage.setItem('version', newVersion); // Save new version
-        forceReload(['index.html','styles.css','app.js','lib.js'])
+        forceReload(['index.html','styles.css','app.js','lib.js', 'network.js'])
         const newUrl = window.location.href
 //console.log('reloading', newUrl)
         window.location.replace(newUrl);
@@ -585,7 +585,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Add unload handler to save myData
-//    window.addEventListener('unload', handleUnload)
+    window.addEventListener('unload', handleUnload)
     window.addEventListener('beforeunload', handleBeforeUnload)
 
     
@@ -715,19 +715,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupAddToHomeScreen()
 });
 
-/*
+
 function handleUnload(e){
     console.log('in handleUnload')
     if (handleSignOut.exit){ 
-        saveState()
 //        window.removeEventListener('unload', handleUnload)
         return 
     } // User selected to Signout; state was already saved
     else{
-        e.preventDefault()
+        saveState()
+//        e.preventDefault()
     }
 }
-*/
+
 
 // Add unload handler to save myData
 function handleBeforeUnload(e){
@@ -957,6 +957,7 @@ console.log('updateChatList chats.length', chats.length)
         const identicon = await generateIdenticon(chat.address);
         const contact = contacts[chat.address]
         const message = contact.messages.at(-1)
+        if (!message){ return '' }
         return `
             <li class="chat-item">
                 <div class="chat-avatar">${identicon}</div>

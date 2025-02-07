@@ -8,7 +8,7 @@ const network = {
       "port": 3030    
     },
   ],
-    "monitor": {
+  "monitor": {
     "url": "http://test.liberdus.com:3000"
   },
   "explorer": {
