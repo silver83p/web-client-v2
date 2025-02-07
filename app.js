@@ -1,6 +1,6 @@
 // Check if there is a newer version and load that using a new random url to avoid cache hits
 //   Versions should be YYYY.MM.DD.HH.mm like 2025.01.25.10.05
-const version = 's'   // Also increment this when you increment version.html
+const version = 't'   // Also increment this when you increment version.html
 let myVersion = '0'
 async function checkVersion(){
     myVersion = localStorage.getItem('version') || '0';
@@ -570,6 +570,19 @@ function getColorFromHash(hash, index) {
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
+// Function to open the About modal
+function openAboutModal() {
+    document.getElementById('aboutModal').classList.add('active');
+    document.getElementById('versionDisplayAbout').textContent = myVersion + ' '+version;
+    document.getElementById('networkNameAbout').textContent = network.name;
+    document.getElementById('netIdAbout').textContent = network.netid;
+}
+
+// Function to close the About modal
+function closeAboutModal() {
+    document.getElementById('aboutModal').classList.remove('active');
+}
+
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
 
@@ -621,7 +634,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('toggleMenu').addEventListener('click', toggleMenu);
     document.getElementById('closeMenu').addEventListener('click', toggleMenu);
-    
+
+    // About Modal
+    document.getElementById('openAbout').addEventListener('click', openAboutModal);
+    document.getElementById('closeAboutModal').addEventListener('click', closeAboutModal);
+
     // Sign In Modal
     signInBtn.addEventListener('click', openSignInModal);
     document.getElementById('closeSignInModal').addEventListener('click', closeSignInModal);

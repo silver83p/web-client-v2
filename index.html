@@ -141,8 +141,50 @@
 -->
                 <li class="menu-item" id="openExportForm">Export</li>
                 <li class="menu-item" id="openRemoveAccount">Remove</li>
+                <li class="menu-item" id="openAbout">About</li>
                 <li class="menu-item" id="handleSignOut">Sign Out</li>
             </ul>
+        </div>
+
+        <!-- About Modal -->
+        <div class="modal" id="aboutModal">
+            <div class="modal-header">
+                <button class="back-button" id="closeAboutModal"></button>
+                <div class="modal-title">About Liberdus</div>
+            </div>
+            <div class="form-container">
+                <div style="padding: 1rem;">
+                    <img src="./liberdus_logo_250.png" alt="Liberdus Logo" style="margin-bottom: 20px; width: 100%; max-width: 200px;">
+                    <p>
+                        Liberdus is a decentralized messaging and wallet application.
+                    </p>
+                    <br><br>
+                    <div style="font-size: 0.8rem; margin-top: 10px; text-align: center;">Version <span id="versionDisplayAbout"></span></div>
+                    <div style="font-size: 0.8rem; margin-top: 10px; text-align: center;">Network Name: <span id="networkNameAbout"></span></div>
+                    <div style="font-size: 0.8rem; margin-top: 10px; text-align: center;">Net ID:<br> 
+                        <span style="font-size: 0.7rem;" id="netIdAbout"></span>
+                    </div><br><br>
+                    <div><a href="https://liberdus.com" target="_blank">Liberdus.com</a></div>
+                    <p><a href="https://github.com/liberdus" target="_blank">Source Code</a></p>
+                    <br>
+                    <p><a href="index.html.txt" target="_blank">index.html</a>
+                    <a href="styles.css" target="_blank">styles.css</a>
+                    <a href="app.js" target="_blank">app.js</a></p>
+                    <br>
+                    <a href="network.js" target="_blank">network.js</a>
+                    <a href="lib.js" target="_blank">lib.js</a>
+                    <a href="service-worker.js" target="_blank">service-worker.js</a>
+                    <br>
+                    <p>
+                        <a href="noble-ciphers.js" target="_blank">noble-ciphers.js</a>
+                        <a href="noble-secp256k1.js" target="_blank">noble-secp256k1.js</a>
+                        <a href="blake2b.js" target="_blank">blake2b.js</a>
+                        <a href="keccak256.js" target="_blank">keccak256.js</a>
+                        <a href="stringify-shardus.js" target="_blank">stringify-shardus.js</a>
+                        <a href="qrcode.js" target="_blank">qrcode.js</a>
+                    </p>
+                </div>
+            </div>
         </div>
 
         <!-- Sign In Modal -->
