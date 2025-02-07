@@ -2747,8 +2747,10 @@ async function registerServiceWorker() {
             await existingReg.unregister();
         }
 
-        // Register new service worker
-        const registration = await navigator.serviceWorker.register('/service-worker.js');
+        // Register new service worker with correct path and scope
+        const registration = await navigator.serviceWorker.register('./service-worker.js', {
+            scope: './'
+        });
         console.log('Service Worker registered successfully:', registration.scope);
 
         // Wait for the service worker to be ready
