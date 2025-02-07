@@ -1,6 +1,6 @@
 // Check if there is a newer version and load that using a new random url to avoid cache hits
 //   Versions should be YYYY.MM.DD.HH.mm like 2025.01.25.10.05
-const version = 'l'   // Also increment this when you increment version.html
+const version = 'p'   // Also increment this when you increment version.html
 let myVersion = '0'
 async function checkVersion(){
     myVersion = localStorage.getItem('version') || '0';
@@ -117,7 +117,8 @@ import { normalizeUsername, generateIdenticon, formatTime,
 const myHashKey = hex2bin('69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc')
 const weiDigits = 18; 
 const wei = 10n**BigInt(weiDigits)
-
+const pollIntervalNormal = 30000 // in millisconds
+const pollIntervalChatting = 5000  // in millseconds
 //network.monitor.url = "http://test.liberdus.com:3000"    // URL of the monitor server
 //network.explorer.url = "http://test.liberdus.com:6001"   // URL of the chain explorer
 
@@ -616,7 +617,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add event listeners
     document.getElementById('search').addEventListener('click', () => {
-        // TODO: Implement search functionality
+        console.log("poll next, last, timer", pollChats.nextPoll, pollChats.lastPoll, pollChats.timer)
     });
     document.getElementById('toggleMenu').addEventListener('click', toggleMenu);
     document.getElementById('closeMenu').addEventListener('click', toggleMenu);
@@ -696,7 +697,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Add refresh balance button handler
     document.getElementById('refreshBalance').addEventListener('click', async () => {
-        await updateWalletBalances();
+//        await updateWalletBalances();
         updateWalletView();
     });
     
@@ -987,8 +988,10 @@ async function updateWalletBalances() {
         console.error('No wallet data available');
         return;
     }
+    await updateAssetPricesIfNeeded()
+    const now = Date.now()
     if (!myData.wallet.timestamp){myData.wallet.timestamp = 0}
-    if (Date.now() - myData.wallet.timestamp < 5000){return}
+    if (now - myData.wallet.timestamp < 5000){return}
 
     // TODO - first update the asset prices from a public API
 
@@ -1022,7 +1025,7 @@ console.log('balance', data)
 
     // Update total wallet balance
     myData.wallet.networth = totalWalletNetworth;
-    myData.wallet.timestamp = Date.now()
+    myData.wallet.timestamp = now
 }
 
 async function switchView(view) {
@@ -1057,11 +1060,12 @@ async function switchView(view) {
     // Update lists when switching views
     if (view === 'chats') {
         await updateChatList('force');
+        pollChatInterval(pollIntervalNormal)
     } else if (view === 'contacts') {
         await updateContactsList();
     } else if (view === 'wallet') {
-        await updateAssetPricesIfNeeded(); // New function to update asset prices
-        await updateWalletBalances();
+//        await updateAssetPricesIfNeeded(); // New function to update asset prices
+//        await updateWalletBalances();
         await updateWalletView();
     }
     
@@ -1556,7 +1560,7 @@ function openChatModal(address) {
     // Setup to update new messages
     appendChatModal.address = address
     appendChatModal.len = messages.length
-    pollChatInterval(5000) // poll for messages every 5 seconds
+    pollChatInterval(pollIntervalChatting) // poll for messages at a faster rate
 }
 
 function appendChatModal(){
@@ -1598,7 +1602,7 @@ function closeChatModal() {
     }
     appendChatModal.address = null
     appendChatModal.len = 0
-    pollChatInterval(0)
+    pollChatInterval(pollIntervalNormal) // back to polling at slower rate
 }
 
 function openReceiveModal() {
@@ -2090,9 +2094,11 @@ async function handleSendMessage() {
 }
 
 // Update wallet view; refresh wallet
-function updateWalletView() {
+async function updateWalletView() {
     const walletData = myData.wallet
     
+    await updateWalletBalances()
+
     // Update total networth
     document.getElementById('walletTotalBalance').textContent = (walletData.networth || 0).toFixed(2);
     
@@ -2288,19 +2294,21 @@ console.log('response', data)
 }
 
 async function pollChatInterval(milliseconds) {
-    if (pollChats.timer){ clearTimeout(pollChats.timer); pollChats.timer = null }
     pollChats.nextPoll = milliseconds
     pollChats()
 }
 
 async function pollChats(){
-    const now = Date.now()
-    if (pollChats.lastPoll + pollChats.nextPoll > now){ return }
-    updateChatList()
-    pollChats.lastPoll = now
     if (pollChats.nextPoll < 100){ return } // can be used to stop polling; pollChatInterval(0)
+    const now = Date.now()
+    if (pollChats.lastPoll + pollChats.nextPoll <= now){
+        updateChatList()
+        if (document.getElementById('walletScreen').classList.contains('active')) { await updateWalletView() }
+        pollChats.lastPoll = now
+    }
+    if (pollChats.timer){ clearTimeout(pollChats.timer) }
+console.log('in pollChats setting timer', now, pollChats.nextPoll)
     pollChats.timer = setTimeout(pollChats, pollChats.nextPoll)
-
 }
 pollChats.lastPoll = 0
 pollChats.nextPoll = 10000   // milliseconds between polls
