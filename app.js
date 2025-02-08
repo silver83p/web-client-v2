@@ -600,7 +600,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Add unload handler to save myData
     window.addEventListener('unload', handleUnload)
     window.addEventListener('beforeunload', handleBeforeUnload)
-
+    document.addEventListener('visibilitychange', handleVisibilityChange);  // Keep as document
     
     // Check for existing accounts and arrange welcome buttons
     const usernames = getAvailableUsernames()
@@ -736,15 +736,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 function handleUnload(e){
     console.log('in handleUnload')
     if (handleSignOut.exit){ 
-//        window.removeEventListener('unload', handleUnload)
         return 
     } // User selected to Signout; state was already saved
     else{
         saveState()
-//        e.preventDefault()
     }
 }
-
 
 // Add unload handler to save myData
 function handleBeforeUnload(e){
@@ -756,10 +753,19 @@ console.log('in handleBeforeUnload', e)
     }  // user selected to Signout; state was already saved
 console.log('stop back button')
     e.preventDefault();
-//    const shouldLeave = confirm('Do you want to leave this page?');
-//    if (shouldLeave == false) {
-        history.pushState(null, '', window.location.href);
-//    }
+    history.pushState(null, '', window.location.href);
+}
+
+// This is for installed apps where we can't stop the back button; just save the state
+function handleVisibilityChange(e) {
+    console.log('in handleVisibilityChange', document.visibilityState);
+    if (document.visibilityState === 'hidden') {
+        saveState();
+        if (handleSignOut.exit) {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            return;
+        }
+    }
 }
 
 
