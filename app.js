@@ -177,6 +177,7 @@ function getAvailableUsernames() {
     return Object.keys(netidAccounts.usernames);
 }
 
+// This is for the sign in button on the welcome page
 function openSignInModal() {
     // Get existing accounts
     const { netid } = network;
@@ -474,6 +475,7 @@ async function handleCreateAccount(event) {
     switchView('chats'); // Default view
 }
 
+// This is for the sign in button after selecting an account
 async function handleSignIn(event) {
     event.preventDefault();
     const username = document.getElementById('username').value;
@@ -1235,7 +1237,7 @@ async function handleImportFile(event) {
         // Get existing accounts or create new structure
         const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
         // Store updated accounts back in localStorage
-        existingAccounts.netids[myAccount.netid].usernames[myAccount.username] = myAccount;
+        existingAccounts.netids[myAccount.netid].usernames[myAccount.username] = {address: myAccount.keys.address};
         localStorage.setItem('accounts', stringify(existingAccounts));
 
         // Store the localStore entry for username_netid
