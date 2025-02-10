@@ -1236,6 +1236,10 @@ async function handleImportFile(event) {
         }
         // Get existing accounts or create new structure
         const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+        // Ensure netid exists
+        if (!existingAccounts.netids[myAccount.netid]) {
+            existingAccounts.netids[myAccount.netid] = { usernames: {} };
+        }
         // Store updated accounts back in localStorage
         existingAccounts.netids[myAccount.netid].usernames[myAccount.username] = {address: myAccount.keys.address};
         localStorage.setItem('accounts', stringify(existingAccounts));

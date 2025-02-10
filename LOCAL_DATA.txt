@@ -4,17 +4,17 @@ LocalStore key "accounts"
     "2f4b9f72089bbfce9f89d3d8e76086daab6ae6f416887c809aab26abb6e5703b": {     // this could be a testnet
       "usernames": {
         "omar":{
-          "address", "15a16dbe4bfb77fc5ff13d99deff5ea069deebf3"
+          "address": "15a16dbe4bfb77fc5ff13d99deff5ea069deebf3"
         },
         "bob": {
-          "address", "7fa16dbe4bfb77fc5ff13d99deff5ea069deebf3"
+          "address": "7fa16dbe4bfb77fc5ff13d99deff5ea069deebf3"
         }
       }
     },
     "87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7": {   // this could be a mainnet
       "usernames": {
         "omar":{                                                            // you can have the same username, but on different networks
-          "address", "49d26dbe4bfb77fc5ff13d99deff5ea069deebf3"
+          "address": "49d26dbe4bfb77fc5ff13d99deff5ea069deebf3"
         }
       }
     }
@@ -34,7 +34,7 @@ LocalStore key "username_netid"; gets read into myData global variable in app.js
     "linkedin": "tomsun",
     "x": "TomSun",
     "keys": {
-      "address", "49d26dbe4bfb77fc5ff13d99deff5ea069deebf3",
+      "address": "49d26dbe4bfb77fc5ff13d99deff5ea069deebf3",
       "public": "b829475707e9a609246f388e81cc6fcb5cd1b5e1166d84d6000235eed05bee46",
       "secret": "93a3ac1f30f392c95299894f02103218181429e682d07411d06108b910a8887ea79d475707e9a609246f388e81cc6fcb5cd1b5e1166d84d6000235eed05bee46",
       "type": "secp256k1"
