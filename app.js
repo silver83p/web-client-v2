@@ -716,6 +716,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     document.getElementById('handleSignOut').addEventListener('click', handleSignOut);
     document.getElementById('closeChatModal').addEventListener('click', closeChatModal);
+    document.getElementById('closeContactInfoModal').addEventListener('click', closeContactInfoModal);
     document.getElementById('handleSendMessage').addEventListener('click', handleSendMessage);
     
     // Add refresh balance button handler
@@ -1583,6 +1584,15 @@ function openChatModal(address) {
         messagesList.parentElement.scrollTop = messagesList.parentElement.scrollHeight;
     }, 100);
 
+    // Add click handler for username to show contact info
+    const userInfo = modal.querySelector('.chat-user-info');
+    userInfo.onclick = () => {
+        const contact = myData.contacts[address];
+        if (contact && contact.senderInfo) {
+            openContactInfoModal(contact.senderInfo);
+        }
+    };
+
     // Show modal
     modal.classList.add('active');
 
@@ -1952,6 +1962,25 @@ console.log('payload is', payload)
         console.error('Transaction error:', error);
         alert('Transaction failed. Please try again.');
     }
+}
+
+function openContactInfoModal(senderInfo) {
+    const modal = document.getElementById('contactInfoModal');
+    
+    // Set values
+    document.getElementById('contactInfoUsername').textContent = senderInfo.username || 'Not provided';
+    document.getElementById('contactInfoName').textContent = senderInfo.name || 'Not provided';
+    document.getElementById('contactInfoEmail').textContent = senderInfo.email || 'Not provided';
+    document.getElementById('contactInfoPhone').textContent = senderInfo.phone || 'Not provided';
+    document.getElementById('contactInfoLinkedin').textContent = senderInfo.linkedin || 'Not provided';
+    document.getElementById('contactInfoX').textContent = senderInfo.x || 'Not provided';
+    
+    // Show modal
+    modal.classList.add('active');
+}
+
+function closeContactInfoModal() {
+    document.getElementById('contactInfoModal').classList.remove('active');
 }
 
 function handleSignOut() {
