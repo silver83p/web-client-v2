@@ -2841,6 +2841,9 @@ async function registerServiceWorker() {
 function setupServiceWorkerMessaging() {
     if (!('serviceWorker' in navigator)) return;
 
+    let lastSoundPlayed = 0;
+    const SOUND_COOLDOWN = 1000; // Prevent multiple sounds within 1 second
+
     // Listen for messages from service worker
     navigator.serviceWorker.addEventListener('message', (event) => {
         const data = event.data;
@@ -2849,6 +2852,37 @@ function setupServiceWorkerMessaging() {
         switch (data.type) {
             case 'error':
                 console.error('Service Worker error:', data.error);
+                break;
+            case 'new_notification':
+                console.log('🖥️ Desktop notification handling');
+                // Show desktop notification
+                if (Notification.permission === 'granted') {
+                    const notificationText = data.chatCount === 1 
+                        ? 'You have new messages in a conversation'
+                        : `You have new messages in ${data.chatCount} conversations`;
+                        
+                    new Notification('New Messages', {
+                        body: notificationText,
+                        icon: './liberdus_logo_250.png'
+                    });
+                }
+                
+                // Play sound if tabbed away
+                if (document.hidden) {
+                    // Prevent duplicate sounds
+                    if (data.timestamp - lastSoundPlayed < SOUND_COOLDOWN) {
+                        return;
+                    }
+                    
+                    const audio = new Audio('./noti.wav');
+                    audio.volume = 0.20;
+                    audio.play()
+                        .then(() => {
+                            lastSoundPlayed = Date.now();
+                            console.log('✅ Sound played successfully');
+                        })
+                        .catch(error => console.error('❌ Error playing sound:', error));
+                }
                 break;
         }
     });
