@@ -113,11 +113,10 @@ const originalConsole = {
 // Override console methods
 console.log = async (...args) => {
   originalConsole.log(...args);
-  // Filter out noise
+  // Only filter out DR script and lockdown messages
   if (!args.some(arg => 
     String(arg).includes('DR script') || 
-    String(arg).includes('lockdown-install.js') ||
-    String(arg).includes('Banner not shown')
+    String(arg).includes('lockdown-install.js')
   )) {
     try {
       await Logger.log('info', ...args);

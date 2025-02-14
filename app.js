@@ -980,7 +980,7 @@ async function updateChatList(force) {
     if (myAccount && myAccount.keys) {
         gotChats = await getChats(myAccount.keys);     // populates myData with new chat messages
     }
-console.log('force gotChats', force, gotChats)
+console.log('force gotChats', JSON.stringify(force), JSON.stringify(gotChats))
     if (! (force || gotChats)){ return }
     const chatList = document.getElementById('chatList');
 //            const chatsData = myData
@@ -3025,7 +3025,7 @@ async function updateLogsView() {
         `;
     }).join('');
 
-    // Scroll to bottom of container
-    logsContainer.scrollTop = logsContainer.scrollHeight;
+    // Scroll to top to show newest logs
+    logsContainer.scrollTop = 0;
 }
 
