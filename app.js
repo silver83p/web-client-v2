@@ -741,6 +741,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 
+    // Add these new event listeners for logs modal
+    document.getElementById('openLogs').addEventListener('click', openLogsModal);
+    document.getElementById('closeLogsModal').addEventListener('click', () => {
+        document.getElementById('logsModal').classList.remove('active');
+    });
+    document.getElementById('clearLogs').addEventListener('click', async () => {
+        await Logger.clearLogs();
+        updateLogsView();
+    });
+    document.getElementById('refreshLogs').addEventListener('click', () => {
+        updateLogsView();
+    });
+
     setupAddToHomeScreen()
 });
 
@@ -2965,4 +2978,54 @@ function requestNotificationPermission() {
     }
 }
 
+// Add to your existing menu items
+function openLogsModal() {
+  const modal = document.getElementById('logsModal');
+  modal.classList.add('active');
+  updateLogsView();
+}
+
+async function updateLogsView() {
+    const logsContainer = document.getElementById('logsContainer');
+    const logs = await Logger.getLogs();
+    
+    // Sort logs by timestamp in descending order (newest first)
+    logs.sort((a, b) => b.timestamp - a.timestamp);
+    
+    logsContainer.innerHTML = logs.map(log => {
+        // Format the timestamp
+        const date = new Date(log.timestamp);
+        const timeStr = date.toLocaleTimeString();
+        const dateStr = date.toLocaleDateString();
+        
+        // Format the message based on its type
+        let formattedMessage = log.message;
+        if (typeof log.message === 'object') {
+            try {
+                formattedMessage = JSON.stringify(log.message, null, 2);
+            } catch (e) {
+                formattedMessage = String(log.message);
+            }
+        }
+
+        // Escape HTML to prevent XSS
+        const escapeHtml = (str) => {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        };
+
+        return `
+            <div class="log-entry ${log.level || 'info'}">
+                <span class="log-timestamp">${dateStr} ${timeStr}</span>
+                <span class="log-source">[${log.source || 'app'}]</span>
+                <span class="log-level">${log.level || 'info'}</span>
+                <pre class="log-message">${escapeHtml(formattedMessage)}</pre>
+            </div>
+        `;
+    }).join('');
+
+    // Scroll to bottom of container
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
 
