@@ -2999,10 +2999,7 @@ async function updateLogsView() {
     // Create document fragment for better performance
     const fragment = document.createDocumentFragment();
     
-    // Sort only once and store result
-    const sortedLogs = logs.sort((a, b) => b.timestamp - a.timestamp);
-    
-    // Reuse date formatter
+    // Use logs directly without sorting - they'll be in insertion order
     const dateFormatter = new Intl.DateTimeFormat();
     const timeFormatter = new Intl.DateTimeFormat(undefined, {
         hour: '2-digit',
@@ -3010,7 +3007,7 @@ async function updateLogsView() {
         second: '2-digit'
     });
     
-    sortedLogs.forEach(log => {
+    logs.forEach(log => {
         const logEntry = document.createElement('div');
         logEntry.className = `log-entry ${log.level || 'info'}`;
         
@@ -3026,7 +3023,7 @@ async function updateLogsView() {
 
     logsContainer.innerHTML = '';
     logsContainer.appendChild(fragment);
-    logsContainer.scrollTop = 0;
+    logsContainer.scrollTop = logsContainer.scrollHeight;  // This scrolls to bottom
 }
 
 // Helper functions moved outside for reuse

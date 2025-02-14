@@ -19,6 +19,12 @@ class Logger {
   static MAX_QUEUE_SIZE = 100;     // Or when queue reaches 100 items
   static _isFlushingQueue = false; // Lock to prevent concurrent flushes
 
+  static MAX_BATCH_SIZE = 50;      // Maximum logs to process in one batch
+  static RETRY_DELAY = 1000;       // Retry failed saves after 1 second
+  static MAX_RETRIES = 3;          // Maximum number of retry attempts
+  static _retryQueue = [];         // Queue for failed saves
+  static _processingRetries = false;
+
   static async initDB() {
     const db = await new Promise((resolve, reject) => {
       const request = indexedDB.open(this.DB_NAME, 1);
@@ -80,20 +86,29 @@ class Logger {
       const tx = db.transaction(this.STORE_NAME, 'readwrite');
       const store = tx.objectStore(this.STORE_NAME);
 
-      // Take all logs from queue
-      logsToSave = [...this._memoryQueue];
-      this._memoryQueue = []; // Clear queue
+      // Process logs in smaller batches
+      while (this._memoryQueue.length > 0) {
+        // Take a batch of logs
+        logsToSave = this._memoryQueue.splice(0, this.MAX_BATCH_SIZE);
 
-      // Save all logs in batch
-      const addPromises = logsToSave.map(log => 
-        new Promise((resolve, reject) => {
-          const request = store.add(log);
-          request.onsuccess = () => resolve();
-          request.onerror = () => reject(request.error);
-        })
-      );
+        // Save batch
+        const addPromises = logsToSave.map(log => 
+          new Promise((resolve, reject) => {
+            const request = store.add(log);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+          })
+        );
 
-      await Promise.all(addPromises);
+        try {
+          await Promise.all(addPromises);
+        } catch (error) {
+          // Add failed logs to retry queue
+          this._retryQueue.push(...logsToSave);
+          this.scheduleRetry();
+          throw error; // Re-throw to trigger outer catch
+        }
+      }
 
       // Wait for transaction to complete
       await new Promise((resolve, reject) => {
@@ -110,6 +125,46 @@ class Logger {
     } finally {
       this._isFlushingQueue = false;
     }
+  }
+
+  static async scheduleRetry() {
+    if (this._processingRetries) return;
+    
+    this._processingRetries = true;
+    let retryCount = 0;
+
+    while (this._retryQueue.length > 0 && retryCount < this.MAX_RETRIES) {
+      await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+      
+      try {
+        const db = await this.getDB();
+        const tx = db.transaction(this.STORE_NAME, 'readwrite');
+        const store = tx.objectStore(this.STORE_NAME);
+
+        // Process retry queue in batches
+        while (this._retryQueue.length > 0) {
+          const batch = this._retryQueue.splice(0, this.MAX_BATCH_SIZE);
+          const promises = batch.map(log => 
+            new Promise((resolve, reject) => {
+              const request = store.add(log);
+              request.onsuccess = () => resolve();
+              request.onerror = () => reject(request.error);
+            })
+          );
+
+          await Promise.all(promises);
+        }
+
+        break; // Success - exit retry loop
+      } catch (error) {
+        retryCount++;
+        if (retryCount >= this.MAX_RETRIES) {
+          originalConsole.error('Max retries reached, some logs may be lost:', error);
+        }
+      }
+    }
+
+    this._processingRetries = false;
   }
 
   static generateUniqueId() {
@@ -164,6 +219,7 @@ class Logger {
       const tx = db.transaction(this.STORE_NAME, 'readonly');
       const store = tx.objectStore(this.STORE_NAME);
       
+      // Use getAll() which returns records in insertion order
       return new Promise((resolve, reject) => {
         const request = store.getAll();
         request.onsuccess = () => resolve(request.result);
@@ -188,10 +244,15 @@ class Logger {
     }
   }
 
-  // For service worker to call when terminating
+  // Update forceSave to handle retry queue
   static async forceSave() {
     clearInterval(this._flushInterval);
     await this.flushQueue(true);
+    
+    // Try to save any remaining retry queue items
+    if (this._retryQueue.length > 0) {
+      await this.scheduleRetry();
+    }
   }
 
   static async saveState() {
