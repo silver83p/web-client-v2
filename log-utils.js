@@ -1,9 +1,10 @@
 /**
  * Logger utility for capturing and storing application logs in IndexedDB
- * - Overrides console methods (log, warn, error) to store logs in IndexedDB
- * - Provides methods to retrieve and clear logs
- * - Stores up to MAX_LOGS entries before auto-cleanup
- * - Access logs via Logger.getLogs() or the logs modal in UI
+ * - Captures console logs (log, warn, error) with source tracking
+ * - Batches and queues logs for efficient storage
+ * - Auto-saves on errors, page unload, and visibility changes
+ * - Handles service worker logs and lifecycle events
+ * - Provides UI modal for viewing logs (up to 1000 entries)
  */
 class Logger {
   static DB_NAME = 'LoggerDB';
@@ -338,24 +339,13 @@ console.error = (...args) => {
   Logger.queueLog('error', processedArgs, source.__source);
 };
 
-// Update visibility and unload handlers
+// Consolidate these handlers - they're duplicated in initDB() and at bottom of file
 if (typeof window !== 'undefined') {
-  // Handle page unload
-  window.addEventListener('unload', () => {
-    clearInterval(Logger._flushInterval);
-    Logger.flushQueue(true);  // Force save logs
-  });
-
-  window.addEventListener('beforeunload', () => {
-    clearInterval(Logger._flushInterval);
-    Logger.flushQueue(true);  // Force save logs
-  });
-
-  // Handle visibility changes
+  // Handle page unload and visibility in one place
+  window.addEventListener('unload', () => Logger.forceSave());
+  window.addEventListener('beforeunload', () => Logger.forceSave());
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      Logger.flushQueue(true);  // Force save logs when app hidden
-    }
+    if (document.visibilityState === 'hidden') Logger.forceSave();
   });
 }
 

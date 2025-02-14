@@ -741,7 +741,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 
-    // Add these new event listeners for logs modal
     document.getElementById('openLogs').addEventListener('click', openLogsModal);
     document.getElementById('closeLogsModal').addEventListener('click', () => {
         document.getElementById('logsModal').classList.remove('active');
@@ -765,7 +764,7 @@ function handleUnload(e){
     } // User selected to Signout; state was already saved
     else{
         saveState()
-        Logger.saveState();  // Add this
+        Logger.forceSave();
     }
 }
 
@@ -773,7 +772,7 @@ function handleUnload(e){
 function handleBeforeUnload(e){
 console.log('in handleBeforeUnload', e)
     saveState()
-    Logger.saveState();  // Add this
+    Logger.saveState();
     if (handleSignOut.exit){ 
         window.removeEventListener('beforeunload', handleBeforeUnload)
         return 
@@ -788,7 +787,7 @@ function handleVisibilityChange(e) {
     console.log('in handleVisibilityChange', document.visibilityState);
     if (document.visibilityState === 'hidden') {
         saveState();
-        Logger.saveState();  // Add this
+        Logger.saveState();
         if (handleSignOut.exit) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             return;
@@ -983,7 +982,7 @@ async function updateChatList(force) {
     if (myAccount && myAccount.keys) {
         gotChats = await getChats(myAccount.keys);     // populates myData with new chat messages
     }
-console.log('force gotChats', force === undefined ? 'undefined' : JSON.stringify(force), 
+    console.log('force gotChats', force === undefined ? 'undefined' : JSON.stringify(force), 
                              gotChats === undefined ? 'undefined' : JSON.stringify(gotChats))
     if (! (force || gotChats)){ return }
     const chatList = document.getElementById('chatList');
@@ -1003,7 +1002,7 @@ console.log('force gotChats', force === undefined ? 'undefined' : JSON.stringify
         return;
     }
 
-console.log('updateChatList chats.length', JSON.stringify(chats.length))
+    console.log('updateChatList chats.length', JSON.stringify(chats.length))
     
     const chatItems = await Promise.all(chats.map(async chat => {
         const identicon = await generateIdenticon(chat.address);
@@ -2431,10 +2430,10 @@ async function getChats(keys) {  // needs to return the number of chats that nee
     const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/${timestamp}`) // TODO get this working
 //    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/0`) // TODO stop using this
     const chatCount = Object.keys(senders.chats).length
-console.log('getChats senders', 
-    timestamp === undefined ? 'undefined' : JSON.stringify(timestamp),
-    chatCount === undefined ? 'undefined' : JSON.stringify(chatCount),
-    senders === undefined ? 'undefined' : JSON.stringify(senders))
+    console.log('getChats senders', 
+        timestamp === undefined ? 'undefined' : JSON.stringify(timestamp),
+        chatCount === undefined ? 'undefined' : JSON.stringify(chatCount),
+        senders === undefined ? 'undefined' : JSON.stringify(senders))
     if (senders && senders.chats && chatCount){     // TODO check if above is working
         await processChats(senders.chats, keys)
     }
@@ -2985,7 +2984,6 @@ function requestNotificationPermission() {
     }
 }
 
-// Add to your existing menu items
 function openLogsModal() {
   const modal = document.getElementById('logsModal');
   modal.classList.add('active');
