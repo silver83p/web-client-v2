@@ -272,11 +272,9 @@ class Logger {
 
   // New direct logging methods
   static log(...args) {
-    if (!args.some(arg => String(arg).includes('favicon.ico'))) {
-      const processedArgs = args.map(processValue);
-      const source = getCurrentSource();
-      this.queueLog('info', processedArgs, source);
-    }
+    const processedArgs = args.map(processValue);
+    const source = getCurrentSource();
+    this.queueLog('info', processedArgs, source);
   }
 
   static warn(...args) {
@@ -312,29 +310,20 @@ const processValue = (arg) => {
 
 // Helper to get current script source
 const getCurrentSource = () => {
-  // Check if we're in a service worker context more safely
-  try {
-    if (typeof self !== 'undefined' && 
-        typeof ServiceWorkerGlobalScope !== 'undefined' && 
-        self instanceof ServiceWorkerGlobalScope) {
-      return 'service-worker.js';
-    }
-  } catch (e) {
-    // Ignore error - not in service worker context
+  if (typeof ServiceWorkerGlobalScope !== 'undefined' && 
+      self instanceof ServiceWorkerGlobalScope) {
+    return 'service-worker.js';
   }
 
-  // Try to detect source from URL if available
   try {
     const currentScript = document.currentScript;
-    if (currentScript && currentScript.src) {
-      const scriptName = currentScript.src.split('/').pop();
-      return scriptName;
+    if (currentScript?.src) {
+      return currentScript.src.split('/').pop();
     }
   } catch (e) {
     // Ignore error - can't get script source
   }
 
-  // Default fallback
   return 'app.js';
 };
 
