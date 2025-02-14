@@ -472,7 +472,9 @@ async function handleCreateAccount(event) {
     
     // Store the account data in localStorage
     localStorage.setItem(`${username}_${netid}`, stringify(myData));
-    
+
+    requestNotificationPermission();
+
     // Close modal and proceed to app
     closeCreateAccountModal();
     document.getElementById('welcomeScreen').style.display = 'none';
@@ -517,7 +519,9 @@ async function handleSignIn(event) {
     myData = parse(localStorage.getItem(`${username}_${netid}`));
     if (!myData) { console.log('Account data not found'); return }
     myAccount = myData.account;
-    
+
+    requestNotificationPermission();
+
     // Close modal and proceed to app
     closeSignInModal();
     document.getElementById('welcomeScreen').style.display = 'none';
@@ -1252,6 +1256,8 @@ async function handleImportFile(event) {
 
         // Store the localStore entry for username_netid
         localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
+
+        requestNotificationPermission();
 
 /*
         // Refresh form data and chat list
@@ -2942,5 +2948,21 @@ function pqSharedKey(recipientKey, encKey){  // inputs base64 or binary, outputs
 }
 
 
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission()
+            .then(permission => {
+                console.log('Notification permission result:', permission);
+                // Optional: Hide a notification button if granted.
+                if (permission === 'granted') {
+                    const notificationButton = document.getElementById('requestNotificationPermission');
+                    if (notificationButton) {
+                        notificationButton.style.display = 'none';
+                    }
+                }
+            })
+            .catch(error => console.error('Error during notification permission request:', error));
+    }
+}
 
-        
+
