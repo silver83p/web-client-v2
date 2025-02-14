@@ -82,6 +82,10 @@ async function forceReload(urls) {
     }
 }
 
+// https://github.com/paulmillr/noble-post-quantum
+// https://github.com/paulmillr/noble-post-quantum/releases
+import { ml_kem1024, randomBytes } from './noble-post-quantum.js';
+
 // https://github.com/paulmillr/noble-secp256k1
 // https://github.com/paulmillr/noble-secp256k1/raw/refs/heads/main/index.js
 import * as secp from './noble-secp256k1.js'; 
@@ -112,7 +116,6 @@ import { normalizeUsername, generateIdenticon, formatTime,
     normalizeAddress, longAddress, utf82bin, bin2utf8, hex2big, bigxnum2big,
     big2str, base642bin, bin2base64, hex2bin, bin2hex,
 } from './lib.js';
-
 
 const myHashKey = hex2bin('69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc')
 const weiDigits = 18; 
@@ -430,6 +433,7 @@ async function handleCreateAccount(event) {
     // Generate uncompressed public key
     const publicKey = secp.getPublicKey(privateKey, false);
     const publicKeyHex = bin2hex(publicKey);
+    const pqSeed = bin2hex(randomBytes(64));
     
     // Generate address from public key
     const address = keccak256(publicKey.slice(1)).slice(-20);
@@ -444,7 +448,8 @@ async function handleCreateAccount(event) {
             address: addressHex,
             public: publicKeyHex,
             secret: privateKeyHex,
-            type: "secp256k1"
+            type: "secp256k1",
+            pqSeed: pqSeed,  // store only the 64 byte seed instead of 32,000 byte public and secret keys
         }
     };
 
@@ -1866,7 +1871,8 @@ async function handleSendAsset(event) {
 
     // Get recipient's public key from contacts
     let recipientPubKey = myData.contacts[toAddress]?.public;
-    if (!recipientPubKey) {
+    let pqRecPubKey = myData.contacts[toAddress]?.pqPublic
+    if (!recipientPubKey || !pqRecPubKey) {
         const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
         if (!recipientInfo?.account?.publicKey){
             console.log(`no public key found for recipient ${currentAddress}`)
@@ -1874,13 +1880,17 @@ async function handleSendAsset(event) {
         }
         recipientPubKey = recipientInfo.account.publicKey
         myData.contacts[toAddress].public = recipientPubKey
+        pqRecPubKey = recipientInfo.account.pqPublicKey
+        myData.contacts[toAddress].pqPublic = pqRecPubKey
     }
 
     // Generate shared secret using ECDH and take first 32 bytes
-    const dhkey = secp.getSharedSecret(
-        hex2bin(keys.secret),
-        hex2bin(recipientPubKey)
-    ).slice(1, 33);
+    let dhkey = ecSharedKey(keys.secret, recipientPubKey)
+    const  { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey)
+    const combined = new Uint8Array(dhkey.length + sharedSecret.length)
+    combined.set(dhkey).set(sharedSecret, dhkey.length)
+    dhkey = blake.blake2b(combined, myHashKey, 32)
+
 
     // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
     // Encrypt message using shared secret
@@ -1907,6 +1917,7 @@ async function handleSendAsset(event) {
         senderInfo: encSenderInfo,
         encrypted: true,
         encryptionMethod: 'xchacha20poly1305',
+        pqEncSharedKey: bin2base64(cipherText),
         sent_timestamp: Date.now()
     };
 
@@ -2055,7 +2066,8 @@ async function handleSendMessage() {
 ///yyy
     // Get recipient's public key from contacts
     let recipientPubKey = myData.contacts[currentAddress]?.public;
-    if (!recipientPubKey) {
+    let pqRecPubKey = myData.contacts[currentAddress]?.pqPublic;
+    if (!recipientPubKey || !pqRecPubKey) {
         const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
         if (!recipientInfo?.account?.publicKey){
             console.log(`no public key found for recipient ${currentAddress}`)
@@ -2063,13 +2075,17 @@ async function handleSendMessage() {
         }
         recipientPubKey = recipientInfo.account.publicKey
         myData.contacts[currentAddress].public = recipientPubKey
+        pqRecPubKey = recipientInfo.account.pqPublicKey
+        myData.contacts[currentAddress].pqPublic = pqRecPubKey
     }
-    
+
     // Generate shared secret using ECDH and take first 32 bytes
-    const dhkey = secp.getSharedSecret(
-        hex2bin(keys.secret),
-        hex2bin(recipientPubKey)
-    ).slice(1, 33);
+    let dhkey = ecSharedKey(keys.secret, recipientPubKey)
+    const { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey)
+    const combined = new Uint8Array(dhkey.length + sharedSecret.length)
+    combined.set(dhkey)
+    combined.set(sharedSecret, dhkey.length)
+    dhkey = blake.blake2b(combined, myHashKey, 32)
 
     // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
     // Encrypt message using shared secret
@@ -2093,6 +2109,7 @@ async function handleSendMessage() {
         senderInfo: encSenderInfo,
         encrypted: true,
         encryptionMethod: 'xchacha20poly1305',
+        pqEncSharedKey: bin2base64(cipherText),
         sent_timestamp: Date.now()
     };
 
@@ -2433,6 +2450,7 @@ console.log("processChats sender", sender)
                         let senderPublic = myData.contacts[from]?.public
                         if (!senderPublic){
                             const senderInfo = await queryNetwork(`/account/${longAddress(from)}`)
+                            // TODO for security, make sure hash of public key is same as from address; needs to be in other similar situations
 //console.log('senderInfo.account', senderInfo.account)
                             if (!senderInfo?.account?.publicKey){
                                 console.log(`no public key found for sender ${sender}`)
@@ -2580,11 +2598,15 @@ console.log("processChats sender", sender)
 async function decryptMessage(payload, keys){
     if (payload.encrypted) {
         // Generate shared secret using ECDH
-        const dhkey = secp.getSharedSecret(
-            hex2bin(keys.secret),
-            hex2bin(payload.public)
-        ).slice(1, 33);
-        
+        let dhkey = ecSharedKey(keys.secret, payload.public)
+        const { publicKey, secretKey } = ml_kem1024.keygen(hex2bin(keys.pqSeed))
+        const sharedSecret = pqSharedKey(secretKey, payload.pqEncSharedKey)
+        const combined = new Uint8Array(dhkey.length + sharedSecret.length)
+        combined.set(dhkey)
+        combined.set(sharedSecret, dhkey.length)
+        dhkey = blake.blake2b(combined, myHashKey, 32)
+    
+
         // Decrypt based on encryption method
         if (payload.encryptionMethod === 'xchacha20poly1305') {
             try {
@@ -2696,12 +2718,15 @@ async function postAssetTransfer(to, amount, memo, keys) {
 async function postRegisterAlias(alias, keys){
     const aliasBytes = utf82bin(alias)
     const aliasHash = blake.blake2bHex(aliasBytes, myHashKey, 32)
+    const { publicKey, secretKey } = ml_kem1024.keygen(hex2bin(keys.pqSeed))
+    const pqPublicKey = bin2base64(publicKey)
     const tx = {
         type: 'register',
         aliasHash: aliasHash,
         from: longAddress(keys.address),
         alias: alias,
         publicKey: keys.public,
+        pqPublicKey: pqPublicKey,
         timestamp: Date.now()
     }
     const res = await injectTx(tx, keys)
@@ -2906,6 +2931,23 @@ function setupAppStateManagement() {
     });
 }
 
+function ecSharedKey(sec, pub){
+    return secp.getSharedSecret(
+        hex2bin(sec),
+        hex2bin(pub)
+    ).slice(1, 33);  // TODO - we were taking only first 32 bytes for chacha; now we can return the whole thing
+}
+
+function pqSharedKey(recipientKey, encKey){  // inputs base64 or binary, outputs binary
+    if (typeof(recipientKey) == 'string'){ recipientKey = base642bin(recipientKey)}
+    if (encKey){
+        if (typeof(encKey) == 'string'){ encKey = base642bin(encKey)} 
+        return ml_kem1024.decapsulate(encKey, recipientKey);
+    }
+    return ml_kem1024.encapsulate(recipientKey);  // { cipherText, sharedSecret }
+}
+
+
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission()
@@ -2922,4 +2964,5 @@ function requestNotificationPermission() {
             .catch(error => console.error('Error during notification permission request:', error));
     }
 }
+
 
