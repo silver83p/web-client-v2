@@ -1,4 +1,8 @@
-importScripts('./log-utils.js');
+try {
+  importScripts('./log-utils.js');
+} catch (e) {
+  console.error('Failed to import log-utils.js:', e);
+}
 
 const SW_VERSION = '1.0.0';
 

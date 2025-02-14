@@ -203,7 +203,8 @@ console.warn = async (...args) => {
   originalConsole.warn(...args);
   try {
     const processedArgs = args.map(processValue);
-    await Logger.log('warn', ...processedArgs);
+    const source = { __source: getCurrentSource() };
+    await Logger.log('warn', ...processedArgs, source);
   } catch (e) {
     originalConsole.error('Logging failed:', e);
   }
@@ -213,7 +214,8 @@ console.error = async (...args) => {
   originalConsole.error(...args);
   try {
     const processedArgs = args.map(processValue);
-    await Logger.log('error', ...processedArgs);
+    const source = { __source: getCurrentSource() };
+    await Logger.log('error', ...processedArgs, source);
   } catch (e) {
     originalConsole.error('Logging failed:', e);
   }
