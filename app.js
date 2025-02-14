@@ -750,7 +750,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await Logger.clearLogs();
         updateLogsView();
     });
-    document.getElementById('refreshLogs').addEventListener('click', () => {
+    document.getElementById('refreshLogs').addEventListener('click', async () => {
         updateLogsView();
     });
 
@@ -765,6 +765,7 @@ function handleUnload(e){
     } // User selected to Signout; state was already saved
     else{
         saveState()
+        Logger.saveState();  // Add this
     }
 }
 
@@ -772,6 +773,7 @@ function handleUnload(e){
 function handleBeforeUnload(e){
 console.log('in handleBeforeUnload', e)
     saveState()
+    Logger.saveState();  // Add this
     if (handleSignOut.exit){ 
         window.removeEventListener('beforeunload', handleBeforeUnload)
         return 
@@ -786,6 +788,7 @@ function handleVisibilityChange(e) {
     console.log('in handleVisibilityChange', document.visibilityState);
     if (document.visibilityState === 'hidden') {
         saveState();
+        Logger.saveState();  // Add this
         if (handleSignOut.exit) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             return;

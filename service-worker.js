@@ -29,6 +29,9 @@ self.addEventListener('activate', (event) => {
 
     // Claim all clients immediately
     event.waitUntil(clients.claim());
+
+    // Add lifecycle handlers
+    event.waitUntil(Logger.forceSave());
 });
 
 // Message event - handle messages from the main thread
@@ -154,4 +157,9 @@ self.addEventListener('notificationclick', (event) => {
             }
         })
     );
+});
+
+// Add lifecycle handlers
+self.addEventListener('terminate', event => {
+  event.waitUntil(Logger.forceSave());
 });
