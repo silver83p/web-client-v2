@@ -741,6 +741,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 
+    document.getElementById('openLogs').addEventListener('click', openLogsModal);
+    document.getElementById('closeLogsModal').addEventListener('click', () => {
+        document.getElementById('logsModal').classList.remove('active');
+    });
+    document.getElementById('clearLogs').addEventListener('click', async () => {
+        await Logger.clearLogs();
+        updateLogsView();
+    });
+    document.getElementById('refreshLogs').addEventListener('click', async () => {
+        updateLogsView();
+    });
+    document.getElementById('openLogs').addEventListener('click', () => {
+        // Close the menu modal first
+        document.getElementById('menuModal').classList.remove('active');
+        // Then open the logs modal
+        openLogsModal();
+    });
+    
     setupAddToHomeScreen()
 });
 
@@ -752,6 +770,7 @@ function handleUnload(e){
     } // User selected to Signout; state was already saved
     else{
         saveState()
+        Logger.forceSave();
     }
 }
 
@@ -759,6 +778,7 @@ function handleUnload(e){
 function handleBeforeUnload(e){
 console.log('in handleBeforeUnload', e)
     saveState()
+    Logger.saveState();
     if (handleSignOut.exit){ 
         window.removeEventListener('beforeunload', handleBeforeUnload)
         return 
@@ -773,6 +793,7 @@ function handleVisibilityChange(e) {
     console.log('in handleVisibilityChange', document.visibilityState);
     if (document.visibilityState === 'hidden') {
         saveState();
+        Logger.saveState();
         if (handleSignOut.exit) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             return;
@@ -967,7 +988,8 @@ async function updateChatList(force) {
     if (myAccount && myAccount.keys) {
         gotChats = await getChats(myAccount.keys);     // populates myData with new chat messages
     }
-console.log('force gotChats', force, gotChats)
+    console.log('force gotChats', force === undefined ? 'undefined' : JSON.stringify(force), 
+                             gotChats === undefined ? 'undefined' : JSON.stringify(gotChats))
     if (! (force || gotChats)){ return }
     const chatList = document.getElementById('chatList');
 //            const chatsData = myData
@@ -986,7 +1008,7 @@ console.log('force gotChats', force, gotChats)
         return;
     }
 
-console.log('updateChatList chats.length', chats.length)
+    console.log('updateChatList chats.length', JSON.stringify(chats.length))
     
     const chatItems = await Promise.all(chats.map(async chat => {
         const identicon = await generateIdenticon(chat.address);
@@ -2414,7 +2436,10 @@ async function getChats(keys) {  // needs to return the number of chats that nee
     const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/${timestamp}`) // TODO get this working
 //    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/0`) // TODO stop using this
     const chatCount = Object.keys(senders.chats).length
-console.log('getChats senders', timestamp, chatCount, senders)
+    console.log('getChats senders', 
+        timestamp === undefined ? 'undefined' : JSON.stringify(timestamp),
+        chatCount === undefined ? 'undefined' : JSON.stringify(chatCount),
+        senders === undefined ? 'undefined' : JSON.stringify(senders))
     if (senders && senders.chats && chatCount){     // TODO check if above is working
         await processChats(senders.chats, keys)
     }
@@ -2965,4 +2990,78 @@ function requestNotificationPermission() {
     }
 }
 
+function openLogsModal() {
+  const modal = document.getElementById('logsModal');
+  modal.classList.add('active');
+  updateLogsView();
+}
+
+async function updateLogsView() {
+    const logsContainer = document.getElementById('logsContainer');
+    const logs = await Logger.getLogs();
+    
+    // Create document fragment for better performance
+    const fragment = document.createDocumentFragment();
+    
+    // Use logs directly without sorting - they'll be in insertion order
+    const dateFormatter = new Intl.DateTimeFormat();
+    const timeFormatter = new Intl.DateTimeFormat(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    
+    logs.forEach(log => {
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry ${log.level || 'info'}`;
+        
+        const date = new Date(log.timestamp);
+        logEntry.innerHTML = `
+            <span class="log-timestamp">${dateFormatter.format(date)} ${timeFormatter.format(date)}</span>
+            <span class="log-source">[${log.source || 'app'}]</span>
+            <span class="log-level">${log.level || 'info'}</span>
+            <pre class="log-message">${escapeHtml(formatMessage(log.message))}</pre>
+        `;
+        fragment.appendChild(logEntry);
+    });
+
+    logsContainer.innerHTML = '';
+    logsContainer.appendChild(fragment);
+    logsContainer.scrollTop = logsContainer.scrollHeight;  // This scrolls to bottom
+}
+
+// Helper functions moved outside for reuse
+function formatMessage(message) {
+    // If message is an array (from new format)
+    if (Array.isArray(message)) {
+        return message.map(part => {
+            try {
+                // Try to parse if it looks like JSON
+                if (typeof part === 'string' && 
+                    (part.startsWith('{') || part.startsWith('[') || 
+                     part.startsWith('"') || part === 'null' || 
+                     part === '"undefined"')) {
+                    return JSON.stringify(JSON.parse(part), null, 2);
+                }
+                return part;
+            } catch (e) {
+                return part;
+            }
+        }).join(' ');
+    }
+
+    // Legacy format (string)
+    try {
+        const parsed = JSON.parse(message);
+        return JSON.stringify(parsed, null, 2);
+    } catch (e) {
+        return message;
+    }
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
 
