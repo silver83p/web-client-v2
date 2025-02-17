@@ -91,6 +91,10 @@ classDiagram
         timestamp: number
         sent_timestamp: number
         my: boolean
+        type: string        // "chat" or "transaction"
+        amount?: bigint     // Only for transactions
+        asset?: string      // Only for transactions
+        status?: string     // For transaction status
     }
 
     myAccount --> AccountKeys
