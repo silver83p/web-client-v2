@@ -2090,17 +2090,113 @@ async function handleSendMessage() {
     // Get recipient's public key from contacts
     let recipientPubKey = myData.contacts[currentAddress]?.public;
     let pqRecPubKey = myData.contacts[currentAddress]?.pqPublic;
+    
+    
+    console.log('Recipient public keys:', {
+        recipientPubKey,
+        pqRecPubKey,
+        currentAddress
+    })
+
     if (!recipientPubKey || !pqRecPubKey) {
         const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
+        console.log('Recipient info from network:', recipientInfo);
+        
         if (!recipientInfo?.account?.publicKey){
             console.log(`no public key found for recipient ${currentAddress}`)
             return
         }
         recipientPubKey = recipientInfo.account.publicKey
         myData.contacts[currentAddress].public = recipientPubKey
+        
+        // Check for pqPublicKey in the account data
+        if (!recipientInfo?.account?.pqPublicKey) {
+            // If no PQ key is available, we'll use a fallback encryption method
+            console.warn('No post-quantum public key available for recipient, using classical encryption only');
+            // Generate shared secret using only ECDH
+            let dhkey = ecSharedKey(keys.secret, recipientPubKey)
+            
+            // Encrypt message using shared secret
+            const encMessage = encryptChacha(dhkey, message)
+
+            // Create sender info object and encrypt it
+            const senderInfo = {
+                username: myAccount.username,
+                name: myData.account.name,
+                email: myData.account.email,
+                phone: myData.account.phone,
+                linkedin: myData.account.linkedin,
+                x: myData.account.x
+            }
+            const encSenderInfo = encryptChacha(dhkey, stringify(senderInfo))
+
+            // Create message payload without PQ encryption
+            const payload = {
+                message: encMessage,
+                senderInfo: encSenderInfo,
+                encrypted: true,
+                encryptionMethod: 'xchacha20poly1305',
+                sent_timestamp: Date.now()
+            }
+
+            // Send the message with the classical-only encryption
+            try {
+                const response = await postChatMessage(currentAddress, payload, 1, keys)
+                
+                if (!response || !response.result || !response.result.success) {
+                    alert('Message failed to send: ' + (response.result?.reason || 'Unknown error'))
+                    return;
+                }
+
+                // Create new message
+                const newMessage = {
+                    message,
+                    timestamp: Date.now(),
+                    sent_timestamp: Date.now(),
+                    my: true
+                }
+                chatsData.contacts[currentAddress].messages.push(newMessage)
+
+                // Update or add to chats list
+                const existingChatIndex = chatsData.chats.findIndex(chat => chat.address === currentAddress);
+                const chatUpdate = {
+                    address: currentAddress,
+                    timestamp: newMessage.timestamp,
+                }
+
+                // Remove existing chat if present
+                if (existingChatIndex !== -1) {
+                    chatsData.chats.splice(existingChatIndex, 1)
+                }
+                // Add updated chat to the beginning of the array
+                chatsData.chats.unshift(chatUpdate)
+
+                // Clear input and reset height
+                messageInput.value = ''
+                messageInput.style.height = '45px'
+
+                appendChatModal();
+
+                // Scroll to bottom of chat modal
+                messagesList.parentElement.scrollTop = messagesList.parentElement.scrollHeight
+
+            } catch (error) {
+                console.error('Message error:', error)
+                alert('Failed to send message. Please try again.')
+            }
+            return;
+        }
+
         pqRecPubKey = recipientInfo.account.pqPublicKey
         myData.contacts[currentAddress].pqPublic = pqRecPubKey
     }
+
+    //before pqSharedKey call
+    console.log('Calling pqSharedKey with:', {
+        pqRecPubKey,
+        type: typeof pqRecPubKey,
+        isUint8Array: pqRecPubKey instanceof Uint8Array
+    })
 
     // Generate shared secret using ECDH and take first 32 bytes
     let dhkey = ecSharedKey(keys.secret, recipientPubKey)
@@ -2968,13 +3064,46 @@ function ecSharedKey(sec, pub){
     ).slice(1, 33);  // TODO - we were taking only first 32 bytes for chacha; now we can return the whole thing
 }
 
-function pqSharedKey(recipientKey, encKey){  // inputs base64 or binary, outputs binary
-    if (typeof(recipientKey) == 'string'){ recipientKey = base642bin(recipientKey)}
-    if (encKey){
-        if (typeof(encKey) == 'string'){ encKey = base642bin(encKey)} 
-        return ml_kem1024.decapsulate(encKey, recipientKey);
+function pqSharedKey(recipientKey, encKey) {  // inputs base64 or binary, outputs binary
+    try {
+        // Debug logging
+        console.log('pqSharedKey input types:', {
+            recipientKey: typeof recipientKey,
+            recipientKeyIsUint8Array: recipientKey instanceof Uint8Array,
+            encKey: typeof encKey,
+            encKeyIsUint8Array: encKey instanceof Uint8Array
+        });
+
+        // Ensure recipientKey is Uint8Array
+        if (typeof recipientKey === 'string') {
+            recipientKey = base642bin(recipientKey);
+        }
+        
+        if (!(recipientKey instanceof Uint8Array)) {
+            throw new Error('recipientKey must be Uint8Array or base64 string');
+        }
+
+        // Handle encapsulation vs decapsulation
+        if (encKey) {
+            if (typeof encKey === 'string') {
+                encKey = base642bin(encKey);
+            }
+            if (!(encKey instanceof Uint8Array)) {
+                throw new Error('encKey must be Uint8Array or base64 string');
+            }
+            return ml_kem1024.decapsulate(encKey, recipientKey);
+        }
+
+        // Encapsulation case
+        return ml_kem1024.encapsulate(recipientKey);  // { cipherText, sharedSecret }
+    } catch (error) {
+        console.error('pqSharedKey error:', error);
+        console.error('Input values:', {
+            recipientKey,
+            encKey,
+        });
+        throw error; // Re-throw to maintain error handling chain
     }
-    return ml_kem1024.encapsulate(recipientKey);  // { cipherText, sharedSecret }
 }
 
 
