@@ -75,23 +75,30 @@ Key Points:
 
 ```mermaid
 sequenceDiagram
-    participant Sender
-    participant Gateway
-    participant Recipient
+    participant Sender as Sender App
+    participant Gateway as Network Gateway
+    participant Recipient as Recipient App
+    participant DB as LocalStorage
 
-    Note over Sender: Create MessagePayload
+    rect rgb(119, 101, 75)
+        Note over Sender: Message Creation
+        Sender->>Sender: handleSendMessage()<br/>1. Create payload with message
+        Sender->>Sender: 2. Encrypt with recipient's keys<br/>using hybrid encryption
+    end
 
-    Sender->>Sender: 1. Prepare payload:<br/>MessagePayload {<br/>  message: "Hello",<br/>  encrypted: true,<br/>  encryptionMethod: "xchacha20poly1305",<br/>  senderInfo: {...}<br/>}
+    rect rgb(119, 101, 75)
+        Note over Sender: Transaction Preparation
+        Sender->>Sender: 3. Create TransactionMessage:<br/>- type: "message"<br/>- xmessage: encrypted payload<br/>- chatId: hash(from+to)<br/>- toll payment: 1
+    end
 
-    Sender->>Sender: 2. Create Transaction:<br/>TransactionMessage {<br/>  type: "message",<br/>  xmessage: MessagePayload,<br/>  chatId: hash(from+to),<br/>  ...<br/>}
+    Sender->>Gateway: 4. postChatMessage(TransactionMessage)
 
-    Sender->>Gateway: 3. postChatMessage(TransactionMessage)
-
-    Gateway->>Recipient: 4. Recipient polls and gets<br/>TransactionMessage
-
-    Recipient->>Recipient: 5. processChats():<br/>Decrypts to ProcessedMessage {<br/>  message: "Hello",<br/>  timestamp: now(),<br/>  sent_timestamp: original,<br/>  my: false<br/>}
-
-    Note over Recipient: 6. Add to contact.messages[]
+    rect rgb(119, 101, 75)
+        Note over Recipient: Message Processing
+        Recipient->>Recipient: 5a. processChats()<br/>- Decrypt message<br/>- Update contact.messages<br/>- Update contact.unread
+        Recipient->>DB: 5b. Save to localStorage
+        Recipient->>Recipient: 5c. updateChatList()<br/>- Update UI if chat open<br/>- Show notifications
+    end
 ```
 
 ## Message Discovery Flow
@@ -101,48 +108,56 @@ Key Points:
 - Polling Strategy:
 
   - Regular checks for new messages via pollChats()
-  - 5-second intervals when actively chatting
-  - 30-second intervals when idle
+  - 5-second intervals when actively chatting (pollIntervalChatting)
+  - 30-second intervals when idle (pollIntervalNormal)
   - Uses chatTimestamp to only fetch new messages
 
 - Two-Step Message Retrieval:
 
   - Step 1: Get list of new messages by sender
-  - Step 2: Fetch full message content for each sender
-  - Efficient batching of messages per sender
+  - Step 2: Process messages and update UI
+  - Handles both chat messages and payment transfers
 
 - Message Processing:
   - Decrypts messages using hybrid encryption
-  - Updates contact's unread count
-  - Updates chat list order
-  - Saves to localStorage for persistence
+  - Updates contact.unread count
+  - Updates myData.chats order
+  - Saves to localStorage
 
 ```mermaid
 sequenceDiagram
-    participant Recipient
-    participant Gateway
-    participant Storage
+    participant App as Recipient App
+    participant Gateway as Network Gateway
+    participant DB as LocalStorage
 
-    Note over Recipient: pollChats() runs every<br/>5s when chatting,<br/>30s when idle
-
-    Recipient->>Gateway: 1. getChats(address, timestamp)
-    Note over Gateway: Finds messages newer than<br/>recipient's last chatTimestamp
-
-    Gateway-->>Recipient: 2. Returns {<br/>chats: {<br/>  senderAddress: messageId,<br/>  senderAddress2: messageId2<br/>}}
-
-    alt Has New Messages
-        loop For each sender
-            Recipient->>Gateway: 3. queryNetwork(<br/>/messages/messageId/timestamp)
-            Gateway-->>Recipient: 4. Returns {<br/>messages: [<br/>  {type: "message",<br/>   xmessage: payload,...},<br/>  {...}<br/>]}
-
-            Recipient->>Recipient: 5. processChats():<br/>- Decrypt messages<br/>- Update contact.unread++<br/>- Update myData.chats
-
-            Recipient->>Storage: 6. Save to localStorage
-        end
-        Note over Recipient: Update UI and show<br/>notification if needed
+    rect rgb(119, 101, 75)
+        Note over App: Poll Interval Check
+        App->>App: pollChatInterval()<br/>5s chatting / 30s idle
     end
 
-    Note over Recipient: Update myAccount.chatTimestamp<br/>to latest message timestamp
+    App->>Gateway: 1. getChats(myAccount.address,<br/>myAccount.chatTimestamp)
+    Gateway-->>App: 2. Returns chat messages<br/>and payment transfers
+
+    Note over App: If no new messages,<br/>continue polling
+
+    alt Has New Messages
+        rect rgb(119, 101, 75)
+            Note over App: processChats()
+            loop For each message
+                App->>App: 3a. decryptMessage()<br/>if message.encrypted
+                App->>App: 3b. Update contact.messages<br/>Update contact.unread
+                App->>App: 3c. Update myData.chats order
+                App->>DB: 3d. Save to localStorage
+            end
+        end
+
+        rect rgb(119, 101, 75)
+            Note over App: UI Updates
+            App->>App: 4a. appendChatModal()<br/>if chat open
+            App->>App: 4b. updateChatList()<br/>if chats view active
+            App->>App: 4c. Update myAccount.chatTimestamp
+        end
+    end
 ```
 
 ## Sequence Diagram Example
