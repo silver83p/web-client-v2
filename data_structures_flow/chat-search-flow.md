@@ -31,10 +31,15 @@ sequenceDiagram
     rect rgb(119, 101, 75)
         Note over Search: Real-time Search
         User->>Search: Type search text
+        Note over Search: Debounce 300ms
         Search->>Data: searchMessages(searchText)
         Data->>Data: Filter messages where:<br/>- type === "chat"<br/>- message includes search
         Data->>Search: Return SearchResult[]
-        Search->>Search: Display results
+        alt No Results
+            Search->>Search: displayEmptyState()
+        else Has Results
+            Search->>Search: displaySearchResults()
+        end
     end
 
     rect rgb(119, 101, 75)
@@ -42,8 +47,16 @@ sequenceDiagram
         User->>Search: Click search result
         Search->>Search: closeSearchView()
         Search->>Chat: handleChatClick(contactAddress)
-        Chat->>Message: scrollToMessage(messageId)
-        Message->>Message: highlightMessage()
+        alt Chat Loaded Successfully
+            Chat->>Message: scrollToMessage(messageId)
+            alt Message Found
+                Message->>Message: highlightMessage()
+            else Message Not Found
+                Message->>Search: Show error notification
+            end
+        else Error Loading Chat
+            Chat->>Search: Show error notification
+        end
     end
 ```
 
