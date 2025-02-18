@@ -74,7 +74,7 @@ interface SearchResult {
     preview: string         // Truncated message for result list
 }
 
-// Core search functionality - unchanged
+// Core search functionality
 function searchMessages(searchText: string): SearchResult[] {
     const results: SearchResult[] = [];
     const searchLower = searchText.toLowerCase();
@@ -95,8 +95,9 @@ function searchMessages(searchText: string): SearchResult[] {
         });
     }
 
-    // Sort results by timestamp, newest first
-    return results.sort((a, b) => b.timestamp - a.timestamp);
+    // Messages are already in timestamp order in the contacts array
+    // No need to sort again
+    return results;
 }
 
 // Utility function
