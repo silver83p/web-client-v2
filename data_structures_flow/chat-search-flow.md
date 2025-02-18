@@ -4,7 +4,7 @@ Key Points:
 
 - Search Interface:
 
-  - Search input field at top of view
+  - Search modal with input field
   - Real-time search as user types
   - Results grouped by chat thread
   - Shows message preview and timestamp
@@ -17,45 +17,46 @@ Key Points:
 ```mermaid
 sequenceDiagram
     participant User
-    participant Search as Search View
+    participant SearchBar as Search Bar
+    participant Modal as Search Modal
     participant Data as myData
     participant Chat as Chat View
     participant Message as Message List
 
     rect rgb(119, 101, 75)
         Note over User: Initiate Search
-        User->>Search: Click search icon
-        Search->>Search: showSearchView()<br/>Display search screen
+        User->>SearchBar: Click search bar
+        SearchBar->>Modal: showSearchModal()<br/>Display modal with focus
     end
 
     rect rgb(119, 101, 75)
-        Note over Search: Real-time Search
-        User->>Search: Type search text
-        Note over Search: Debounce 300ms
-        Search->>Data: searchMessages(searchText)
+        Note over Modal: Real-time Search
+        User->>Modal: Type search text
+        Note over Modal: Debounce 300ms
+        Modal->>Data: searchMessages(searchText)
         Data->>Data: Filter messages where:<br/>- type === "chat"<br/>- message includes search
-        Data->>Search: Return SearchResult[]
+        Data->>Modal: Return SearchResult[]
         alt No Results
-            Search->>Search: displayEmptyState()
+            Modal->>Modal: displayEmptyState()
         else Has Results
-            Search->>Search: displaySearchResults()
+            Modal->>Modal: displaySearchResults()
         end
     end
 
     rect rgb(119, 101, 75)
-        Note over Search: Result Selection
-        User->>Search: Click search result
-        Search->>Search: closeSearchView()
-        Search->>Chat: handleChatClick(contactAddress)
+        Note over Modal: Result Selection
+        User->>Modal: Click search result
+        Modal->>Modal: closeSearchModal()
+        Modal->>Chat: handleChatClick(contactAddress)
         alt Chat Loaded Successfully
             Chat->>Message: scrollToMessage(messageId)
             alt Message Found
                 Message->>Message: highlightMessage()
             else Message Not Found
-                Message->>Search: Show error notification
+                Message->>Modal: Show error notification
             end
         else Error Loading Chat
-            Chat->>Search: Show error notification
+            Chat->>Modal: Show error notification
         end
     end
 ```
@@ -64,7 +65,6 @@ sequenceDiagram
 
 ```javascript
 // Interface defining the structure of a search result
-// Maps to our existing data structures in CoreDataStructures.md
 interface SearchResult {
     contactAddress: string    // Address of the contact
     username: string         // Display name from Contact
@@ -74,34 +74,14 @@ interface SearchResult {
     preview: string         // Truncated message for result list
 }
 
+// Core search functionality - unchanged
 function searchMessages(searchText: string): SearchResult[] {
     const results: SearchResult[] = [];
-    // Convert to lowercase once instead of in each iteration
     const searchLower = searchText.toLowerCase();
 
-    // Option 1: Sequential search through contacts and messages
+    // Sequential search through contacts and messages
     for (const [address, contact] of myData.contacts) {
-        // For each contact, search through their message history
         contact.messages.forEach((msg, index) => {
-            // Only search text messages (skip transactions)
-            // Case-insensitive search using pre-lowercased search text
-            if (msg.type === "chat" && msg.message.toLowerCase().includes(searchLower)) {
-                results.push({
-                    contactAddress: address,
-                    username: contact.username,
-                    messageId: index,        // Store index for scrolling to message
-                    messageText: msg.message, // Full message for context
-                    timestamp: msg.timestamp,
-                    preview: truncateMessage(msg.message)
-                });
-            }
-        });
-    }
-
-    /* Option 2: Parallel Processing (if needed for large datasets)
-    await Promise.all(Array.from(myData.contacts).map(async ([address, contact]) => {
-        // Process each contact's messages in parallel
-        const matches = contact.messages.filter((msg, index) => {
             if (msg.type === "chat" && msg.message.toLowerCase().includes(searchLower)) {
                 results.push({
                     contactAddress: address,
@@ -111,18 +91,15 @@ function searchMessages(searchText: string): SearchResult[] {
                     timestamp: msg.timestamp,
                     preview: truncateMessage(msg.message)
                 });
-                return true;
             }
-            return false;
         });
-    }));
-    */
+    }
 
     // Sort results by timestamp, newest first
     return results.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-// Utility function to create preview text
+// Utility function
 function truncateMessage(message: string): string {
     const MAX_PREVIEW_LENGTH = 50;
     return message.length > MAX_PREVIEW_LENGTH
@@ -130,22 +107,24 @@ function truncateMessage(message: string): string {
         : message;
 }
 
-// UI Event Handlers
-function showSearchView() {
-    // Hide all other screens first
-    document.querySelectorAll('.app-screen').forEach(screen => {
-        screen.classList.remove('active');
+// Modal Event Handlers
+function showSearchModal() {
+    // Hide any other active modals first
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.style.display = 'none';
     });
 
-    // Show and initialize search view
-    document.getElementById('searchView').classList.add('active');
-    document.getElementById('messageSearch').focus(); // Auto-focus input
-    document.getElementById('newChatButton').classList.remove('visible');
+    // Show search modal
+    const searchModal = document.getElementById('searchModal');
+    searchModal.style.display = 'flex';
+
+    // Focus search input
+    document.getElementById('messageSearch').focus();
 }
 
-function closeSearchView() {
-    // Clean up and return to chats view
-    switchView('chats');
+function closeSearchModal() {
+    // Hide search modal
+    document.getElementById('searchModal').style.display = 'none';
 
     // Clear search state
     document.getElementById('messageSearch').value = '';
@@ -155,43 +134,20 @@ function closeSearchView() {
 // Initialize search functionality
 function initializeSearch() {
     const searchButton = document.getElementById('search');
-
-    // Show search button only on Chats view
-    document.addEventListener('viewChange', (event) => {
-        if (event.detail.view === 'chats') {
-            searchButton.style.display = 'block';
-        } else {
-            searchButton.style.display = 'none';
-        }
-    });
+    const backButton = document.getElementById('closeSearchModal');
 
     // Handle search button click
-    searchButton.addEventListener('click', () => {
-        if (getCurrentView() === 'chats') {
-            showSearchView();
-        }
-    });
+    searchButton.addEventListener('click', showSearchModal);
+
+    // Handle back button click
+    backButton.addEventListener('click', closeSearchModal);
 }
 
-// Add debouncing utility at the top with other utilities
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Keep but enhance with debouncing and empty state
+// Debounced search input handler
 const handleSearchInput = debounce((event) => {
     const searchText = event.target.value;
     if (searchText.length < 2) {
-        // Clear results if search is too short
-        document.getElementById('searchResults').innerHTML = '';
+        displayEmptyState();
         return;
     }
 
@@ -200,10 +156,11 @@ const handleSearchInput = debounce((event) => {
         displayEmptyState();
     } else {
         displaySearchResults(results);
+        saveRecentSearch(searchText);
     }
-}, 300);  // 300ms delay
+}, 300);
 
-// Add these new functions
+// UI feedback functions
 function displayEmptyState() {
     const searchResults = document.getElementById('searchResults');
     searchResults.innerHTML = `
@@ -214,6 +171,7 @@ function displayEmptyState() {
     `;
 }
 
+// Recent searches handling
 const MAX_RECENT_SEARCHES = 5;
 function saveRecentSearch(searchText) {
     const recent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
@@ -223,20 +181,19 @@ function saveRecentSearch(searchText) {
     );
 }
 
-// Keep but enhance with error handling
+// Result handling with error management
 function handleSearchResult(result: SearchResult) {
     try {
-        // Close search view and return to chats
-        closeSearchView();
-
-        // Open the specific chat using existing chat handler
+        closeSearchModal();
         handleChatClick(result.contactAddress);
 
-        // Add timeout to ensure chat is loaded before scrolling
+        // Add timeout to ensure chat is loaded
         setTimeout(() => {
             const messageFound = scrollToMessage(result.messageId);
             if (!messageFound) {
                 console.error('Message not found');
+            } else {
+                highlightMessage(result.messageId);
             }
         }, 100);
     } catch (error) {
@@ -244,12 +201,11 @@ function handleSearchResult(result: SearchResult) {
     }
 }
 
-// Optional: Add visual feedback for the found message
+// Visual feedback for found message
 function highlightMessage(messageId) {
     const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
     if (messageElement) {
         messageElement.classList.add('highlighted');
-        // Remove highlight after a delay
         setTimeout(() => {
             messageElement.classList.remove('highlighted');
         }, 2000);
@@ -261,12 +217,12 @@ function highlightMessage(messageId) {
 
 ```ascii
 +---------------------------+
-|        LIBERDUS          |
+|   ←   Search Messages    |
 +---------------------------+
 |   🔍 Search messages...   |
 +---------------------------+
 |                          |
-| Recent Chats             |
+| Recent Results           |
 |                          |
 | +----------------------+ |
 | | John Doe            | |
@@ -292,131 +248,32 @@ function highlightMessage(messageId) {
 ## Updated UI Implementation
 
 ```html
-<!-- Search View Structure -->
-<div id="searchView" class="view app-screen">
-  <div class="search-header">
-    <button class="back-button" onclick="closeSearchView()">&larr;</button>
-    <div class="search-input-container">
-      <input
-        type="text"
-        id="messageSearch"
-        placeholder="Search messages..."
-        oninput="handleSearchInput(event)"
-        autofocus
-      />
+<!-- Search Modal -->
+<div class="modal" id="searchModal">
+  <div class="modal-header">
+    <button class="back-button" id="closeSearchModal"></button>
+    <div class="modal-title">Search Messages</div>
+  </div>
+  <div class="form-container">
+    <input
+      type="text"
+      id="messageSearch"
+      class="form-control"
+      placeholder="Search messages..."
+      oninput="handleSearchInput(event)"
+      autofocus
+    />
+    <div id="searchResults" class="chat-list">
+      <!-- Results will be populated here -->
     </div>
   </div>
-
-  <div id="searchResults" class="chat-list">
-    <!-- Results use same styling as chat list -->
-  </div>
 </div>
-
-<!-- Updated JavaScript Implementation -->
-<script>
-  function showSearchView() {
-    // Hide all screens (similar to switchView)
-    document.querySelectorAll(".app-screen").forEach((screen) => {
-      screen.classList.remove("active");
-    });
-
-    // Show search view
-    document.getElementById("searchView").classList.add("active");
-
-    // Focus search input
-    document.getElementById("messageSearch").focus();
-
-    // Hide new chat button (like other views do)
-    document.getElementById("newChatButton").classList.remove("visible");
-  }
-
-  function closeSearchView() {
-    // Switch back to chats view
-    switchView("chats");
-
-    // Clear search input and results
-    document.getElementById("messageSearch").value = "";
-    document.getElementById("searchResults").innerHTML = "";
-  }
-
-  function initializeSearch() {
-    const searchButton = document.getElementById("search");
-
-    // Only show search button on Chats page
-    document.addEventListener("viewChange", (event) => {
-      if (event.detail.view === "chats") {
-        searchButton.style.display = "block";
-      } else {
-        searchButton.style.display = "none";
-      }
-    });
-
-    // Add click handler
-    searchButton.addEventListener("click", () => {
-      if (getCurrentView() === "chats") {
-        showSearchView();
-      }
-    });
-  }
-</script>
 ```
 
 ## CSS Implementation
 
 ```css
-/* Search View Styles */
-#searchView {
-  display: none;
-  flex-direction: column;
-  height: 100%;
-  background: var(--background-color);
-}
-
-#searchView.active {
-  display: flex;
-}
-
-/* Search Header Styles */
-.search-header {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  background: var(--header-background);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.back-button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  color: var(--text-color);
-  padding: 5px 15px;
-  cursor: pointer;
-}
-
-.back-button:hover {
-  opacity: 0.8;
-}
-
-.search-input-container {
-  flex: 1;
-  margin: 0 10px;
-}
-
-#messageSearch {
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background: var(--input-background);
-  color: var(--text-color);
-  font-size: 16px;
-}
-
-#messageSearch:focus {
-  outline: none;
-  border-color: var(--accent-color);
-}
+/* Modal is already styled in main CSS, only need search-specific styles */
 
 /* Search Results Styles */
 #searchResults {
@@ -528,7 +385,7 @@ const debouncedSearch = debounce(handleSearchInput, 300);
 ```javascript
 function handleSearchResult(result: SearchResult) {
   try {
-    closeSearchView();
+    closeSearchModal();
     handleChatClick(result.contactAddress);
 
     // Add timeout to ensure chat is loaded
@@ -603,5 +460,196 @@ function searchMessages(
   filters?: SearchFilters
 ): SearchResult[] {
   // Implementation with filters
+}
+```
+
+6. Transition Animations (Future Enhancement):
+
+```css
+/* Smooth transition between search bar and modal */
+.search-bar {
+  transition: all 0.3s ease-out;
+}
+
+.search-modal-enter {
+  animation: modalEnter 0.3s ease-out;
+}
+
+@keyframes modalEnter {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Position tracking for seamless transition */
+.search-bar.transitioning {
+  position: fixed;
+  width: 100%;
+  z-index: 1000;
+}
+```
+
+```javascript
+// Enhanced modal transition
+function showSearchModal() {
+  const searchBar = document.querySelector(".search-bar");
+  const searchModal = document.getElementById("searchModal");
+  const rect = searchBar.getBoundingClientRect();
+
+  // Store position for animation
+  searchBar.style.top = `${rect.top}px`;
+  searchBar.classList.add("transitioning");
+
+  // Trigger animation
+  searchModal.classList.add("search-modal-enter");
+
+  // Cleanup after animation
+  setTimeout(() => {
+    searchBar.classList.remove("transitioning");
+    searchModal.style.display = "flex";
+  }, 300);
+}
+```
+
+## Updated Header and Search Implementation
+
+1. HTML Structure (modify existing header):
+
+```html
+<header class="header" id="header">
+  <div id="logo"><img src="liberdus_logo_50.png" /></div>
+  <div class="app-name">Liberdus</div>
+  <div class="header-icons">
+    <!-- Remove search button -->
+    <button class="icon-button" id="toggleMenu"></button>
+  </div>
+</header>
+
+<!-- Add persistent search bar below header -->
+<div class="search-bar-container" id="searchBarContainer">
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input
+      type="text"
+      id="searchBarInput"
+      placeholder="Search messages..."
+      readonly
+    />
+  </div>
+</div>
+
+<!-- Search Modal (shown when search bar is clicked) -->
+<div class="modal" id="searchModal">
+  <div class="modal-header">
+    <button class="back-button" id="closeSearchModal"></button>
+    <div class="modal-title">Search Messages</div>
+  </div>
+  <div class="form-container">
+    <input
+      type="text"
+      id="messageSearch"
+      class="form-control"
+      placeholder="Search messages..."
+      oninput="handleSearchInput(event)"
+      autofocus
+    />
+    <div id="searchResults" class="chat-list">
+      <!-- Results will be populated here -->
+    </div>
+  </div>
+</div>
+```
+
+2. Additional CSS:
+
+```css
+.search-bar-container {
+  display: none; /* Hidden by default */
+  padding: 8px 16px;
+  background: var(--background-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-bar-container.visible {
+  display: block;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--input-background);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.search-bar:hover {
+  background: var(--hover-background);
+}
+
+.search-icon {
+  margin-right: 8px;
+  color: var(--secondary-text-color);
+}
+
+#searchBarInput {
+  border: none;
+  background: transparent;
+  width: 100%;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+#searchBarInput:focus {
+  outline: none;
+}
+```
+
+3. Update CSS Variables:
+
+```css
+:root {
+  /* ... existing variables ... */
+  --search-height: 56px; /* Height of search container */
+}
+```
+
+4. Update JavaScript for view management:
+
+```javascript
+function switchView(view) {
+  // ... existing view switching code ...
+
+  // Toggle search bar visibility
+  const searchBarContainer = document.getElementById("searchBarContainer");
+
+  if (view === "chats" || view === "contacts") {
+    searchBarContainer.classList.add("visible");
+  } else {
+    searchBarContainer.classList.remove("visible");
+  }
+}
+
+// Initialize search functionality
+function initializeSearch() {
+  const searchBar = document.querySelector(".search-bar");
+  const searchBarInput = document.getElementById("searchBarInput");
+  const closeButton = document.getElementById("closeSearchModal");
+
+  // Show modal when search bar is clicked
+  searchBar.addEventListener("click", () => {
+    showSearchModal();
+    // Focus the modal's search input
+    document.getElementById("messageSearch").focus();
+  });
+
+  // Handle back button click
+  closeButton.addEventListener("click", closeSearchModal);
 }
 ```
