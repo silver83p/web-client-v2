@@ -249,21 +249,27 @@ function highlightMessage(messageId) {
 ## Updated UI Implementation
 
 ```html
-<!-- Search Modal -->
-<div class="modal" id="searchModal">
+<!-- Persistent search bar (stays in place) -->
+<div class="search-bar-container" id="searchBarContainer">
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input
+      type="text"
+      id="searchInput"
+      class="search-input"
+      placeholder="Search messages..."
+      autocomplete="off"
+    />
+  </div>
+</div>
+
+<!-- Search Modal (expands from search bar) -->
+<div class="modal search-modal" id="searchModal">
   <div class="modal-header">
     <button class="back-button" id="closeSearchModal"></button>
     <div class="modal-title">Search Messages</div>
   </div>
-  <div class="form-container">
-    <input
-      type="text"
-      id="messageSearch"
-      class="form-control"
-      placeholder="Search messages..."
-      oninput="handleSearchInput(event)"
-      autofocus
-    />
+  <div class="search-results-container">
     <div id="searchResults" class="chat-list">
       <!-- Results will be populated here -->
     </div>
@@ -274,6 +280,42 @@ function highlightMessage(messageId) {
 ## CSS Implementation
 
 ```css
+/* Search bar styling */
+.search-bar-container {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 8px 16px;
+  background: var(--background-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--input-background);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+/* Modal expansion */
+.search-modal {
+  display: none;
+}
+
+.search-modal.active {
+  display: flex;
+}
+
+/* Keep search bar visible in modal */
+.search-modal.active ~ .search-bar-container {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+}
+
 /* Modal is already styled in main CSS, only need search-specific styles */
 
 /* Search Results Styles */
@@ -653,4 +695,64 @@ function initializeSearch() {
   // Handle back button click
   closeButton.addEventListener("click", closeSearchModal);
 }
+```
+
+# Chat Search Implementation Checklist
+
+## HTML Structure
+- [ ] Add persistent search bar to header
+- [ ] Create search modal with results container
+- [ ] Add empty state for no results
+- [ ] Add loading state for search in progress
+
+## CSS Updates
+- [ ] Style persistent search bar in header
+- [ ] Style search modal and transitions
+- [ ] Style search results list
+- [ ] Add animations for modal open/close
+- [ ] Style empty and loading states
+
+## JavaScript Implementation
+- [ ] Add search bar click handler to open modal
+- [ ] Implement real-time search as user types
+- [ ] Add debounce to search input
+- [ ] Create search results rendering logic
+- [ ] Handle empty states and loading states
+- [ ] Implement modal close behavior
+- [ ] Persist search state between view changes
+
+## Search Logic
+- [ ] Create message search function
+- [ ] Implement contact search function
+- [ ] Add highlight matching text in results
+- [ ] Sort results by relevance
+- [ ] Cache recent searches
+
+```html
+<!-- Persistent search bar (stays in place) -->
+<div class="search-bar-container" id="searchBarContainer">
+    <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input 
+            type="text" 
+            id="searchInput" 
+            class="search-input"
+            placeholder="Search messages..."
+            autocomplete="off"
+        />
+    </div>
+</div>
+
+<!-- Search Modal (expands from search bar) -->
+<div class="modal search-modal" id="searchModal">
+    <div class="modal-header">
+        <button class="back-button" id="closeSearchModal"></button>
+        <div class="modal-title">Search Messages</div>
+    </div>
+    <div class="search-results-container">
+        <div class="search-results" id="searchResults">
+            <!-- Results will be inserted here -->
+        </div>
+    </div>
+</div>
 ```
