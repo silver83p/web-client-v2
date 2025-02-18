@@ -741,24 +741,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 
-    document.getElementById('openLogs').addEventListener('click', openLogsModal);
+    document.getElementById('openLogs').addEventListener('click', () => {
+        // Close the menu modal first
+        document.getElementById('menuModal').classList.remove('active');
+        // Then open the logs modal and update view
+        document.getElementById('logsModal').classList.add('active');
+        updateLogsView();
+    });
+
     document.getElementById('closeLogsModal').addEventListener('click', () => {
         document.getElementById('logsModal').classList.remove('active');
     });
+
+    document.getElementById('refreshLogs').addEventListener('click', () => {
+        updateLogsView();
+    });
+
     document.getElementById('clearLogs').addEventListener('click', async () => {
         await Logger.clearLogs();
         updateLogsView();
     });
-    document.getElementById('refreshLogs').addEventListener('click', async () => {
-        updateLogsView();
-    });
-    document.getElementById('openLogs').addEventListener('click', () => {
-        // Close the menu modal first
-        document.getElementById('menuModal').classList.remove('active');
-        // Then open the logs modal
-        openLogsModal();
-    });
-    
+
     setupAddToHomeScreen()
 });
 
@@ -3002,11 +3005,11 @@ function requestNotificationPermission() {
     }
 }
 
-function openLogsModal() {
+/* function openLogsModal() {
   const modal = document.getElementById('logsModal');
   modal.classList.add('active');
   updateLogsView();
-}
+} */
 
 async function updateLogsView() {
     const logsContainer = document.getElementById('logsContainer');
