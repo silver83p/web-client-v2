@@ -33,13 +33,22 @@ sequenceDiagram
         Note over Modal: Real-time Search
         User->>Modal: Type search text
         Note over Modal: Debounce 300ms
-        Modal->>Data: searchMessages(searchText)
-        Data->>Data: Filter messages where:<br/>- type === "chat"<br/>- message includes search
-        Data->>Modal: Return SearchResult[]
-        alt No Results
-            Modal->>Modal: displayEmptyState()
-        else Has Results
-            Modal->>Modal: displaySearchResults()
+        alt Search Text Empty
+            Modal->>Modal: Clear results<br/>No empty state
+        else Search Text = 1 char
+            Note over Modal: Wait 600ms
+            Modal->>Data: searchMessages(searchText)
+            Data->>Modal: Return SearchResult[]
+        else Search Text ≥ 2 chars
+            Note over Modal: Wait 300ms
+            Modal->>Data: searchMessages(searchText)
+            Data->>Data: Filter & highlight matches<br/>Sort by timestamp
+            Data->>Modal: Return SearchResult[]
+            alt No Results
+                Modal->>Modal: displayEmptyState()
+            else Has Results
+                Modal->>Modal: displaySearchResults()
+            end
         end
     end
 
@@ -47,16 +56,13 @@ sequenceDiagram
         Note over Modal: Result Selection
         User->>Modal: Click search result
         Modal->>Modal: closeSearchModal()
+        Modal->>Chat: switchView('chats')
         Modal->>Chat: handleChatClick(contactAddress)
         alt Chat Loaded Successfully
-            Chat->>Message: scrollToMessage(messageId)
-            alt Message Found
-                Message->>Message: highlightMessage()
-            else Message Not Found
-                Message->>Modal: Show error notification
-            end
+            Chat->>Message: scrollIntoView(messageId)
+            Message->>Message: highlightMessage(2s)
         else Error Loading Chat
-            Chat->>Modal: Show error notification
+            Chat->>Console: Log error
         end
     end
 ```
@@ -700,59 +706,63 @@ function initializeSearch() {
 # Chat Search Implementation Checklist
 
 ## HTML Structure
-- [ ] Add persistent search bar to header
-- [ ] Create search modal with results container
-- [ ] Add empty state for no results
-- [ ] Add loading state for search in progress
+
+- [x] Add persistent search bar to header
+- [x] Create search modal with results container
+- [x] Add empty state for no results
+- [x] Add loading state for search in progress
 
 ## CSS Updates
-- [ ] Style persistent search bar in header
-- [ ] Style search modal and transitions
-- [ ] Style search results list
-- [ ] Add animations for modal open/close
-- [ ] Style empty and loading states
+
+- [x] Style persistent search bar in header
+- [x] Style search modal and transitions
+- [x] Style search results list
+- [x] Add animations for modal open/close
+- [x] Style empty and loading states
 
 ## JavaScript Implementation
-- [ ] Add search bar click handler to open modal
-- [ ] Implement real-time search as user types
-- [ ] Add debounce to search input
-- [ ] Create search results rendering logic
-- [ ] Handle empty states and loading states
-- [ ] Implement modal close behavior
-- [ ] Persist search state between view changes
+
+- [x] Add search bar click handler to open modal
+- [x] Implement real-time search as user types
+- [x] Add debounce to search input
+- [x] Create search results rendering logic
+- [x] Handle empty states and loading states
+- [x] Implement modal close behavior
+- [x] Persist search state between view changes
 
 ## Search Logic
-- [ ] Create message search function
+
+- [x] Create message search function
 - [ ] Implement contact search function
-- [ ] Add highlight matching text in results
-- [ ] Sort results by relevance
+- [x] Add highlight matching text in results
+- [x] Sort results by relevance (by timestamp)
 - [ ] Cache recent searches
 
 ```html
 <!-- Persistent search bar (stays in place) -->
 <div class="search-bar-container" id="searchBarContainer">
-    <div class="search-bar">
-        <span class="search-icon">🔍</span>
-        <input 
-            type="text" 
-            id="searchInput" 
-            class="search-input"
-            placeholder="Search messages..."
-            autocomplete="off"
-        />
-    </div>
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input
+      type="text"
+      id="searchInput"
+      class="search-input"
+      placeholder="Search messages..."
+      autocomplete="off"
+    />
+  </div>
 </div>
 
 <!-- Search Modal (expands from search bar) -->
 <div class="modal search-modal" id="searchModal">
-    <div class="modal-header">
-        <button class="back-button" id="closeSearchModal"></button>
-        <div class="modal-title">Search Messages</div>
+  <div class="modal-header">
+    <button class="back-button" id="closeSearchModal"></button>
+    <div class="modal-title">Search Messages</div>
+  </div>
+  <div class="search-results-container">
+    <div class="search-results" id="searchResults">
+      <!-- Results will be inserted here -->
     </div>
-    <div class="search-results-container">
-        <div class="search-results" id="searchResults">
-            <!-- Results will be inserted here -->
-        </div>
-    </div>
+  </div>
 </div>
 ```
