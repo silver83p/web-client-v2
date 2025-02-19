@@ -17,52 +17,60 @@ Key Points:
 ```mermaid
 sequenceDiagram
     participant User
-    participant SearchBar as Search Bar
-    participant Modal as Search Modal
-    participant Data as myData
-    participant Chat as Chat View
-    participant Message as Message List
+    participant SearchBar
+    participant SearchModal
+    participant SearchResults
+    participant ChatView
+    participant MessageView
+
+    User->>SearchBar: Click search input (readonly)
+    SearchBar->>SearchModal: Open & autofocus messageSearch input
 
     rect rgb(119, 101, 75)
-        Note over User: Initiate Search
-        User->>SearchBar: Click search bar
-        SearchBar->>Modal: showSearchModal()<br/>Display modal with focus
-    end
+        Note over SearchModal: Search Input Flow
+        User->>SearchModal: Type search text
+        Note over SearchModal: Debounce 300ms
 
-    rect rgb(119, 101, 75)
-        Note over Modal: Real-time Search
-        User->>Modal: Type search text
-        Note over Modal: Debounce 300ms
-        alt Search Text Empty
-            Modal->>Modal: Clear results<br/>No empty state
-        else Search Text = 1 char
-            Note over Modal: Wait 600ms
-            Modal->>Data: searchMessages(searchText)
-            Data->>Modal: Return SearchResult[]
-        else Search Text ≥ 2 chars
-            Note over Modal: Wait 300ms
-            Modal->>Data: searchMessages(searchText)
-            Data->>Data: Filter & highlight matches<br/>Sort by timestamp
-            Data->>Modal: Return SearchResult[]
+        alt Search text is empty
+            SearchModal->>SearchResults: Clear results without empty state
+        else Single character
+            SearchModal->>SearchResults: Clear results
+            Note over SearchModal: Wait additional 300ms (600ms total)
+            SearchModal->>SearchResults: searchMessages()
             alt No Results
-                Modal->>Modal: displayEmptyState()
+                SearchResults->>SearchResults: displayEmptyState()
             else Has Results
-                Modal->>Modal: displaySearchResults()
+                SearchResults->>SearchResults: displaySearchResults()
+                Note over SearchResults: Add "You:" prefix for my:true
+                Note over SearchResults: Highlight matching text with <mark>
+            end
+        else Multiple characters
+            SearchModal->>SearchResults: searchMessages()
+            alt No Results
+                SearchResults->>SearchResults: displayEmptyState()
+            else Has Results
+                SearchResults->>SearchResults: displaySearchResults()
+                Note over SearchResults: Add "You:" prefix for my:true
+                Note over SearchResults: Highlight matching text with <mark>
             end
         end
     end
 
     rect rgb(119, 101, 75)
-        Note over Modal: Result Selection
-        User->>Modal: Click search result
-        Modal->>Modal: closeSearchModal()
-        Modal->>Chat: switchView('chats')
-        Modal->>Chat: handleChatClick(contactAddress)
+        Note over SearchModal: Result Selection
+        User->>SearchResults: Click result
+        SearchResults->>SearchModal: closeSearchModal()
+        SearchModal->>SearchModal: Clear search input & results
+        SearchModal->>ChatView: handleChatClick(contactAddress)
+        ChatView->>ChatView: Generate identicon
+        ChatView->>ChatView: Setup chat modal & header
+        ChatView->>ChatView: Load messages & scroll to bottom
         alt Chat Loaded Successfully
-            Chat->>Message: scrollIntoView(messageId)
-            Message->>Message: highlightMessage(2s)
+            ChatView->>MessageView: scrollIntoView()
+            MessageView->>MessageView: Add 'highlighted' class
+            Note over MessageView: Remove highlight after 2s
         else Error Loading Chat
-            Chat->>Console: Log error
+            ChatView->>Console: Log error
         end
     end
 ```
