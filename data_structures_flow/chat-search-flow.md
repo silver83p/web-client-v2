@@ -5,7 +5,7 @@ Key Points:
 - Search Interface:
 
   - Search modal with input field
-  - Real-time search as user types
+  - Real-time search as user types with dynamic debounce
   - Results grouped by chat thread
   - Shows message preview and timestamp
 
@@ -29,22 +29,11 @@ sequenceDiagram
     rect rgb(119, 101, 75)
         Note over SearchModal: Search Input Flow
         User->>SearchModal: Type search text
-        Note over SearchModal: Debounce 300ms
+        Note over SearchModal: Dynamic debounce (300ms/600ms)
 
         alt Search text is empty
             SearchModal->>SearchResults: Clear results without empty state
-        else Single character
-            SearchModal->>SearchResults: Clear results
-            Note over SearchModal: Wait additional 300ms (600ms total)
-            SearchModal->>SearchResults: searchMessages()
-            alt No Results
-                SearchResults->>SearchResults: displayEmptyState()
-            else Has Results
-                SearchResults->>SearchResults: displaySearchResults()
-                Note over SearchResults: Add "You:" prefix for my:true
-                Note over SearchResults: Highlight matching text with <mark>
-            end
-        else Multiple characters
+        else Has Search Text
             SearchModal->>SearchResults: searchMessages()
             alt No Results
                 SearchResults->>SearchResults: displayEmptyState()
@@ -74,126 +63,135 @@ sequenceDiagram
         end
     end
 ```
+
 ## Implementation App.js
 
 ```javascript
-// Inside of 
+// Inside of
 // Load saved account data and update chat list on page load
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener("DOMContentLoaded", async () => {
   //... existing code
-    document.getElementById('refreshLogs').addEventListener('click', () => {
-        updateLogsView();
-    });
-    // Add new search functionality
-    const searchInput = document.getElementById('searchInput');
-    const messageSearch = document.getElementById('messageSearch');
-    const searchModal = document.getElementById('searchModal');
+  document.getElementById("refreshLogs").addEventListener("click", () => {
+    updateLogsView();
+  });
+  // Add new search functionality
+  const searchInput = document.getElementById("searchInput");
+  const messageSearch = document.getElementById("messageSearch");
+  const searchModal = document.getElementById("searchModal");
 
-    // Close search modal
-    document.getElementById('closeSearchModal').addEventListener('click', () => {
-        searchModal.classList.remove('active');
-        messageSearch.value = '';
-        document.getElementById('searchResults').innerHTML = '';
-    });
+  // Close search modal
+  document.getElementById("closeSearchModal").addEventListener("click", () => {
+    searchModal.classList.remove("active");
+    messageSearch.value = "";
+    document.getElementById("searchResults").innerHTML = "";
+  });
 
-    // Handle search input with debounce
-    messageSearch.addEventListener('input', debounce((e) => {
+  // Handle search input with dynamic debounce
+  messageSearch.addEventListener(
+    "input",
+    debounce(
+      (e) => {
         const searchText = e.target.value.trim();
         if (searchText.length < 2) {
-            displayEmptyState();
-            return;
+          displayEmptyState("searchResults", "No messages found");
+          return;
         }
 
         const results = searchMessages(searchText);
         if (results.length === 0) {
-            displayEmptyState();
+          displayEmptyState("searchResults", "No messages found");
         } else {
-            displaySearchResults(results);
+          displaySearchResults(results);
         }
-    }, 300));
+      },
+      (searchText) => (searchText.length === 1 ? 600 : 300)
+    ) // Dynamic wait time
+  );
 
-    document.getElementById('closeChatModal')?.addEventListener('click', () => {
-        document.getElementById('chatModal').classList.remove('active');
-    });
-    initializeSearch();
-    //... existing code
+  document.getElementById("closeChatModal")?.addEventListener("click", () => {
+    document.getElementById("chatModal").classList.remove("active");
+  });
+  initializeSearch();
+  //... existing code
 });
 ```
 
 ```javascript
 function debounce(func, waitFn) {
-    let timeout;
-    return function executedFunction(...args) {
-        const wait = typeof waitFn === 'function' ? waitFn(args[0]) : waitFn;
-        
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
+  let timeout;
+  return function executedFunction(...args) {
+    const wait = typeof waitFn === "function" ? waitFn(args[0]) : waitFn;
+
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
     };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
 }
 
 function truncateMessage(message, maxLength = 50) {
-    return message.length > maxLength
-        ? message.substring(0, maxLength) + '...'
-        : message;
+  return message.length > maxLength
+    ? message.substring(0, maxLength) + "..."
+    : message;
 }
 
 // Add these search-related functions
 function searchMessages(searchText) {
-    if (!searchText || !myData?.contacts) return [];
-    
-    const results = [];
-    const searchLower = searchText.toLowerCase();
-    
-    // Search through all contacts and their messages
-    Object.entries(myData.contacts).forEach(([address, contact]) => {
-        if (!contact.messages) return;
-        
-        contact.messages.forEach((message, index) => {
-            if (message.message.toLowerCase().includes(searchLower)) {
-                // Highlight matching text
-                const messageText = message.message;
-                const highlightedText = messageText.replace(
-                    new RegExp(searchText, 'gi'),
-                    match => `<mark>${match}</mark>`
-                );
-                
-                results.push({
-                    contactAddress: address,
-                    username: contact.username || address,
-                    messageId: index,
-                    message: message,  // Pass the entire message object
-                    timestamp: message.timestamp,
-                    preview: truncateMessage(highlightedText, 100),
-                    my: message.my  // Include the my property
-                });
-            }
+  if (!searchText || !myData?.contacts) return [];
+
+  const results = [];
+  const searchLower = searchText.toLowerCase();
+
+  // Search through all contacts and their messages
+  Object.entries(myData.contacts).forEach(([address, contact]) => {
+    if (!contact.messages) return;
+
+    contact.messages.forEach((message, index) => {
+      if (message.message.toLowerCase().includes(searchLower)) {
+        // Highlight matching text
+        const messageText = message.message;
+        const highlightedText = messageText.replace(
+          new RegExp(searchText, "gi"),
+          (match) => `<mark>${match}</mark>`
+        );
+
+        results.push({
+          contactAddress: address,
+          username: contact.username || address,
+          messageId: index,
+          message: message, // Pass the entire message object
+          timestamp: message.timestamp,
+          preview: truncateMessage(highlightedText, 100),
+          my: message.my, // Include the my property
         });
+      }
     });
-    
-    return results.sort((a, b) => b.timestamp - a.timestamp);
+  });
+
+  return results.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 function displaySearchResults(results) {
-    const searchResults = document.getElementById('searchResults');
-    // Create a ul element to properly contain the list items
-    const resultsList = document.createElement('ul');
-    resultsList.className = 'chat-list';
-    
-    results.forEach(async result => {
-        const resultElement = document.createElement('li');
-        resultElement.className = 'chat-item search-result-item';
-        
-        // Generate identicon for the contact
-        const identicon = await generateIdenticon(result.contactAddress);
-        
-        // Format message preview with "You:" prefix if it's a sent message
-        const messagePreview = result.my ? `You: ${result.preview}` : result.preview;
-        
-        resultElement.innerHTML = `
+  const searchResults = document.getElementById("searchResults");
+  // Create a ul element to properly contain the list items
+  const resultsList = document.createElement("ul");
+  resultsList.className = "chat-list";
+
+  results.forEach(async (result) => {
+    const resultElement = document.createElement("li");
+    resultElement.className = "chat-item search-result-item";
+
+    // Generate identicon for the contact
+    const identicon = await generateIdenticon(result.contactAddress);
+
+    // Format message preview with "You:" prefix if it's a sent message
+    const messagePreview = result.my
+      ? `You: ${result.preview}`
+      : result.preview;
+
+    resultElement.innerHTML = `
             <div class="chat-avatar">
                 ${identicon}
             </div>
@@ -208,116 +206,118 @@ function displaySearchResults(results) {
             </div>
         `;
 
-        resultElement.addEventListener('click', () => {
-            handleSearchResultClick(result);
-        });
-
-        resultsList.appendChild(resultElement);
+    resultElement.addEventListener("click", () => {
+      handleSearchResultClick(result);
     });
 
-    // Clear and append the new list
-    searchResults.innerHTML = '';
-    searchResults.appendChild(resultsList);
+    resultsList.appendChild(resultElement);
+  });
+
+  // Clear and append the new list
+  searchResults.innerHTML = "";
+  searchResults.appendChild(resultsList);
 }
 
-function displayEmptyState() {
-    const searchResults = document.getElementById('searchResults');
-    searchResults.innerHTML = `
+function displayEmptyState(containerId, message) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = `
         <div class="no-results">
-            <div>No messages found</div>
+            <div>${message}</div>
             <div class="suggestion">Try different keywords</div>
         </div>
     `;
 }
 
 function handleSearchResultClick(result) {
-    try {
-        // Close search modal
-        document.getElementById('searchModal').classList.remove('active');
-        
-        // Switch to chats view if not already there
-        switchView('chats');
-        
-        // Open the chat with this contact
-        handleChatClick(result.contactAddress);
-        
-        // Scroll to and highlight the message
-        setTimeout(() => {
-            const messageElement = document.querySelector(`[data-message-id="${result.messageId}"]`);
-            if (messageElement) {
-                messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                messageElement.classList.add('highlighted');
-                setTimeout(() => messageElement.classList.remove('highlighted'), 2000);
-            } else {
-                console.error('Message not found');
-                // Could add a toast notification here
-            }
-        }, 300);
-    } catch (error) {
-        console.error('Error handling search result:', error);
-        // Could add error notification here
-    }
+  try {
+    // Close search modal
+    document.getElementById("searchModal").classList.remove("active");
+
+    // Switch to chats view if not already there
+    switchView("chats");
+
+    // Open the chat with this contact
+    handleChatClick(result.contactAddress);
+
+    // Scroll to and highlight the message
+    setTimeout(() => {
+      const messageElement = document.querySelector(
+        `[data-message-id="${result.messageId}"]`
+      );
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        messageElement.classList.add("highlighted");
+        setTimeout(() => messageElement.classList.remove("highlighted"), 2000);
+      } else {
+        console.error("Message not found");
+        // Could add a toast notification here
+      }
+    }, 300);
+  } catch (error) {
+    console.error("Error handling search result:", error);
+    // Could add error notification here
+  }
 }
 
 // Add the search input handler
 function initializeSearch() {
-    const searchInput = document.getElementById('searchInput');
-    const messageSearch = document.getElementById('messageSearch');
-    const searchResults = document.getElementById('searchResults');
-    const searchModal = document.getElementById('searchModal');
-    
-    // Debounced search function
-    const debouncedSearch = debounce((searchText) => {
-        const trimmedText = searchText.trim();
-        
-        // Just clear results if empty
-        if (!trimmedText) {
-            searchResults.innerHTML = ''; // Clear without showing empty state
-            return;
-        }
+  const searchInput = document.getElementById("searchInput");
+  const messageSearch = document.getElementById("messageSearch");
+  const searchResults = document.getElementById("searchResults");
+  const searchModal = document.getElementById("searchModal");
 
-        // For single character, wait longer before showing any results
-        if (trimmedText.length === 1) {
-            // Show empty space initially
-            searchResults.innerHTML = '';
-            
-            // Wait before showing any state
-            setTimeout(() => {
-                const results = searchMessages(trimmedText);
-                if (results.length === 0) {
-                    displayEmptyState();
-                } else {
-                    displaySearchResults(results);
-                }
-            }, 600); // Longer delay for single character
-            return;
-        }
+  // Debounced search function
+  const debouncedSearch = debounce((searchText) => {
+    const trimmedText = searchText.trim();
 
-        // For multiple characters, proceed with normal search
+    // Just clear results if empty
+    if (!trimmedText) {
+      searchResults.innerHTML = ""; // Clear without showing empty state
+      return;
+    }
+
+    // For single character, wait longer before showing any results
+    if (trimmedText.length === 1) {
+      // Show empty space initially
+      searchResults.innerHTML = "";
+
+      // Wait before showing any state
+      setTimeout(() => {
         const results = searchMessages(trimmedText);
         if (results.length === 0) {
-            displayEmptyState();
+          displayEmptyState("searchResults", "No messages found");
         } else {
-            displaySearchResults(results);
+          displaySearchResults(results);
         }
-    }, 300);
-    
-    // Connect search input to modal input
-    searchInput.addEventListener('click', () => {
-        searchModal.classList.add('active');
-        messageSearch.focus();
-    });
-    
-    // Handle search input
-    messageSearch.addEventListener('input', (e) => {
-        debouncedSearch(e.target.value);
-    });
+      }, 600); // Longer delay for single character
+      return;
+    }
+
+    // For multiple characters, proceed with normal search
+    const results = searchMessages(trimmedText);
+    if (results.length === 0) {
+      displayEmptyState("searchResults", "No messages found");
+    } else {
+      displaySearchResults(results);
+    }
+  }, 300);
+
+  // Connect search input to modal input
+  searchInput.addEventListener("click", () => {
+    searchModal.classList.add("active");
+    messageSearch.focus();
+  });
+
+  // Handle search input
+  messageSearch.addEventListener("input", (e) => {
+    debouncedSearch(e.target.value);
+  });
 }
 
 // Add loading state display function
 function displayLoadingState() {
-    const searchResults = document.getElementById('searchResults');
-    searchResults.innerHTML = `
+  const searchResults = document.getElementById("searchResults");
+  searchResults.innerHTML = `
         <div class="search-loading">
             Searching messages
         </div>
@@ -325,20 +325,20 @@ function displayLoadingState() {
 }
 
 async function handleChatClick(contactAddress) {
-    // Get the contact info
-    const contact = myData.contacts[contactAddress];
-    if (!contact) return;
+  // Get the contact info
+  const contact = myData.contacts[contactAddress];
+  if (!contact) return;
 
-    // Open chat modal
-    const chatModal = document.getElementById('chatModal');
-    chatModal.classList.add('active');
+  // Open chat modal
+  const chatModal = document.getElementById("chatModal");
+  chatModal.classList.add("active");
 
-    // Generate the identicon first
-    const identicon = await generateIdenticon(contactAddress);
+  // Generate the identicon first
+  const identicon = await generateIdenticon(contactAddress);
 
-    // Update chat header with contact info and avatar - match exact structure from chat view
-    const modalHeader = chatModal.querySelector('.modal-header');
-    modalHeader.innerHTML = `
+  // Update chat header with contact info and avatar - match exact structure from chat view
+  const modalHeader = chatModal.querySelector(".modal-header");
+  modalHeader.innerHTML = `
         <button class="back-button" id="closeChatModal"></button>
         <div class="chat-user-info">
             <div class="modal-avatar">${identicon}</div>
@@ -346,47 +346,47 @@ async function handleChatClick(contactAddress) {
         </div>
     `;
 
-    // Re-attach close button event listener
-    document.getElementById('closeChatModal').addEventListener('click', () => {
-        chatModal.classList.remove('active');
-    });
+  // Re-attach close button event listener
+  document.getElementById("closeChatModal").addEventListener("click", () => {
+    chatModal.classList.remove("active");
+  });
 
-    // Ensure messages container structure matches
-    const messagesContainer = chatModal.querySelector('.messages-container');
-    if (!messagesContainer) {
-        const container = document.createElement('div');
-        container.className = 'messages-container';
-        container.innerHTML = '<div class="messages-list"></div>';
-        chatModal.appendChild(container);
-    }
+  // Ensure messages container structure matches
+  const messagesContainer = chatModal.querySelector(".messages-container");
+  if (!messagesContainer) {
+    const container = document.createElement("div");
+    container.className = "messages-container";
+    container.innerHTML = '<div class="messages-list"></div>';
+    chatModal.appendChild(container);
+  }
 
-    // Load messages
-    const messagesList = chatModal.querySelector('.messages-list');
-    messagesList.innerHTML = ''; // Clear existing messages
+  // Load messages
+  const messagesList = chatModal.querySelector(".messages-list");
+  messagesList.innerHTML = ""; // Clear existing messages
 
-    // Add messages if they exist
-    if (contact.messages && contact.messages.length > 0) {
-        contact.messages.forEach((msg, index) => {
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${msg.my ? 'sent' : 'received'}`;
-            messageElement.setAttribute('data-message-id', index);
-            messageElement.innerHTML = `
+  // Add messages if they exist
+  if (contact.messages && contact.messages.length > 0) {
+    contact.messages.forEach((msg, index) => {
+      const messageElement = document.createElement("div");
+      messageElement.className = `message ${msg.my ? "sent" : "received"}`;
+      messageElement.setAttribute("data-message-id", index);
+      messageElement.innerHTML = `
                 <div class="message-content">${msg.message}</div>
                 <div class="message-time">${formatTime(msg.timestamp)}</div>
             `;
-            messagesList.appendChild(messageElement);
-        });
-        
-        // Scroll to bottom of messages
-        messagesList.scrollTop = messagesList.scrollHeight;
-    }
+      messagesList.appendChild(messageElement);
+    });
 
-    // Ensure input container exists
-    const inputContainer = chatModal.querySelector('.message-input-container');
-    if (!inputContainer) {
-        const container = document.createElement('div');
-        container.className = 'message-input-container';
-        container.innerHTML = `
+    // Scroll to bottom of messages
+    messagesList.scrollTop = messagesList.scrollHeight;
+  }
+
+  // Ensure input container exists
+  const inputContainer = chatModal.querySelector(".message-input-container");
+  if (!inputContainer) {
+    const container = document.createElement("div");
+    container.className = "message-input-container";
+    container.innerHTML = `
             <textarea class="message-input" placeholder="Type a message..."></textarea>
             <button class="send-button" id="handleSendMessage">
                 <svg viewBox="0 0 24 24">
@@ -394,13 +394,14 @@ async function handleChatClick(contactAddress) {
                 </svg>
             </button>
         `;
-        chatModal.appendChild(container);
-    }
+    chatModal.appendChild(container);
+  }
 
-    // Store current contact for message sending
-    handleChatClick.currentContact = contactAddress;
+  // Store current contact for message sending
+  handleChatClick.currentContact = contactAddress;
 }
 ```
+
 ## Implementation index.html
 
 ```html
@@ -408,9 +409,9 @@ async function handleChatClick(contactAddress) {
   <div class="search-bar-container" id="searchBarContainer">
       <div class="search-bar">
           <span class="search-icon"></span>
-          <input 
-              type="text" 
-              id="searchInput" 
+          <input
+              type="text"
+              id="searchInput"
               class="search-input"
               placeholder="Search messages..."
               autocomplete="off"
@@ -447,7 +448,7 @@ async function handleChatClick(contactAddress) {
 
 ## Implementation styles.css
 
-```css
+````css
 :root {
   --border-color: #dee2e6;
   --background-color: white;
@@ -785,6 +786,8 @@ function searchMessages(searchText: string): SearchResult[] {
 
     // Sequential search through contacts and messages
     for (const [address, contact] of myData.contacts) {
+        if (!contact.messages) continue;
+
         contact.messages.forEach((msg, index) => {
             if (msg.type === "chat" && msg.message.toLowerCase().includes(searchLower)) {
                 results.push({
@@ -916,7 +919,7 @@ function highlightMessage(messageId) {
         }, 2000);
     }
 }
-```
+````
 
 ## Search Interface Layout
 
@@ -1111,10 +1114,12 @@ function highlightMessage(messageId) {
 1. Performance Optimizations:
 
 ```javascript
-// Add debouncing to prevent excessive searches while typing
-function debounce(func, wait) {
+// Enhanced debounce with dynamic wait time
+function debounce(func, waitFn) {
   let timeout;
   return function executedFunction(...args) {
+    const wait = typeof waitFn === "function" ? waitFn(args[0]) : waitFn;
+
     const later = () => {
       clearTimeout(timeout);
       func(...args);
@@ -1124,7 +1129,10 @@ function debounce(func, wait) {
   };
 }
 
-const debouncedSearch = debounce(handleSearchInput, 300);
+// Usage with dynamic wait time based on input length
+const debouncedSearch = debounce(handleSearchInput, (searchText) =>
+  searchText.length === 1 ? 600 : 300
+);
 ```
 
 2. Error States:
@@ -1238,28 +1246,6 @@ function searchMessages(
   position: fixed;
   width: 100%;
   z-index: 1000;
-}
-```
-
-```javascript
-// Enhanced modal transition
-function showSearchModal() {
-  const searchBar = document.querySelector(".search-bar");
-  const searchModal = document.getElementById("searchModal");
-  const rect = searchBar.getBoundingClientRect();
-
-  // Store position for animation
-  searchBar.style.top = `${rect.top}px`;
-  searchBar.classList.add("transitioning");
-
-  // Trigger animation
-  searchModal.classList.add("search-modal-enter");
-
-  // Cleanup after animation
-  setTimeout(() => {
-    searchBar.classList.remove("transitioning");
-    searchModal.style.display = "flex";
-  }, 300);
 }
 ```
 
@@ -1458,8 +1444,8 @@ function initializeSearch() {
     <div class="modal-title">Search Messages</div>
   </div>
   <div class="search-results-container">
-    <div class="search-results" id="searchResults">
-      <!-- Results will be inserted here -->
+    <div id="searchResults" class="chat-list">
+      <!-- Results will be populated here -->
     </div>
   </div>
 </div>

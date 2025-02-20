@@ -822,28 +822,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // For single character, wait longer
-        if (searchText.length === 1) {
-            document.getElementById("contactSearchResults").innerHTML = "";
-            setTimeout(() => {
-                const results = searchContacts(searchText);
-                if (results.length === 0) {
-                    displayEmptyState('contactSearchResults', "No contacts found");
-                } else {
-                    displayContactResults(results, searchText); // Pass searchText here
-                }
-            }, 600);
-            return;
-        }
-
-        // For multiple characters, proceed with normal search
         const results = searchContacts(searchText);
         if (results.length === 0) {
             displayEmptyState('contactSearchResults', "No contacts found");
         } else {
-            displayContactResults(results, searchText); // Pass searchText here
+            displayContactResults(results, searchText);
         }
-    }, 300));
+    }, (searchText) => searchText.length === 1 ? 600 : 300)); // Dynamic wait time
 
     setupAddToHomeScreen()
 });
@@ -3280,7 +3265,7 @@ function handleSearchResultClick(result) {
         switchView('chats');
         
         // Open the chat with this contact
-        handleChatClick(result.contactAddress);
+        handleResultClick(result.contactAddress);
         
         // Scroll to and highlight the message
         setTimeout(() => {
@@ -3311,37 +3296,18 @@ function initializeSearch() {
     const debouncedSearch = debounce((searchText) => {
         const trimmedText = searchText.trim();
         
-        // Just clear results if empty
         if (!trimmedText) {
-            searchResults.innerHTML = ''; // Clear without showing empty state
-            return;
-        }
-
-        // For single character, wait longer before showing any results
-        if (trimmedText.length === 1) {
-            // Show empty space initially
             searchResults.innerHTML = '';
-            
-            // Wait before showing any state
-            setTimeout(() => {
-                const results = searchMessages(trimmedText);
-                if (results.length === 0) {
-                    displayEmptyState('searchResults', "No messages found");
-                } else {
-                    displaySearchResults(results);
-                }
-            }, 600); // Longer delay for single character
             return;
         }
 
-        // For multiple characters, proceed with normal search
         const results = searchMessages(trimmedText);
         if (results.length === 0) {
             displayEmptyState('searchResults', "No messages found");
         } else {
             displaySearchResults(results);
         }
-    }, 300);
+    }, (searchText) => searchText.length === 1 ? 600 : 300); // Dynamic wait time
     
     // Connect search input to modal input
     searchInput.addEventListener('click', () => {
@@ -3365,7 +3331,7 @@ function displayLoadingState() {
     `;
 }
 
-async function handleChatClick(contactAddress) {
+async function handleResultClick(contactAddress) {
     // Get the contact info
     const contact = myData.contacts[contactAddress];
     if (!contact) return;
@@ -3392,13 +3358,6 @@ async function handleChatClick(contactAddress) {
         chatModal.classList.remove('active');
     });
 
-    // Add click handler for username to show contact info
-    const userInfo = modalHeader.querySelector('.chat-user-info');
-    userInfo.onclick = () => {
-        if (contact && contact.senderInfo) {
-            openContactInfoModal(contact.senderInfo);
-        }
-    };
 
     // Ensure messages container structure matches
     const messagesContainer = chatModal.querySelector('.messages-container');
@@ -3447,7 +3406,7 @@ async function handleChatClick(contactAddress) {
     }
 
     // Store current contact for message sending
-    handleChatClick.currentContact = contactAddress;
+    handleResultClick.currentContact = contactAddress;
 }
 
 // Contact search functions

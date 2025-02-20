@@ -1,6 +1,7 @@
 # Contact Search Implementation Flow
 
 Last edited: 2025-02-19 17:04:00
+
 # This document outlines the implementation flow for the contact search feature in the app.
 
 ```mermaid
@@ -20,22 +21,10 @@ sequenceDiagram
     rect rgb(119, 101, 75)
         Note over Modal: Real-time Search
         User->>Modal: Type search text
-        Note over Modal: Debounce 300ms
+        Note over Modal: Dynamic debounce (300ms/600ms)
         alt Search Text Empty
             Modal->>Modal: Clear results
-        else Search Text = 1 char
-            Note over Modal: Wait 600ms
-            Modal->>Data: searchContacts(searchText)
-            Data->>Data: Filter contacts by:<br/>- username<br/>- name<br/>- email<br/>- phone<br/>- linkedin<br/>- x
-            Data->>Modal: Return ContactResult[]
-            alt No Results
-                Modal->>Modal: displayEmptyState('contactSearchResults',<br/>'No contacts found')
-            else Has Results
-                Modal->>Modal: displayContactResults(results, searchText)
-                Note over Modal: Sort results by relevance:<br/>1. Exact matches<br/>2. Starts with<br/>3. Contains<br/>4. Show matched field with highlight
-            end
-        else Search Text > 1 char
-            Note over Modal: Wait 300ms
+        else Has Search Text
             Modal->>Data: searchContacts(searchText)
             Data->>Data: Filter contacts by:<br/>- username<br/>- name<br/>- email<br/>- phone<br/>- linkedin<br/>- x
             Data->>Modal: Return ContactResult[]
@@ -58,7 +47,7 @@ sequenceDiagram
 
 ## Reusable Functions from Chat Search
 
-- `debounce(func, waitFn)`: Controls function execution frequency
+- `debounce(func, waitFn)`: Controls function execution frequency with dynamic wait time
 - `displayEmptyState()`: Shows "no results found" UI
 - `displayLoadingState()`: Shows loading indicator
 - `initializeSearch()`: Sets up search event listeners
@@ -159,7 +148,7 @@ function getContactDisplayInfo(contact, address) {
    - Allow manual verification
    - Cache verification status
 
-## Implementation Pseudocode
+## Implementation Code
 
 ```javascript
 // Inside App.js DOMContentLoaded event listener
@@ -180,40 +169,27 @@ document.addEventListener("DOMContentLoaded", async () => {
       document.getElementById("contactSearchResults").innerHTML = "";
     });
 
-  // Handle contact search input with debounce
+  // Handle contact search input with dynamic debounce
   contactSearch.addEventListener(
     "input",
-    debounce((e) => {
-      const searchText = e.target.value.trim();
+    debounce(
+      (e) => {
+        const searchText = e.target.value.trim();
 
-      // Just clear results if empty
-      if (!searchText) {
-        document.getElementById("contactSearchResults").innerHTML = "";
-        return;
-      }
+        if (!searchText) {
+          document.getElementById("contactSearchResults").innerHTML = "";
+          return;
+        }
 
-      // For single character, wait longer
-      if (searchText.length === 1) {
-        document.getElementById("contactSearchResults").innerHTML = "";
-        setTimeout(() => {
-          const results = searchContacts(searchText);
-          if (results.length === 0) {
-            displayEmptyState();
-          } else {
-            displayContactResults(results);
-          }
-        }, 600);
-        return;
-      }
-
-      // For multiple characters, proceed with normal search
-      const results = searchContacts(searchText);
-      if (results.length === 0) {
-        displayEmptyState();
-      } else {
-        displayContactResults(results);
-      }
-    }, 300)
+        const results = searchContacts(searchText);
+        if (results.length === 0) {
+          displayEmptyState("contactSearchResults", "No contacts found");
+        } else {
+          displayContactResults(results, searchText);
+        }
+      },
+      (searchText) => (searchText.length === 1 ? 600 : 300)
+    ) // Dynamic wait time
   );
 
   initializeContactSearch();
@@ -225,103 +201,108 @@ function searchContacts(searchText) {
 
   const results = [];
   const searchLower = searchText.toLowerCase();
+  const searchFields = ["username", "name", "email", "phone", "linkedin", "x"];
 
-  // Search through all contacts
   Object.entries(myData.contacts).forEach(([address, contact]) => {
-    // Fields to search through
-    const searchFields = [
-      contact.username,
-      contact.name,
-      contact.email,
-      contact.phone,
-      contact.linkedin,
-      contact.x,
-    ].filter(Boolean); // Remove null/undefined values
+    let matched = false;
+    let matchType = 0;
+    let matchField = "";
+    let matchValue = "";
 
-    // Check if any field matches
-    const matches = searchFields.some((field) =>
-      field.toLowerCase().includes(searchLower)
-    );
+    for (const field of searchFields) {
+      const value = contact[field];
+      if (!value) continue;
 
-    if (matches) {
-      // Determine match type for sorting
-      const exactMatch = searchFields.some(
-        (field) => field.toLowerCase() === searchLower
-      );
-      const startsWithMatch = searchFields.some((field) =>
-        field.toLowerCase().startsWith(searchLower)
-      );
+      const valueLower = value.toLowerCase();
+      if (valueLower === searchLower) {
+        matchType = 3; // Exact match
+        matchField = field;
+        matchValue = value;
+        matched = true;
+        break;
+      } else if (valueLower.startsWith(searchLower)) {
+        matchType = 2; // Starts with
+        matchField = field;
+        matchValue = value;
+        matched = true;
+      } else if (valueLower.includes(searchLower) && matchType < 2) {
+        matchType = 1; // Contains
+        matchField = field;
+        matchValue = value;
+        matched = true;
+      }
+    }
 
+    if (matched) {
       results.push({
-        contactAddress: address,
-        contact: contact,
-        matchType: exactMatch ? 1 : startsWithMatch ? 2 : 3,
+        address,
+        username: contact.username || address,
+        matchField,
+        matchValue,
+        matchType,
+        preview: generateMatchPreview(matchValue, searchText),
       });
     }
   });
 
-  // Sort by match type (exact > starts with > contains)
-  return results.sort((a, b) => a.matchType - b.matchType);
+  return results.sort((a, b) => b.matchType - a.matchType);
+}
+
+function generateMatchPreview(text, searchText) {
+  const highlightedText = text.replace(
+    new RegExp(searchText, "gi"),
+    (match) => `<mark>${match}</mark>`
+  );
+  return highlightedText;
 }
 
 function displayContactResults(results, searchText) {
-  const searchResults = document.getElementById("contactSearchResults");
+  const container = document.getElementById("contactSearchResults");
   const resultsList = document.createElement("ul");
-  resultsList.className = "contact-list";
+  resultsList.className = "chat-list";
 
   results.forEach(async (result) => {
     const resultElement = document.createElement("li");
-    resultElement.className = "contact-item search-result-item";
+    resultElement.className = "chat-item search-result-item";
 
-    const identicon = await generateIdenticon(result.contactAddress);
+    const identicon = await generateIdenticon(result.address);
 
     resultElement.innerHTML = `
-            <div class="contact-avatar">
-                ${identicon}
-            </div>
-            <div class="contact-content">
-                <div class="contact-header">
-                    <div class="contact-name">${
-                      result.contact.username || result.contactAddress
-                    }</div>
-                </div>
-                <div class="contact-details">
-                    ${
-                      result.contact.name
-                        ? `<div>${result.contact.name}</div>`
-                        : ""
-                    }
-                    ${
-                      result.contact.email
-                        ? `<div>${result.contact.email}</div>`
-                        : ""
-                    }
-                </div>
-            </div>
-        `;
+      <div class="chat-avatar">
+        ${identicon}
+      </div>
+      <div class="chat-content">
+        <div class="chat-header">
+          <div class="chat-name">${result.username}</div>
+        </div>
+        <div class="chat-message">
+          ${result.preview}
+        </div>
+      </div>
+    `;
 
     resultElement.addEventListener("click", () => {
-      handleContactResultClick(result, searchText);
+      handleContactResultClick(result);
     });
 
     resultsList.appendChild(resultElement);
   });
 
-  searchResults.innerHTML = "";
-  searchResults.appendChild(resultsList);
+  container.innerHTML = "";
+  container.appendChild(resultsList);
 }
 
-function handleContactResultClick(result, searchText) {
+function handleContactResultClick(result) {
   try {
     // Close search modal
     document.getElementById("contactSearchModal").classList.remove("active");
 
     // Open chat modal
-    openChatModal(result.contactAddress);
+    openChatModal(result.address);
 
     // Highlight matched field
-    const matchedField = searchText.toLowerCase();
-    const contactElements = document.querySelectorAll(".contact-item");
+    const matchedField = result.matchField.toLowerCase();
+    const contactElements = document.querySelectorAll(".chat-item");
     contactElements.forEach((element) => {
       const text = element.textContent.toLowerCase();
       if (text.includes(matchedField)) {
@@ -409,6 +390,156 @@ This implementation maintains the same UX patterns (debouncing, loading states, 
 - [x] Close modal after selection
 
 #Implemented code as of 2025-02-19 17:04:00
+
 ```bash
 git diff 4225051286353fb7c40bd57d1820576669f6865b c7d53ffeeeea9728dde8260a73064b7675925c58 > changes.diff
 ```
+
+## Shared Functionality with Chat Search
+
+### Core Functions
+
+```javascript
+// Shared debounce implementation
+function debounce(func, waitFn) {
+  let timeout;
+  return function executedFunction(...args) {
+    const wait = typeof waitFn === "function" ? waitFn(args[0]) : waitFn;
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Shared empty state display
+function displayEmptyState(containerId, message) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-message">${message}</div>
+        </div>
+    `;
+}
+
+// Shared loading state
+function displayLoadingState() {
+  // Used by both search implementations
+  const searchResults = document.getElementById("searchResults");
+  searchResults.innerHTML = `
+        <div class="search-loading">
+            Searching...
+        </div>
+    `;
+}
+```
+
+### Shared UI Components
+
+1. Search Modal Structure:
+
+```html
+<div class="modal search-modal">
+  <div class="modal-header">
+    <button class="back-button"></button>
+    <div class="modal-title">Search</div>
+  </div>
+  <div class="search-results-container">
+    <div class="chat-list">
+      <!-- Results populated here -->
+    </div>
+  </div>
+</div>
+```
+
+2. Result Item Structure:
+
+```html
+<div class="chat-item search-result-item">
+  <div class="chat-avatar">
+    <!-- Identicon -->
+  </div>
+  <div class="chat-content">
+    <div class="chat-header">
+      <div class="chat-name"></div>
+      <div class="chat-time"></div>
+    </div>
+    <div class="chat-message">
+      <!-- Preview content -->
+    </div>
+  </div>
+</div>
+```
+
+### Shared Styles
+
+```css
+/* Base chat list styles */
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+/* Search result items */
+.search-result-item {
+  display: flex;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Hover effects */
+.search-result-item:hover {
+  background: var(--hover-background);
+}
+```
+
+### Shared Data Access
+
+Both search implementations:
+
+- Access `myData.contacts` for data
+- Use existing data structures
+- No additional storage requirements
+- Real-time search through contact/message data
+
+### Modal Control
+
+```javascript
+// Shared modal control functions
+function closeSearchModal() {
+  document.getElementById("searchModal").classList.remove("active");
+  clearSearchInput();
+  clearSearchResults();
+}
+
+function showSearchModal() {
+  document.getElementById("searchModal").classList.add("active");
+  focusSearchInput();
+}
+```
+
+### Basic UI Utilities
+
+```javascript
+// Shared across both search implementations
+async function generateIdenticon(address) {
+  // Common identicon generation
+}
+
+function formatTime(timestamp) {
+  // Common time formatting
+}
+```
+
+The key difference between contact and chat search lies in:
+
+1. Search target (contacts vs messages)
+2. Result display format
+3. Sorting logic
+4. Field prioritization
+5. Result handling behavior
