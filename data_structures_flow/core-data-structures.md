@@ -86,6 +86,15 @@ classDiagram
         senderInfo: SenderInfo
     }
 
+    class SenderInfo {
+        username: string
+        name: string
+        email: string
+        phone: string
+        linkedin: string
+        x: string
+    }
+
     class Message {
         message: string
         timestamp: number
@@ -105,6 +114,11 @@ classDiagram
     myData --> Settings
     myData --> Contact
     Contact --> Message
+    Contact "1" *-- "1" SenderInfo : contains
+    Contact "1" *-- "*" Message : contains
+
+    note for Contact "username/name are display fields\ncan exist without senderInfo"
+    note for SenderInfo "Complete profile info\nonly exists after receiving message"
 ```
 
 This initial diagram shows:
