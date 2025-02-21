@@ -32,14 +32,17 @@ Menu Dropdown:
 sequenceDiagram
     participant U as User
     participant CL as Contact List
+    participant DI as Display Info
     participant CI as Contact Info Modal
     participant M as Menu
     participant D as myData
 
     U->>CL: Clicks contact item
-    CL->>CI: Opens contact info modal
-    CI->>D: Fetch contact details
-    D-->>CI: Return contact data
+    CL->>D: Fetch contact details
+    D-->>CL: Return contact data
+    CL->>DI: Create display info object
+    Note over DI: Format data for display
+    DI->>CI: Opens modal with formatted data
     CI->>CI: Display contact info
 
     Note over CI,M: User can interact with menu
@@ -53,18 +56,51 @@ sequenceDiagram
     end
 ```
 
-## Menu Implementation
+## Data Flow
 
-The menu button in the top-right corner of the contact info modal provides these actions:
+1. Contact data structure:
 
-- Edit Contact (future implementation)
-- Open Chat
+```javascript
+contact = {
+  address: "0x1234...5678",
+  username: "john",
+  senderInfo: {
+    username: "john",
+    name: "John Doe",
+    email: "john@example.com",
+    phone: "123-456-7890",
+    linkedin: "/johndoe",
+    x: "@johndoe",
+  },
+};
+```
+
+2. Display info structure:
+
+```javascript
+displayInfo = {
+  username: "john", // from senderInfo.username || contact.username || shortened address
+  name: "John Doe", // from contact.name || senderInfo.name || 'Not provided'
+  email: "john@example.com", // from senderInfo.email || 'Not provided'
+  phone: "123-456-7890", // from senderInfo.phone || 'Not provided'
+  linkedin: "/johndoe", // from senderInfo.linkedin || 'Not provided'
+  x: "@johndoe", // from senderInfo.x || 'Not provided'
+};
+```
 
 ## Event Flow
 
 1. User clicks a contact in the contacts list
-2. Contact info modal opens showing contact details
-3. User can:
+2. System creates a displayInfo object with formatted data
+3. Contact info modal opens showing formatted contact details
+4. User can:
    - View contact information
    - Use menu to open chat
    - Close modal to return to contacts list
+
+## Data Handling
+
+- Contact data is retrieved from myData.contacts
+- Display info is created before opening the modal
+- The modal only handles displaying the pre-formatted data
+- Data fallbacks are handled during displayInfo creation

@@ -1246,7 +1246,18 @@ async function updateContactsList() {
     
     // Add click handlers to contact items
     document.querySelectorAll('#contactsList .chat-item').forEach((item, index) => {
-        item.onclick = () => openChatModal(contactsArray[index].address);
+        item.onclick = () => {
+            const contact = contactsArray[index];
+            const displayInfo = {
+                username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),
+                name: contact.name || contact.senderInfo?.name || 'Not provided',
+                email: contact.senderInfo?.email || 'Not provided',
+                phone: contact.senderInfo?.phone || 'Not provided',
+                linkedin: contact.senderInfo?.linkedin || 'Not provided',
+                x: contact.senderInfo?.x || 'Not provided'
+            };
+            openContactInfoModal(displayInfo);
+        };
     });
 }
 
@@ -1687,8 +1698,16 @@ function openChatModal(address) {
     const userInfo = modal.querySelector('.chat-user-info');
     userInfo.onclick = () => {
         const contact = myData.contacts[address];
-        if (contact && contact.senderInfo) {
-            openContactInfoModal(contact.senderInfo);
+        if (contact) {
+            const displayInfo = {
+                username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),
+                name: contact.name || contact.senderInfo?.name || 'Not provided',
+                email: contact.senderInfo?.email || 'Not provided',
+                phone: contact.senderInfo?.phone || 'Not provided',
+                linkedin: contact.senderInfo?.linkedin || 'Not provided',
+                x: contact.senderInfo?.x || 'Not provided'
+            };
+            openContactInfoModal(displayInfo);
         }
     };
 
@@ -2069,18 +2088,17 @@ console.log('payload is', payload)
     }
 }
 
-function openContactInfoModal(senderInfo) {
+function openContactInfoModal(displayInfo) {
     const modal = document.getElementById('contactInfoModal');
     
-    // Set values
-    document.getElementById('contactInfoUsername').textContent = senderInfo.username || 'Not provided';
-    document.getElementById('contactInfoName').textContent = senderInfo.name || 'Not provided';
-    document.getElementById('contactInfoEmail').textContent = senderInfo.email || 'Not provided';
-    document.getElementById('contactInfoPhone').textContent = senderInfo.phone || 'Not provided';
-    document.getElementById('contactInfoLinkedin').textContent = senderInfo.linkedin || 'Not provided';
-    document.getElementById('contactInfoX').textContent = senderInfo.x || 'Not provided';
+    // Set values directly from our display object
+    document.getElementById('contactInfoUsername').textContent = displayInfo.username;
+    document.getElementById('contactInfoName').textContent = displayInfo.name;
+    document.getElementById('contactInfoEmail').textContent = displayInfo.email;
+    document.getElementById('contactInfoPhone').textContent = displayInfo.phone;
+    document.getElementById('contactInfoLinkedin').textContent = displayInfo.linkedin;
+    document.getElementById('contactInfoX').textContent = displayInfo.x;
     
-    // Show modal
     modal.classList.add('active');
 }
 
@@ -2564,6 +2582,8 @@ console.log("processChats sender", sender)
                     decryptMessage(payload, keys)  // modifies the payload object
                     if (payload.senderInfo){
                         contact.senderInfo = JSON.parse(JSON.stringify(payload.senderInfo))  // make a copy
+                        // DEBUG
+                        console.log('contact.senderInfo', JSON.stringify(contact.senderInfo, null, 4))
                         delete payload.senderInfo
                         if (! contact.username && contact.senderInfo.username){
                             // TODO check the network to see if the username given with the message maps to the address of this contact
