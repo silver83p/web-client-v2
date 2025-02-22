@@ -52,40 +52,31 @@ The diagram also shows the basic contact object structure created in both flows.
 
 ```mermaid
 sequenceDiagram
-    participant Sender
-    participant Recipient
+    participant User
     participant UI
+    participant ContactInfo
+    participant Chat
 
-    Sender->>Recipient: Send message with senderInfo
-    Recipient->>Recipient: Process message & store senderInfo
-    Note over Recipient: Contact updated with sender details
+    User->>UI: Click contact
+    UI->>ContactInfo: Open contact info modal
+    Note over ContactInfo: Display contact details<br/>with chat and menu buttons
 
-    Recipient->>UI: Click on contact
-    UI->>UI: Check if contact.senderInfo exists
-    alt Has senderInfo
-        UI->>UI: Open contact info modal
-    else No senderInfo
-        Note over UI: Contact info not available
+    alt User clicks Chat button
+        User->>ContactInfo: Click chat icon
+        ContactInfo->>ContactInfo: Close modal
+        ContactInfo->>Chat: Open chat with contact
+    else User opens menu
+        User->>ContactInfo: Click menu button (⋮)
+        ContactInfo->>ContactInfo: Show dropdown menu
+        alt User clicks Edit
+            User->>ContactInfo: Click Edit
+            ContactInfo->>UI: Open edit form
+        else User clicks Add Friend
+            User->>ContactInfo: Click Add Friend
+            ContactInfo->>UI: Handle friend request
+        end
     end
 ```
-
-This sequence diagram illustrates the flow for opening the contact info modal.
-
-```mermaid
-sequenceDiagram
-    participant UI
-    participant App
-
-    UI->>App: Click on user info
-    App->>App: Check contact.senderInfo
-    alt Has senderInfo
-        App->>UI: Open contact info modal
-    else No senderInfo
-        Note over App: Do nothing
-    end
-```
-
-This sequence diagram illustrates the flow for opening the contact info modal.
 
 ## Contact Fields vs SenderInfo Fields
 
@@ -105,6 +96,30 @@ The display hierarchy is:
 1. Show name if available
 2. Otherwise show username
 3. If neither exists, show truncated address
+
+### Contact Info Display
+
+When viewing contact info, the data is formatted into a display object:
+
+```javascript
+displayInfo = {
+  username:
+    contact.senderInfo?.username || contact.username || shortened_address,
+  name: contact.senderInfo?.name || "Not provided",
+  email: contact.senderInfo?.email || "Not provided",
+  phone: contact.senderInfo?.phone || "Not provided",
+  linkedin: contact.senderInfo?.linkedin || "Not provided",
+  x: contact.senderInfo?.x || "Not provided",
+  address: contact.address, // Required for chat functionality
+};
+```
+
+The contact info modal provides:
+
+- Full profile information display
+- Direct chat access via chat button
+- Menu options for Edit and Add Friend
+- Consistent fallbacks for missing data
 
 ### SenderInfo Updates
 
@@ -187,51 +202,6 @@ This means:
 2. The display name shown in chat can be different from the registered username
 3. Profile updates (senderInfo) don't affect the blockchain username registration
 
-### Full Profile View
-
-SenderInfo is used directly only in the contact info modal to show complete profile:
-
-```javascript
-document.getElementById("contactInfoUsername").textContent =
-  senderInfo.username || "Not provided";
-document.getElementById("contactInfoName").textContent =
-  senderInfo.name || "Not provided";
-// ... other fields like email, phone, etc.
-```
-
-### Design Benefits
-
-This dual-field design allows:
-
-- Quick access to display names without accessing senderInfo
-- Preservation of manually set names/usernames
-- Full profile information when needed
-- Separation between display identity and full profile information
-
-```mermaid
-sequenceDiagram
-    participant Message
-    participant Contact
-    participant UI
-
-    Message->>Contact: Receive message with senderInfo
-    Note over Contact: Check if username/name exist
-    alt No existing username
-        Contact->>Contact: Update username from senderInfo
-    end
-    Note over Contact: Store complete senderInfo
-
-    UI->>Contact: Request display name
-    Contact-->>UI: Return name || username || truncated address
-
-    UI->>Contact: Open contact info
-    alt Has senderInfo
-        Contact-->>UI: Show full profile from senderInfo
-    else No senderInfo
-        Contact-->>UI: Cannot show full profile
-    end
-```
-
 ### Profile Updates and Message Flow
 
 The diagram below shows how user profile information flows from account updates to messages:
@@ -281,3 +251,26 @@ Key aspects of profile information flow:
 - Only the intended recipient can decrypt your profile info
 - You control what profile info to include by updating your account
 - Profile info is separate from your cryptographic identity (address)
+
+### Contact Info Modal Actions
+
+The contact info modal now provides several interaction options:
+
+1. **Direct Chat Access**
+
+   - Chat button in header for quick access
+   - Uses stored contact address
+   - Seamlessly transitions from info to chat
+
+2. **Menu Options**
+
+   - Edit contact information
+   - Add contact as friend
+   - Dropdown menu with icons
+   - Green styling for Add Friend action
+
+3. **UI/UX Improvements**
+   - Compact dropdown design
+   - Visual feedback on hover
+   - Consistent icon styling
+   - Clear action hierarchy

@@ -1254,7 +1254,8 @@ async function updateContactsList() {
                 email: contact.senderInfo?.email || 'Not provided',
                 phone: contact.senderInfo?.phone || 'Not provided',
                 linkedin: contact.senderInfo?.linkedin || 'Not provided',
-                x: contact.senderInfo?.x || 'Not provided'
+                x: contact.senderInfo?.x || 'Not provided',
+                address: contact.address  // used to open chat modal
             };
             openContactInfoModal(displayInfo);
         };
@@ -1705,7 +1706,8 @@ function openChatModal(address) {
                 email: contact.senderInfo?.email || 'Not provided',
                 phone: contact.senderInfo?.phone || 'Not provided',
                 linkedin: contact.senderInfo?.linkedin || 'Not provided',
-                x: contact.senderInfo?.x || 'Not provided'
+                x: contact.senderInfo?.x || 'Not provided',
+                address: contact.address  // used to open chat modal
             };
             openContactInfoModal(displayInfo);
         }
@@ -2091,13 +2093,60 @@ console.log('payload is', payload)
 function openContactInfoModal(displayInfo) {
     const modal = document.getElementById('contactInfoModal');
     
-    // Set values directly from our display object
+    // Add menu button and dropdown to the modal header while preserving back button
+    const modalHeader = modal.querySelector('.modal-header');
+    const backButton = modalHeader.querySelector('.back-button');
+    modalHeader.innerHTML = `
+        ${backButton.outerHTML}
+        <div class="modal-title">Contact Info</div>
+        <div class="header-actions">
+            <button class="icon-button chat-icon" id="contactInfoChatButton"></button>
+            <button class="dropdown-menu-button" id="contactInfoMenuButton">⋮</button>
+            <div class="dropdown-menu" id="contactInfoMenuDropdown">
+                <button class="dropdown-item">
+                    <span class="dropdown-icon edit-icon"></span>
+                    <span class="dropdown-text">Edit</span>
+                </button>
+                <button class="dropdown-item add-friend">
+                    <span class="dropdown-icon add-friend-icon"></span>
+                    <span class="dropdown-text">Add Friend</span>
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Reattach the back button click handler
+    modalHeader.querySelector('.back-button').onclick = closeContactInfoModal;
+
+    // Add chat button handler
+    modalHeader.querySelector('#contactInfoChatButton').onclick = () => {
+        if (displayInfo.address) {
+            closeContactInfoModal();  // Close contact info modal first
+            openChatModal(displayInfo.address);
+        }
+    };
+
+    // Set contact info values
     document.getElementById('contactInfoUsername').textContent = displayInfo.username;
     document.getElementById('contactInfoName').textContent = displayInfo.name;
     document.getElementById('contactInfoEmail').textContent = displayInfo.email;
     document.getElementById('contactInfoPhone').textContent = displayInfo.phone;
     document.getElementById('contactInfoLinkedin').textContent = displayInfo.linkedin;
     document.getElementById('contactInfoX').textContent = displayInfo.x;
+    
+    // Add menu toggle functionality
+    const menuButton = document.getElementById('contactInfoMenuButton');
+    const menuDropdown = document.getElementById('contactInfoMenuDropdown');
+    
+    menuButton.onclick = (e) => {
+        e.stopPropagation();
+        menuDropdown.classList.toggle('active');
+    };
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+        menuDropdown.classList.remove('active');
+    });
     
     modal.classList.add('active');
 }

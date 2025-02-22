@@ -7,7 +7,7 @@ This document describes the flow for opening contact information from the contac
 ```ascii
 Before (Contacts List):              After (Contact Info):
 +-------------------------+         +-------------------------+
-|       Contacts         |         |    Contact Info     [⋮] | <- Menu button
+|       Contacts         |         |    Contact Info   [💬][⋮]| <- Chat & Menu buttons
 +-------------------------+         +-------------------------+
 | ┌─────────────────────┐|         | Username: john         |
 | │ [Avatar]  john     ││         | Name: Not provided      |
@@ -22,7 +22,7 @@ Before (Contacts List):              After (Contact Info):
 Menu Dropdown:
 +------------------+
 | ✏️ Edit          |
-| 💬 Open Chat     |
+| 👥 Add Friend    |
 +------------------+
 ```
 
@@ -45,14 +45,15 @@ sequenceDiagram
     DI->>CI: Opens modal with formatted data
     CI->>CI: Display contact info
 
-    Note over CI,M: User can interact with menu
-    U->>M: Opens menu dropdown
-    M-->>U: Show options (Edit/Chat)
+    Note over CI,M: User can interact with header buttons
 
-    alt User clicks "Open Chat"
-        U->>M: Clicks Open Chat
-        M->>CI: Close contact info
+    alt User clicks Chat button
+        U->>CI: Clicks Chat button
+        CI->>CI: Close contact info
         CI->>CL: Open chat modal
+    else User opens menu dropdown
+        U->>M: Clicks menu button (⋮)
+        M-->>U: Show options (Edit/Add Friend)
     end
 ```
 
@@ -85,6 +86,7 @@ displayInfo = {
   phone: "123-456-7890", // from senderInfo.phone || 'Not provided'
   linkedin: "/johndoe", // from senderInfo.linkedin || 'Not provided'
   x: "@johndoe", // from senderInfo.x || 'Not provided'
+  address: "0x1234...5678", // Required for chat functionality
 };
 ```
 
@@ -92,11 +94,33 @@ displayInfo = {
 
 1. User clicks a contact in the contacts list
 2. System creates a displayInfo object with formatted data
-3. Contact info modal opens showing formatted contact details
+3. Contact info modal opens showing:
+   - Back button (←)
+   - Modal title "Contact Info"
+   - Chat button (💬)
+   - Menu button (⋮)
 4. User can:
    - View contact information
-   - Use menu to open chat
+   - Click chat button to open chat directly
+   - Use menu dropdown to:
+     - Edit contact info
+     - Add as friend
    - Close modal to return to contacts list
+
+## Header Actions
+
+1. Chat Button:
+
+   - Direct access to open chat with contact
+   - Uses contact's address from displayInfo
+   - Closes contact info modal before opening chat
+
+2. Menu Dropdown:
+   - Opens a compact dropdown menu
+   - Edit option with pencil icon
+   - Add Friend option with person-plus icon
+   - Green styling for Add Friend option
+   - Closes when clicking outside
 
 ## Data Handling
 
@@ -104,3 +128,4 @@ displayInfo = {
 - Display info is created before opening the modal
 - The modal only handles displaying the pre-formatted data
 - Data fallbacks are handled during displayInfo creation
+- Contact address is now included in displayInfo for chat functionality
