@@ -718,7 +718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     document.getElementById('handleSignOut').addEventListener('click', handleSignOut);
     document.getElementById('closeChatModal').addEventListener('click', closeChatModal);
-    document.getElementById('closeContactInfoModal').addEventListener('click', closeContactInfoModal);
+    document.getElementById('closeContactInfoModal').addEventListener('click', contactInfoModal.close());
     document.getElementById('handleSendMessage').addEventListener('click', handleSendMessage);
     
     // Add refresh balance button handler
@@ -1248,7 +1248,7 @@ async function updateContactsList() {
     document.querySelectorAll('#contactsList .chat-item').forEach((item, index) => {
         item.onclick = () => {
             const contact = contactsArray[index];
-            openContactInfoModal(createDisplayInfo(contact));
+            contactInfoModal.open(createDisplayInfo(contact));
         };
     });
 }
@@ -1691,7 +1691,7 @@ function openChatModal(address) {
     userInfo.onclick = () => {
         const contact = myData.contacts[address];
         if (contact) {
-            openContactInfoModal(createDisplayInfo(contact));
+            contactInfoModal.open(createDisplayInfo(contact));
         }
     };
 
@@ -2072,69 +2072,97 @@ console.log('payload is', payload)
     }
 }
 
-function openContactInfoModal(displayInfo) {
-    const modal = document.getElementById('contactInfoModal');
-    
-    // Add menu button and dropdown to the modal header while preserving back button
-    const modalHeader = modal.querySelector('.modal-header');
-    const backButton = modalHeader.querySelector('.back-button');
-    modalHeader.innerHTML = `
-        ${backButton.outerHTML}
-        <div class="modal-title">Contact Info</div>
-        <div class="header-actions">
-            <button class="icon-button chat-icon" id="contactInfoChatButton"></button>
-            <button class="dropdown-menu-button" id="contactInfoMenuButton">⋮</button>
-            <div class="dropdown-menu" id="contactInfoMenuDropdown">
-                <button class="dropdown-item">
-                    <span class="dropdown-icon edit-icon"></span>
-                    <span class="dropdown-text">Edit</span>
-                </button>
-                <button class="dropdown-item add-friend">
-                    <span class="dropdown-icon add-friend-icon"></span>
-                    <span class="dropdown-text">Add Friend</span>
-                </button>
-            </div>
-        </div>
-    `;
+// Contact Info Modal Management
+class ContactInfoModalManager {
+    constructor() {
+        this.modal = document.getElementById('contactInfoModal');
+        this.menuDropdown = document.getElementById('contactInfoMenuDropdown');
+        this.setupEventListeners();
+    }
 
-    modalHeader.querySelector('.back-button').onclick = closeContactInfoModal;
+    // Initialize event listeners that only need to be set up once
+    setupEventListeners() {
+        // Back button
+        this.modal.querySelector('.back-button').addEventListener('click', () => {
+            this.close();
+        });
 
-    // Add chat button handler
-    modalHeader.querySelector('#contactInfoChatButton').onclick = () => {
+        // Menu toggle
+        const menuButton = document.getElementById('contactInfoMenuButton');
+        menuButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.menuDropdown.classList.toggle('active');
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            this.menuDropdown.classList.remove('active');
+        });
+
+        // Edit button
+        document.getElementById('editContactButton').addEventListener('click', () => {
+            // TODO: Implement edit functionality
+            console.log('Edit contact clicked');
+        });
+
+        // Add friend button
+        document.getElementById('addFriendButton').addEventListener('click', () => {
+            // TODO: Implement add friend functionality
+            console.log('Add friend clicked');
+        });
+    }
+
+    // Update contact info values
+    updateContactInfo(displayInfo) {
+        const fields = {
+            'Username': 'contactInfoUsername',
+            'Name': 'contactInfoName',
+            'Email': 'contactInfoEmail',
+            'Phone': 'contactInfoPhone',
+            'LinkedIn': 'contactInfoLinkedin',
+            'X': 'contactInfoX'
+        };
+
+        Object.entries(fields).forEach(([field, elementId]) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                const value = displayInfo[field.toLowerCase()] || 'Not provided';
+                element.textContent = value;
+            }
+        });
+    }
+
+    // Set up chat button functionality
+    setupChatButton(displayInfo) {
+        const chatButton = document.getElementById('contactInfoChatButton');
         if (displayInfo.address) {
-            closeContactInfoModal();  // Close contact info modal first
-            openChatModal(displayInfo.address);
+            chatButton.addEventListener('click', () => {
+                this.close();
+                openChatModal(displayInfo.address);
+            });
+            chatButton.style.display = 'block';
+        } else {
+            chatButton.style.display = 'none';
         }
-    };
+    }
 
-    // Set contact info values
-    document.getElementById('contactInfoUsername').textContent = displayInfo.username;
-    document.getElementById('contactInfoName').textContent = displayInfo.name;
-    document.getElementById('contactInfoEmail').textContent = displayInfo.email;
-    document.getElementById('contactInfoPhone').textContent = displayInfo.phone;
-    document.getElementById('contactInfoLinkedin').textContent = displayInfo.linkedin;
-    document.getElementById('contactInfoX').textContent = displayInfo.x;
-    
-    // Add menu toggle functionality
-    const menuButton = document.getElementById('contactInfoMenuButton');
-    const menuDropdown = document.getElementById('contactInfoMenuDropdown');
-    
-    menuButton.onclick = (e) => {
-        e.stopPropagation();
-        menuDropdown.classList.toggle('active');
-    };
+    // Open the modal
+    open(displayInfo) {
+        this.updateContactInfo(displayInfo);
+        this.setupChatButton(displayInfo);
+        this.modal.classList.add('active');
+    }
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', () => {
-        menuDropdown.classList.remove('active');
-    });
-    
-    modal.classList.add('active');
+    // Close the modal
+    close() {
+        this.modal.classList.remove('active');
+        this.menuDropdown.classList.remove('active');
+    }
 }
 
-function closeContactInfoModal() {
-    document.getElementById('contactInfoModal').classList.remove('active');
-}
+// Create a singleton instance
+const contactInfoModal = new ContactInfoModalManager();
+
 
 function handleSignOut() {
 //    const shouldLeave = confirm('Do you want to leave this page?');
@@ -3561,7 +3589,7 @@ function displayContactResults(results, searchText) {
     });
 }
 
-// Add this new helper function
+// Create a display info object from a contact object
 function createDisplayInfo(contact) {
     return {
         username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),

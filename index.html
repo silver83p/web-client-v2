@@ -612,9 +612,44 @@
         <div class="modal-header">
           <button class="back-button" id="closeContactInfoModal"></button>
           <div class="modal-title">Contact Info</div>
+          <!-- Add header actions container -->
+          <div class="header-actions">
+            <button
+              class="icon-button chat-icon"
+              id="contactInfoChatButton"
+              aria-label="Open chat"
+            ></button>
+            <div class="dropdown">
+              <button
+                class="dropdown-menu-button"
+                id="contactInfoMenuButton"
+                aria-label="More options"
+              >
+                ⋮
+              </button>
+              <div class="dropdown-menu" id="contactInfoMenuDropdown">
+                <button class="dropdown-item" id="editContactButton">
+                  <span class="dropdown-icon edit-icon"></span>
+                  <span class="dropdown-text">Edit</span>
+                </button>
+                <button class="dropdown-item add-friend" id="addFriendButton">
+                  <span class="dropdown-icon add-friend-icon"></span>
+                  <span class="dropdown-text">Add Friend</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="form-container">
           <div class="contact-info-list">
+            <!-- Template for contact info items -->
+            <template id="contactInfoItemTemplate">
+              <div class="contact-info-item">
+                <div class="contact-info-label"></div>
+                <div class="contact-info-value"></div>
+              </div>
+            </template>
+            <!-- Contact info fields -->
             <div class="contact-info-item">
               <div class="contact-info-label">Username</div>
               <div class="contact-info-value" id="contactInfoUsername"></div>
