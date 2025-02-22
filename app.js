@@ -1248,16 +1248,7 @@ async function updateContactsList() {
     document.querySelectorAll('#contactsList .chat-item').forEach((item, index) => {
         item.onclick = () => {
             const contact = contactsArray[index];
-            const displayInfo = {
-                username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),
-                name: contact.name || contact.senderInfo?.name || 'Not provided',
-                email: contact.senderInfo?.email || 'Not provided',
-                phone: contact.senderInfo?.phone || 'Not provided',
-                linkedin: contact.senderInfo?.linkedin || 'Not provided',
-                x: contact.senderInfo?.x || 'Not provided',
-                address: contact.address  // used to open chat modal
-            };
-            openContactInfoModal(displayInfo);
+            openContactInfoModal(createDisplayInfo(contact));
         };
     });
 }
@@ -1700,16 +1691,7 @@ function openChatModal(address) {
     userInfo.onclick = () => {
         const contact = myData.contacts[address];
         if (contact) {
-            const displayInfo = {
-                username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),
-                name: contact.name || contact.senderInfo?.name || 'Not provided',
-                email: contact.senderInfo?.email || 'Not provided',
-                phone: contact.senderInfo?.phone || 'Not provided',
-                linkedin: contact.senderInfo?.linkedin || 'Not provided',
-                x: contact.senderInfo?.x || 'Not provided',
-                address: contact.address  // used to open chat modal
-            };
-            openContactInfoModal(displayInfo);
+            openContactInfoModal(createDisplayInfo(contact));
         }
     };
 
@@ -2115,7 +2097,6 @@ function openContactInfoModal(displayInfo) {
         </div>
     `;
 
-    // Reattach the back button click handler
     modalHeader.querySelector('.back-button').onclick = closeContactInfoModal;
 
     // Add chat button handler
@@ -2631,8 +2612,6 @@ console.log("processChats sender", sender)
                     decryptMessage(payload, keys)  // modifies the payload object
                     if (payload.senderInfo){
                         contact.senderInfo = JSON.parse(JSON.stringify(payload.senderInfo))  // make a copy
-                        // DEBUG
-                        console.log('contact.senderInfo', JSON.stringify(contact.senderInfo, null, 4))
                         delete payload.senderInfo
                         if (! contact.username && contact.senderInfo.username){
                             // TODO check the network to see if the username given with the message maps to the address of this contact
@@ -3580,5 +3559,18 @@ function displayContactResults(results, searchText) {
 
         resultsContainer.appendChild(contactElement);
     });
+}
+
+// Add this new helper function
+function createDisplayInfo(contact) {
+    return {
+        username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),
+        name: contact.name || contact.senderInfo?.name || 'Not provided',
+        email: contact.senderInfo?.email || 'Not provided',
+        phone: contact.senderInfo?.phone || 'Not provided',
+        linkedin: contact.senderInfo?.linkedin || 'Not provided',
+        x: contact.senderInfo?.x || 'Not provided',
+        address: contact.address
+    };
 }
 
