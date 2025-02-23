@@ -20,15 +20,15 @@ classDiagram
     }
 
     class Contact {
-        address: string        // Unique identifier for the contact
-        username: string       // Display name in the network
-        name: string          // User-set custom name
-        messages: Message[]    // History of chat messages
-        timestamp: number      // Last message timestamp
-        unread: number        // Count of unread messages
-        public: string        // Public key for encryption
-        pqPublic: string      // Post-quantum public key
-        senderInfo: SenderInfo // Additional sender metadata
+        address: string        
+        username: string       
+        name: string          
+        messages: Message[]    
+        timestamp: number      
+        unread: number        
+        public: string        
+        pqPublic: string      
+        senderInfo: SenderInfo 
         friend: boolean       // Client-side friend status flag
     }
 
@@ -42,6 +42,114 @@ classDiagram
 
     style Contact fill:#696,stroke:#333,stroke-width:2px
 ```
+
+## Implementation Details
+
+### Contact Info Modal
+
+The friend status is managed through the ContactInfoModalManager class:
+
+```typescript
+class ContactInfoModalManager {
+  currentContactAddress: string | null; // Tracks current contact being viewed
+
+  // Updates friend button appearance based on status
+  updateFriendButton(isFriend: boolean) {
+    // Updates text: "Add Friend" ↔ "Remove Friend"
+    // Updates icon: plus sign ↔ minus sign
+    // Updates colors: green ↔ red
+  }
+}
+```
+
+### Visual States
+
+The friend toggle button has two states:
+
+1. Add Friend (Default):
+
+   - Text: "Add Friend"
+   - Icon: Person with plus sign
+   - Color: Green (--success-color)
+   - Hover: Light green background
+
+2. Remove Friend:
+   - Text: "Remove Friend"
+   - Icon: Person with minus sign
+   - Color: Red (--danger-color)
+   - Hover: Light red background
+
+### CSS Implementation
+
+```css
+/* Base friend button styles */
+.dropdown-item.add-friend {
+  color: var(--success-color);
+}
+
+/* Remove friend state */
+.dropdown-item.add-friend.removing {
+  color: var(--danger-color);
+}
+
+/* Icons for both states */
+.dropdown-icon.add-friend-icon {
+  /* Person with plus icon */
+}
+.dropdown-icon.add-friend-icon.removing {
+  /* Person with minus icon */
+}
+```
+
+### State Management
+
+1. Friend status is stored in contact data:
+
+```javascript
+myData.contacts[address].friend = boolean;
+```
+
+2. Status is persisted via localStorage:
+
+```javascript
+saveState(); // Called after toggling friend status
+```
+
+3. Status is loaded when opening contact info:
+
+```javascript
+open(displayInfo) {
+    const contact = myData.contacts[displayInfo.address];
+    this.updateFriendButton(contact.friend || false);
+}
+```
+
+### Event Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CI as Contact Info Modal
+    participant M as Menu
+    participant D as myData
+
+    Note over CI: Contact Info Modal open
+    U->>M: Opens menu dropdown
+    M-->>U: Show menu options
+    U->>M: Clicks Add/Remove Friend
+    M->>D: Toggle friend status
+    D-->>M: Status updated
+    M->>CI: Update button appearance
+    Note over CI: Button shows new state
+    M->>D: Save state to localStorage
+```
+
+### Security and Privacy
+
+- Friend status is client-side only
+- Not transmitted to backend or other users
+- Persists across sessions via localStorage
+- Cleared when account is removed
 
 ## Implementation Flow
 
@@ -60,26 +168,6 @@ sequenceDiagram
     D-->>M: Status updated
     M-->>U: Update menu item text
 ```
-
-## Implementation Details
-
-The friend status is stored in the contact data structure:
-
-```typescript
-interface ContactData {
-  name: string;
-  address: string;
-  friend?: boolean; // Optional boolean flag to mark contact as friend
-  // ... other existing contact properties
-}
-```
-
-The `friend` property is:
-
-- Optional (undefined means not friended)
-- Boolean (true indicates the contact is marked as a friend)
-- Client-side only (not synchronized with the backend)
-- Can be toggled by the user at any time
 
 ## Menu Implementation
 
@@ -130,4 +218,3 @@ To check if a contact is marked as friend:
 ```typescript
 const isFriend = myData.contacts[address]?.friend ?? false;
 ```
-

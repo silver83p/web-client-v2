@@ -2077,6 +2077,7 @@ class ContactInfoModalManager {
     constructor() {
         this.modal = document.getElementById('contactInfoModal');
         this.menuDropdown = document.getElementById('contactInfoMenuDropdown');
+        this.currentContactAddress = null;
         this.setupEventListeners();
     }
 
@@ -2107,9 +2108,40 @@ class ContactInfoModalManager {
 
         // Add friend button
         document.getElementById('addFriendButton').addEventListener('click', () => {
-            // TODO: Implement add friend functionality
-            console.log('Add friend clicked');
+            if (!this.currentContactAddress) return;
+            
+            const contact = myData.contacts[this.currentContactAddress];
+            if (!contact) return;
+
+            // Toggle friend status
+            contact.friend = !contact.friend;
+
+            // Update button text
+            this.updateFriendButton(contact.friend);
+
+            // Close the dropdown
+            this.menuDropdown.classList.remove('active');
+
+            // Save state
+            saveState();
         });
+    }
+
+    // Update friend button text based on current status
+    updateFriendButton(isFriend) {
+        const button = document.getElementById('addFriendButton');
+        const textSpan = button.querySelector('.dropdown-text');
+        const iconSpan = button.querySelector('.dropdown-icon');
+        textSpan.textContent = isFriend ? 'Remove Friend' : 'Add Friend';
+        
+        // Toggle the removing class based on friend status
+        if (isFriend) {
+            button.classList.add('removing');
+            iconSpan.classList.add('removing');
+        } else {
+            button.classList.remove('removing');
+            iconSpan.classList.remove('removing');
+        }
     }
 
     // Update contact info values
@@ -2148,13 +2180,22 @@ class ContactInfoModalManager {
 
     // Open the modal
     open(displayInfo) {
+        this.currentContactAddress = displayInfo.address;
         this.updateContactInfo(displayInfo);
         this.setupChatButton(displayInfo);
+
+        // Update friend button status
+        const contact = myData.contacts[displayInfo.address];
+        if (contact) {
+            this.updateFriendButton(contact.friend || false);
+        }
+
         this.modal.classList.add('active');
     }
 
     // Close the modal
     close() {
+        this.currentContactAddress = null;
         this.modal.classList.remove('active');
         this.menuDropdown.classList.remove('active');
     }
