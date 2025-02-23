@@ -718,7 +718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     document.getElementById('handleSignOut').addEventListener('click', handleSignOut);
     document.getElementById('closeChatModal').addEventListener('click', closeChatModal);
-    document.getElementById('closeContactInfoModal').addEventListener('click', contactInfoModal.close());
+    document.getElementById('closeContactInfoModal').addEventListener('click', () => contactInfoModal.close());
     document.getElementById('handleSendMessage').addEventListener('click', handleSendMessage);
     
     // Add refresh balance button handler
