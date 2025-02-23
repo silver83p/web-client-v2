@@ -1211,7 +1211,6 @@ async function switchView(view) {
 // Update contacts list UI
 async function updateContactsList() {
     const contactsList = document.getElementById('contactsList');
-//            const chatsData = myData
     const contacts = myData.contacts;
     
     if (Object.keys(contacts).length === 0) {
@@ -1224,30 +1223,73 @@ async function updateContactsList() {
         return;
     }
 
+    // Convert contacts object to array and sort
     const contactsArray = Object.values(contacts);
-    const contactItems = await Promise.all(contactsArray.map(async contact => {
-        const identicon = await generateIdenticon(contact.address);
-        return `
-            <li class="chat-item">
-                <div class="chat-avatar">${identicon}</div>
-                <div class="chat-content">
-                    <div class="chat-header">
-                        <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
-                    </div>
-                    <div class="chat-message">
-                        ${contact.email || contact.x || contact.phone || contact.address}
-                    </div>
-                </div>
-            </li>
-        `;
-    }));
     
-    contactsList.innerHTML = contactItems.join('');
+    // Split into friends and others in a single pass
+    const { friends, others } = contactsArray.reduce((acc, contact) => {
+        const key = contact.friend ? 'friends' : 'others';
+        acc[key].push(contact);
+        return acc;
+    }, { friends: [], others: [] });
+
+    // Sort friends and others
+    friends.sort((a, b) => (a.username || a.name || '').localeCompare(b.username || b.name || ''));
+    others.sort((a, b) => (a.username || a.name || '').localeCompare(b.username || b.name || ''));
+
+    // Build HTML for both sections
+    let html = '';
+
+    // Add friends section if there are friends
+    if (friends.length > 0) {
+        html += `<div class="contact-section-header">Friends</div>`;
+        const friendItems = await Promise.all(friends.map(async contact => {
+            const identicon = await generateIdenticon(contact.address);
+            return `
+                <li class="chat-item">
+                    <div class="chat-avatar">${identicon}</div>
+                    <div class="chat-content">
+                        <div class="chat-header">
+                            <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
+                        </div>
+                        <div class="chat-message">
+                            ${contact.email || contact.x || contact.phone || contact.address}
+                        </div>
+                    </div>
+                </li>
+            `;
+        }));
+        html += friendItems.join('');
+    }
+
+    // Add others section if there are other contacts
+    if (others.length > 0) {
+        html += `<div class="contact-section-header">Others</div>`;
+        const otherItems = await Promise.all(others.map(async contact => {
+            const identicon = await generateIdenticon(contact.address);
+            return `
+                <li class="chat-item">
+                    <div class="chat-avatar">${identicon}</div>
+                    <div class="chat-content">
+                        <div class="chat-header">
+                            <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
+                        </div>
+                        <div class="chat-message">
+                            ${contact.email || contact.x || contact.phone || contact.address}
+                        </div>
+                    </div>
+                </li>
+            `;
+        }));
+        html += otherItems.join('');
+    }
+    
+    contactsList.innerHTML = html;
     
     // Add click handlers to contact items
     document.querySelectorAll('#contactsList .chat-item').forEach((item, index) => {
+        const contact = [...friends, ...others][index];
         item.onclick = () => {
-            const contact = contactsArray[index];
             contactInfoModal.open(createDisplayInfo(contact));
         };
     });
@@ -2078,6 +2120,7 @@ class ContactInfoModalManager {
         this.modal = document.getElementById('contactInfoModal');
         this.menuDropdown = document.getElementById('contactInfoMenuDropdown');
         this.currentContactAddress = null;
+        this.needsContactListUpdate = false;  // track if we need to update the contact list
         this.setupEventListeners();
     }
 
@@ -2121,6 +2164,9 @@ class ContactInfoModalManager {
 
             // Close the dropdown
             this.menuDropdown.classList.remove('active');
+
+            // Mark that we need to update the contact list
+            this.needsContactListUpdate = true;
 
             // Save state
             saveState();
@@ -2198,6 +2244,12 @@ class ContactInfoModalManager {
         this.currentContactAddress = null;
         this.modal.classList.remove('active');
         this.menuDropdown.classList.remove('active');
+
+        // If we made changes that affect the contact list, update it
+        if (this.needsContactListUpdate) {
+            updateContactsList();
+            this.needsContactListUpdate = false;
+        }
     }
 }
 
@@ -2302,27 +2354,29 @@ async function handleSendMessage() {
     // Encrypt message using shared secret
     const encMessage = encryptChacha(dhkey, message)
 
-    // Create sender info object
-    const senderInfo = {
-        username: myAccount.username,
-        name: myData.account.name,
-        email: myData.account.email,
-        phone: myData.account.phone,
-        linkedin: myData.account.linkedin,
-        x: myData.account.x
-    };
-    // Encrypt sender info
-    const encSenderInfo = encryptChacha(dhkey, stringify(senderInfo));
-
     // Create message payload
     const payload = {
         message: encMessage,
-        senderInfo: encSenderInfo,
         encrypted: true,
         encryptionMethod: 'xchacha20poly1305',
         pqEncSharedKey: bin2base64(cipherText),
         sent_timestamp: Date.now()
     };
+
+    // Only include senderInfo if recipient is a friend
+    const contact = myData.contacts[currentAddress];
+    if (contact && contact.friend) {
+        // Create and encrypt sender info
+        const senderInfo = {
+            username: myAccount.username,
+            name: myData.account.name,
+            email: myData.account.email,
+            phone: myData.account.phone,
+            linkedin: myData.account.linkedin,
+            x: myData.account.x
+        };
+        payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
+    }
 
     try {
 //console.log('payload is', payload)
@@ -2374,12 +2428,6 @@ async function handleSendMessage() {
         // Scroll to bottom of chat modal
         messagesList.parentElement.scrollTop = messagesList.parentElement.scrollHeight;
 
-/*  This is probably not needed
-        // Update chat list if visible
-        if (document.getElementById('chatsScreen').classList.contains('active')) {
-            updateChatList();
-        }
-*/
     } catch (error) {
         console.error('Message error:', error);
         alert('Failed to send message. Please try again.');
