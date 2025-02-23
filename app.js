@@ -3621,7 +3621,8 @@ function displayContactResults(results, searchText) {
 
         // Add click handler to show contact info
         contactElement.addEventListener("click", () => {
-            openChatModal(contact.address);
+            // Create display info and open contact info modal
+            contactInfoModal.open(createDisplayInfo(contact));
             // Close the search modal
             document.getElementById("contactSearchModal").classList.remove("active");
         });

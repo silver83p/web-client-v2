@@ -1645,7 +1645,7 @@ pre.log-message {
   border-bottom: 1px solid var(--border-color);
 }
 
-/* Search Bar */
+/* Search Bar - Common styles for all search bars */
 .search-bar {
   display: flex;
   align-items: center;
@@ -1661,7 +1661,7 @@ pre.log-message {
   background: var(--hover-background-dark);
 }
 
-/* Search input styles */
+/* Search input styles - Common for all search inputs */
 .search-input {
   border: none;
   background: transparent;
@@ -1681,6 +1681,23 @@ pre.log-message {
   outline: none;
 }
 
+/* Search icon */
+.search-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  opacity: 0.7;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cline x1='22' y1='22' x2='16.65' y2='16.65'%3E%3C/line%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+/* Modal specific search bar container */
+.modal .form-container .search-bar {
+  margin-bottom: 16px;
+}
+
 /* Search Modal */
 .search-modal {
   display: none;
@@ -1690,37 +1707,12 @@ pre.log-message {
   display: flex;
 }
 
-/* Search Results */
-.search-results {
-  padding: 8px 0;
-}
-
-.search-result-item {
-  display: flex;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color) !important;
-  background: var(--background-color);
-  cursor: pointer;
-  align-items: center;
-}
-
-.search-result-item:hover {
-  background: var(--hover-background);
-}
-
-/* Use existing chat-item styles for consistency */
-.search-result-item.chat-item {
-  display: flex;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-/* Remove old search result styles that conflict */
-.search-result-header,
-.search-result-username,
-.search-result-time,
-.search-result-preview {
-  display: none;
+/* Remove any conflicting styles */
+#messageSearch,
+#contactSearch {
+  padding-left: 0; /* Reset padding since it's handled by search bar */
+  border-radius: 0; /* Reset border radius since it's handled by search bar */
+  background: transparent; /* Reset background since it's handled by search bar */
 }
 
 /* Message Highlight Animation */
@@ -1737,31 +1729,6 @@ pre.log-message {
   80% {
     background: var(--highlight-color);
   }
-}
-
-/* Update search modal input to match main search bar */
-#messageSearch {
-  border: none;
-  background: var(--input-background);
-  width: 100%;
-  color: var(--text-color);
-  font-size: 0.9rem;
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-
-#messageSearch:focus {
-  outline: none;
-  background: var(--hover-background);
-}
-
-/* Add search icon to modal search input */
-.form-container {
-  position: relative;
-}
-
-#messageSearch {
-  padding-left: 12px; /* Reset to normal padding */
 }
 
 /* Style for highlighted search matches */
