@@ -2172,6 +2172,9 @@ class ContactInfoModalManager {
             // Toggle friend status
             contact.friend = !contact.friend;
 
+            // Show appropriate toast message
+            showToast(contact.friend ? 'Added to friends' : 'Removed from friends');
+
             // Update button text
             this.updateFriendButton(contact.friend);
 
@@ -2383,7 +2386,30 @@ class ContactInfoModalManager {
     }
 
     // Update contact info values
-    updateContactInfo(displayInfo) {
+    async updateContactInfo(displayInfo) {
+        // Add avatar section at the top
+        const contactInfoList = this.modal.querySelector('.contact-info-list');
+        const avatarSection = document.createElement('div');
+        avatarSection.className = 'contact-avatar-section';
+        
+        // Generate identicon for the contact
+        const identicon = await generateIdenticon(displayInfo.address, 96);
+        
+        avatarSection.innerHTML = `
+            <div class="avatar">${identicon}</div>
+            <div class="name">${displayInfo.name !== 'Not provided' ? displayInfo.name : displayInfo.username}</div>
+            <div class="subtitle">${displayInfo.address}</div>
+        `;
+
+        // Remove existing avatar section if it exists
+        const existingAvatarSection = contactInfoList.querySelector('.contact-avatar-section');
+        if (existingAvatarSection) {
+            existingAvatarSection.remove();
+        }
+
+        // Add new avatar section at the top
+        contactInfoList.insertBefore(avatarSection, contactInfoList.firstChild);
+
         const fields = {
             'Username': 'contactInfoUsername',
             'Name': 'contactInfoName',
@@ -2417,9 +2443,9 @@ class ContactInfoModalManager {
     }
 
     // Open the modal
-    open(displayInfo) {
+    async open(displayInfo) {
         this.currentContactAddress = displayInfo.address;
-        this.updateContactInfo(displayInfo);
+        await this.updateContactInfo(displayInfo);
         this.setupChatButton(displayInfo);
 
         // Update friend button status
@@ -3882,5 +3908,31 @@ function createDisplayInfo(contact) {
         x: contact.senderInfo?.x || 'Not provided',
         address: contact.address
     };
+}
+
+// Add this function before the ContactInfoModalManager class
+function showToast(message, duration = 2000) {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    
+    toastContainer.appendChild(toast);
+    
+    // Force reflow to enable transition
+    toast.offsetHeight;
+    
+    // Show the toast
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+    
+    // Hide and remove the toast after duration
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toastContainer.removeChild(toast);
+        }, 300); // Match transition duration
+    }, duration);
 }
 
