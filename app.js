@@ -1233,9 +1233,16 @@ async function updateContactsList() {
         return acc;
     }, { friends: [], others: [] });
 
-    // Sort friends and others
-    friends.sort((a, b) => (a.username || a.name || '').localeCompare(b.username || b.name || ''));
-    others.sort((a, b) => (a.username || a.name || '').localeCompare(b.username || b.name || ''));
+    // Sort friends and others by name first, then by username if name is not available
+    const sortByName = (a, b) => {
+        const nameA = a.name || a.username || '';
+        const nameB = b.name || b.username || '';
+        return nameA.localeCompare(nameB);
+    };
+
+    // sort friends and others
+    friends.sort(sortByName);
+    others.sort(sortByName);
 
     // Build HTML for both sections
     let html = '';
@@ -2121,6 +2128,8 @@ class ContactInfoModalManager {
         this.menuDropdown = document.getElementById('contactInfoMenuDropdown');
         this.currentContactAddress = null;
         this.needsContactListUpdate = false;  // track if we need to update the contact list
+        this.isEditing = false;
+        this.originalName = null;
         this.setupEventListeners();
     }
 
@@ -2128,7 +2137,11 @@ class ContactInfoModalManager {
     setupEventListeners() {
         // Back button
         this.modal.querySelector('.back-button').addEventListener('click', () => {
-            this.close();
+            if (this.isEditing) {
+                this.exitEditMode(false);
+            } else {
+                this.close();
+            }
         });
 
         // Menu toggle
@@ -2145,8 +2158,8 @@ class ContactInfoModalManager {
 
         // Edit button
         document.getElementById('editContactButton').addEventListener('click', () => {
-            // TODO: Implement edit functionality
-            console.log('Edit contact clicked');
+            this.enterEditMode();
+            this.menuDropdown.classList.remove('active');
         });
 
         // Add friend button
@@ -2171,6 +2184,185 @@ class ContactInfoModalManager {
             // Save state
             saveState();
         });
+
+        // Add keyboard event listener for Escape key
+        this.modal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isEditing) {
+                this.exitEditMode(false);
+            }
+        });
+    }
+
+    enterEditMode() {
+        this.isEditing = true;
+        const contact = myData.contacts[this.currentContactAddress];
+        this.originalName = contact?.name || '';
+        
+        // Update header
+        const header = this.modal.querySelector('.modal-header');
+        header.innerHTML = `
+            <button class="icon-button cancel-button" id="cancelEdit" aria-label="Cancel"></button>
+            <div class="modal-title">Edit Contact</div>
+            <button class="icon-button save-button" id="saveEdit" aria-label="Save"></button>
+        `;
+
+        // Setup header button listeners
+        header.querySelector('#cancelEdit').addEventListener('click', () => this.exitEditMode(false));
+        header.querySelector('#saveEdit').addEventListener('click', () => this.exitEditMode(true));
+
+        // Transform name field to edit mode
+        this.updateNameFieldToEditMode();
+    }
+
+    updateNameFieldToEditMode() {
+        const nameField = document.getElementById('contactInfoName');
+        const contact = myData.contacts[this.currentContactAddress];
+        const currentValue = contact?.name || '';
+        
+        nameField.innerHTML = `
+            <div class="contact-info-value editing">
+                <input 
+                    type="text" 
+                    class="edit-field-input"
+                    value="${currentValue}"
+                    placeholder="Enter contact name"
+                >
+                <button class="field-action-button ${currentValue ? 'clear' : 'add'}" aria-label="${currentValue ? 'Clear' : 'Add'}"></button>
+            </div>
+        `;
+
+        // Add event listeners
+        const input = nameField.querySelector('input');
+        const actionButton = nameField.querySelector('.field-action-button');
+
+        // Handle input changes
+        input.addEventListener('input', () => {
+            const hasValue = input.value.trim().length > 0;
+            actionButton.className = `field-action-button ${hasValue ? 'clear' : 'add'}`;
+            actionButton.setAttribute('aria-label', hasValue ? 'Clear' : 'Add');
+        });
+
+        // Handle action button clicks
+        actionButton.addEventListener('click', () => {
+            if (input.value.trim()) {
+                input.value = '';
+                actionButton.className = 'field-action-button add';
+                actionButton.setAttribute('aria-label', 'Add');
+            }
+            input.focus();
+        });
+
+        // Handle enter key
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.exitEditMode(true);
+            }
+        });
+    }
+
+    exitEditMode(save = false) {
+        if (save) {
+            // Save changes
+            const input = document.querySelector('.edit-field-input');
+            const newName = input.value.trim();
+            const contact = myData.contacts[this.currentContactAddress];
+            if (contact) {
+                contact.name = newName || null;
+                saveState();
+                this.needsContactListUpdate = true;
+            }
+        } else {
+            // Restore original name
+            const contact = myData.contacts[this.currentContactAddress];
+            if (contact) {
+                contact.name = this.originalName;
+            }
+        }
+
+        // Reset edit state
+        this.isEditing = false;
+        
+        // Restore original header
+        this.restoreHeader();
+        
+        // Update display
+        this.updateContactInfo(createDisplayInfo(myData.contacts[this.currentContactAddress]));
+    }
+
+    restoreHeader() {
+        const header = this.modal.querySelector('.modal-header');
+        header.innerHTML = `
+            <button class="back-button" id="closeContactInfoModal"></button>
+            <div class="modal-title">Contact Info</div>
+            <div class="header-actions">
+                <button class="icon-button chat-icon" id="contactInfoChatButton"></button>
+                <div class="dropdown">
+                    <button class="dropdown-menu-button" id="contactInfoMenuButton"></button>
+                    <div class="dropdown-menu" id="contactInfoMenuDropdown">
+                        <button class="dropdown-item" id="editContactButton">
+                            <span class="dropdown-icon edit-icon"></span>
+                            <span class="dropdown-text">Edit</span>
+                        </button>
+                        <button class="dropdown-item add-friend" id="addFriendButton">
+                            <span class="dropdown-icon add-friend-icon"></span>
+                            <span class="dropdown-text">Add Friend</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Reattach all necessary event listeners
+        const menuButton = document.getElementById('contactInfoMenuButton');
+        const menuDropdown = document.getElementById('contactInfoMenuDropdown');
+        const editButton = document.getElementById('editContactButton');
+        const addFriendButton = document.getElementById('addFriendButton');
+
+        // Menu button click handler
+        menuButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menuDropdown.classList.toggle('active');
+        });
+
+        // Edit button click handler
+        editButton.addEventListener('click', () => {
+            this.enterEditMode();
+            menuDropdown.classList.remove('active');
+        });
+
+        // Add friend button click handler
+        addFriendButton.addEventListener('click', () => {
+            if (!this.currentContactAddress) return;
+            const contact = myData.contacts[this.currentContactAddress];
+            if (!contact) return;
+            contact.friend = !contact.friend;
+            this.updateFriendButton(contact.friend);
+            menuDropdown.classList.remove('active');
+            this.needsContactListUpdate = true;
+            saveState();
+        });
+
+        // Back button click handler
+        this.modal.querySelector('.back-button').addEventListener('click', () => {
+            if (this.isEditing) {
+                this.exitEditMode(false);
+            } else {
+                this.close();
+            }
+        });
+
+        // Document click handler to close dropdown
+        document.addEventListener('click', () => {
+            menuDropdown.classList.remove('active');
+        });
+
+        // Restore chat button functionality and friend status
+        const contact = myData.contacts[this.currentContactAddress];
+        if (contact) {
+            this.setupChatButton({ address: this.currentContactAddress });
+            this.updateFriendButton(contact.friend || false);
+        }
     }
 
     // Update friend button text based on current status
