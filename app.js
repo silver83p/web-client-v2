@@ -2660,20 +2660,25 @@ async function handleSendMessage() {
         sent_timestamp: Date.now()
     };
 
-    // Only include senderInfo if recipient is a friend
+    // Always include username, but only include other info if recipient is a friend
     const contact = myData.contacts[currentAddress];
+    // Create basic sender info with just username
+    const senderInfo = {
+        username: myAccount.username
+    };
+    
+    // Add additional info only if recipient is a friend
     if (contact && contact.friend) {
-        // Create and encrypt sender info
-        const senderInfo = {
-            username: myAccount.username,
-            name: myData.account.name,
-            email: myData.account.email,
-            phone: myData.account.phone,
-            linkedin: myData.account.linkedin,
-            x: myData.account.x
-        };
-        payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
+        // Add more personal details for friends
+        senderInfo.name = myData.account.name;
+        senderInfo.email = myData.account.email;
+        senderInfo.phone = myData.account.phone;
+        senderInfo.linkedin = myData.account.linkedin;
+        senderInfo.x = myData.account.x;
     }
+    
+    // Always encrypt and send senderInfo (which will contain at least the username)
+    payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
 
     try {
 //console.log('payload is', payload)
