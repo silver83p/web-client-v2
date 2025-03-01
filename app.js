@@ -4210,6 +4210,24 @@ function markConnectivityDependentElements() {
 // Update UI elements based on connectivity status
 function updateUIForConnectivity() {
     const networkDependentElements = document.querySelectorAll('[data-requires-connection]');
+    const offlineIndicator = document.getElementById('offlineIndicator');
+    
+    // Update offline indicator in header
+    if (offlineIndicator) {
+        if (!isOnline) {
+            offlineIndicator.style.opacity = '1';
+            offlineIndicator.style.visibility = 'visible';
+            offlineIndicator.style.width = 'auto';
+            offlineIndicator.style.padding = '4px 8px';
+            offlineIndicator.style.overflow = 'visible';
+        } else {
+            offlineIndicator.style.opacity = '0';
+            offlineIndicator.style.visibility = 'hidden';
+            offlineIndicator.style.width = '0';
+            offlineIndicator.style.padding = '0';
+            offlineIndicator.style.overflow = 'hidden';
+        }
+    }
     
     networkDependentElements.forEach(element => {
         if (!isOnline) {
