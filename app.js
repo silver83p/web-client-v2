@@ -3885,6 +3885,13 @@ async function handleResultClick(contactAddress) {
         chatModal.classList.remove('active');
     });
 
+    // Add click handler for username to show contact info
+    const userInfo = chatModal.querySelector('.chat-user-info');
+    userInfo.onclick = () => {
+        if (contact) {
+            contactInfoModal.open(createDisplayInfo(contact));
+        }
+    };
 
     // Ensure messages container structure matches
     const messagesContainer = chatModal.querySelector('.messages-container');
