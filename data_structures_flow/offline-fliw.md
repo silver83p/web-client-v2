@@ -276,16 +276,23 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Added offline data access for all stores
 
 6. **Component Implementation**
+
    - ✅ Updated `updateChatList()` to handle offline mode
    - ✅ Updated `updateContactsList()` to handle offline mode
    - ✅ Updated `updateWalletView()` to handle offline mode
    - ✅ Added conditional polling based on connectivity
 
+7. **Authentication Improvements**
+   - ✅ Enhanced `checkUsernameAvailability()` to support offline sign-in
+   - ✅ Added local storage verification for usernames when offline
+   - ✅ Implemented `verifyUsernameOnReconnect()` to validate accounts when coming back online
+   - ✅ Added graceful sign-out for invalid accounts after reconnection
+
 ### Current Implementation Details
 
 The following code has been implemented to support offline functionality:
 
-```javascript
+````javascript
 // Global connectivity state
 let isOnline = true; // Will be updated by connectivity checks
 
@@ -328,6 +335,9 @@ async function handleConnectivityChange(event) {
       updateUIForConnectivity();
       showToast("You're back online!", 3000, "online");
 
+      // Verify username is still valid on the network
+      await verifyUsernameOnReconnect();
+
       // Sync any pending offline actions
       const registration = await navigator.serviceWorker.getRegistration();
       if (registration && "sync" in registration) {
@@ -342,181 +352,147 @@ async function handleConnectivityChange(event) {
   }
 }
 
-// Mark elements that should be disabled when offline
-function markConnectivityDependentElements() {
-  // Elements that require network connectivity
-  const networkDependentElements = [
-    // Chat related
-    "#handleSendMessage",
-    ".message-input",
-    "#newChatButton",
+// Verify username availability when coming back online
+async function verifyUsernameOnReconnect() {
+  // Only proceed if user is logged in
+  if (!myAccount || !myAccount.username) {
+    console.log('No active account to verify');
+    return;
+  }
 
-    // Wallet related
-    "#openSendModal",
-    "#refreshBalance",
-    '#sendForm button[type="submit"]',
+  console.log('Verifying username on reconnect:', myAccount.username);
 
-    // Contact related
-    "#chatRecipient",
+  // Check if the username is still valid on the network
+  const availability = await checkUsernameAvailability(myAccount.username, myAccount.keys.address);
 
-    // Profile related
-    '#accountForm button[type="submit"]',
-    '#createAccountForm button[type="submit"]',
-    '#importForm button[type="submit"]',
-  ];
+  if (availability !== 'mine') {
+    console.log('Username verification failed on reconnect:', availability);
 
-  // Add data attribute to all network-dependent elements
-  networkDependentElements.forEach((selector) => {
-    const elements = document.querySelectorAll(selector);
-    elements.forEach((element) => {
-      element.setAttribute("data-requires-connection", "true");
+    // Show a notification to the user
+    showToast('Your account is no longer valid on the network. You will be signed out.', 5000, 'error');
 
-      // Add tooltip for disabled state
-      element.title = "This feature requires an internet connection";
-
-      // Add aria label for accessibility
-      element.setAttribute("aria-disabled", !isOnline);
-    });
-  });
+    // Wait a moment for the user to see the toast
+    setTimeout(() => {
+      // Sign out the user
+      handleSignOut();
+    }, 5000);
+  } else {
+    console.log('Username verified successfully on reconnect');
+  }
 }
 
-// Update UI elements based on connectivity status
-function updateUIForConnectivity() {
-  const networkDependentElements = document.querySelectorAll(
-    "[data-requires-connection]"
-  );
-
-  networkDependentElements.forEach((element) => {
-    if (!isOnline) {
-      // Disable element
-      element.disabled = true;
-      element.classList.add("offline-disabled");
-
-      // If it's a form, prevent submission
-      if (element.form) {
-        element.form.addEventListener("submit", preventOfflineSubmit);
-      }
-    } else {
-      // Enable element
-      element.disabled = false;
-      element.classList.remove("offline-disabled");
-
-      // Remove form submit prevention
-      if (element.form) {
-        element.form.removeEventListener("submit", preventOfflineSubmit);
-      }
-    }
-
-    // Update aria-disabled state
-    element.setAttribute("aria-disabled", !isOnline);
-  });
-}
-
-// Prevent form submissions when offline
-function preventOfflineSubmit(event) {
+// Enhanced username availability check with offline support
+async function checkUsernameAvailability(username, address) {
+  // First check if we're offline
   if (!isOnline) {
-    event.preventDefault();
-    showToast("This action requires an internet connection", 3000, "error");
-  }
-}
+    console.log('Checking username availability offline');
+    // When offline, check local storage only
+    const { netid } = network;
+    const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+    const netidAccounts = existingAccounts.netids[netid];
 
-// Data access pattern for components
-async function updateChatList(force) {
-  if (myAccount && myAccount.keys) {
-    if (isOnline) {
-      // Online: Get from network and cache
-      gotChats = await getChats(myAccount.keys);
-      if (gotChats > 0 || force) {
-        // Cache the updated chat data
-        try {
-          const chatData = addVersion({
-            chatId: myAccount.keys.address,
-            chats: myData.chats,
-            contacts: myData.contacts,
-          });
-          await saveData(STORES.CHATS, chatData);
-        } catch (error) {
-          console.error("Failed to cache chat data:", error);
-        }
-      }
-    } else {
-      // Offline: Get from cache
-      try {
-        const cachedData = await getData(STORES.CHATS, myAccount.keys.address);
-        if (cachedData) {
-          myData.chats = cachedData.chats;
-          myData.contacts = cachedData.contacts;
-          console.log(
-            "Using cached chat data from:",
-            new Date(cachedData.lastUpdated)
-          );
-        }
-      } catch (error) {
-        console.error("Failed to read cached chat data:", error);
-      }
+    // If we have this username locally and the address matches
+    if (netidAccounts?.usernames &&
+        netidAccounts.usernames[username] &&
+        normalizeAddress(netidAccounts.usernames[username].address) === normalizeAddress(address)) {
+      console.log('Username found locally and matches address');
+      return 'mine';
     }
+
+    // If we have the username but address doesn't match
+    if (netidAccounts?.usernames && netidAccounts.usernames[username]) {
+      console.log('Username found locally but address does not match');
+      return 'taken';
+    }
+
+    // Username not found locally
+    console.log('Username not found locally');
+    return 'available';
   }
 
-  // Update UI with available data
-  // ...
-}
-```
-
-Enhanced CSS styles have been added to provide clear visual feedback for offline-disabled elements:
-
-```css
-.offline-disabled {
-  opacity: 0.6;
-  cursor: not-allowed !important;
-  position: relative;
-  pointer-events: none;
-  background-color: var(--hover-background) !important;
-}
-
-/* Exception for floating button - don't apply position:relative */
-.floating-button.offline-disabled {
-  position: fixed; /* Keep the original positioning */
-}
-
-@media (min-width: 769px) {
-  .floating-button.offline-disabled {
-    position: absolute; /* Match the media query from the original floating-button */
+  // Online flow - existing implementation
+  const randomGateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
+  const usernameBytes = utf82bin(normalizeUsername(username))
+  const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32)
+  try {
+    const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`);
+    const data = await response.json();
+    if (data && data.address){
+      if (address && normalizeAddress(data.address) === normalizeAddress(address)) {
+        return 'mine';
+      }
+      return 'taken'
+    }
+    if (!data){
+      return 'error'
+    }
+    return 'available'
+  } catch (error) {
+    console.log('Error checking username:', error);
+    return 'error2';
   }
 }
 
-.offline-disabled::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    rgba(0, 0, 0, 0.05) 10px,
-    rgba(0, 0, 0, 0.05) 20px
-  );
-  pointer-events: none;
-}
+### Offline Sign-In Flow
 
-.offline-disabled:hover::after {
-  content: "Requires internet connection";
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: nowrap;
-  z-index: 1000;
-  pointer-events: none;
-}
-```
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as App
+    participant LS as LocalStorage
+    participant N as Network
+
+    Note over U,A: User Attempts to Sign In While Offline
+
+    U->>A: Open Sign-In Modal
+    A->>LS: Get Existing Accounts
+    LS-->>A: Return Accounts Data
+    A->>A: Display Username Dropdown
+
+    U->>A: Select Username
+    A->>A: Check Online Status (isOnline)
+
+    Note over A: App Detects Offline State
+
+    A->>LS: Check Username in Local Storage
+    LS-->>A: Return Account Data
+
+    alt Username Found Locally & Address Matches
+        A->>A: Return 'mine' Status
+        A->>A: Enable Sign-In Button
+        U->>A: Click Sign-In
+        A->>LS: Load User Data
+        LS-->>A: Return User Data
+        A->>A: Set myAccount & myData
+        A->>A: Switch to Chats View
+    else Username Found Locally but Address Doesn't Match
+        A->>A: Return 'taken' Status
+        A->>A: Show "taken" Message
+        A->>A: Disable Sign-In Button
+    else Username Not Found Locally
+        A->>A: Return 'available' Status
+        A->>A: Show "not found" Message
+        A->>A: Enable "Recreate" Option
+    end
+
+    Note over U,A: User Successfully Signs In Offline
+
+    rect rgba(200, 230, 230, 0.15)
+        Note over A: Later: Coming Back Online
+        A->>A: Detect Online Connection
+        A->>A: Call verifyUsernameOnReconnect()
+        A->>N: Check Username Availability on Network
+        N-->>A: Return Availability Status
+
+        alt Username Still Valid ('mine')
+            A->>A: Continue Normal Operation
+        else Username No Longer Valid
+            A->>A: Show Toast Notification
+            A->>A: Wait 5 Seconds
+            A->>A: Sign Out User
+        end
+    end
+````
 
 ### Next Steps 🔄
 
@@ -531,12 +507,19 @@ Enhanced CSS styles have been added to provide clear visual feedback for offline
    - [ ] Add persistent offline status indicator in header/navigation
    - [ ] Enhance update notification styling
 
-3. **Testing**
+3. **Authentication Improvements**
+
+   - [ ] Add secure credential storage for offline authentication
+   - [ ] Implement offline account creation with pending network registration
+   - [ ] Add conflict resolution for accounts modified while offline
+
+4. **Testing**
    - [ ] Test service worker installation and updates
    - [ ] Verify caching strategies effectiveness
    - [ ] Test offline page functionality
    - [ ] Validate offline element disabling
    - [ ] Test offline data access and sync
+   - [ ] Test offline sign-in and reconnection verification
 
 ## Implementation Phases
 
