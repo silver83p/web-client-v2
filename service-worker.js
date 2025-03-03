@@ -365,8 +365,20 @@ self.addEventListener('sync', (event) => {
 
 // Handle messages from the client
 self.addEventListener('message', (event) => {
-  if (event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+  const { type, timestamp, account } = event.data;
+  
+  switch (type) {
+    case 'start_polling':
+      state.timestamp = timestamp;
+      state.account = account;
+      startPolling();
+      break;
+    case 'stop_polling':
+      stopPolling();
+      break;
+    case 'SKIP_WAITING':
+      self.skipWaiting();
+      break;
   }
 });
 
