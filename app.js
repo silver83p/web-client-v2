@@ -11,7 +11,7 @@ async function checkVersion(){
         newVersion = await response.text();
     } catch (error) {
         console.error('Version check failed:', error);
-        alert('Version check failed. You are offline.')
+        alert('Version check failed. Your Internet connection may be down.')
         // Only trigger offline UI if it's a network error
         if (!navigator.onLine || error instanceof TypeError) {
             isOnline = false;
@@ -125,16 +125,7 @@ import { normalizeUsername, generateIdenticon, formatTime,
 } from './lib.js';
 
 // Import database functions
-import { STORES, saveData, getData, getAllData } from './db.js';
-
-// Local version function to replace addVersionToData
-function addVersion(data) {
-    return {
-        ...data,
-        version: Date.now(),
-        lastUpdated: Date.now()
-    };
-}
+import { STORES, saveData, getData, addVersionToData, closeAllConnections } from './db.js';
 
 const myHashKey = hex2bin('69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc')
 const weiDigits = 18; 
@@ -888,6 +879,7 @@ function handleUnload(e){
     else{
         saveState()
         Logger.forceSave();
+        closeAllConnections();
     }
 }
 
@@ -1106,19 +1098,39 @@ async function updateChatList(force) {
     if (myAccount && myAccount.keys) {
         if (isOnline) {
             // Online: Get from network and cache
-            gotChats = await getChats(myAccount.keys);
-            if (gotChats > 0 || force) {
-                // Cache the updated chat data
-                try {
-                    const chatData = addVersion({
-                        chatId: myAccount.keys.address,
-                        chats: myData.chats,
-                        contacts: myData.contacts
-                    });
-                    await saveData(STORES.CHATS, chatData);
-                } catch (error) {
-                    console.error('Failed to cache chat data:', error);
+            try {
+                let retryCount = 0;
+                const maxRetries = 2;
+                
+                while (retryCount <= maxRetries) {
+                    try {
+                        gotChats = await getChats(myAccount.keys);
+                        break; // Success, exit the retry loop
+                    } catch (networkError) {
+                        retryCount++;
+                        if (retryCount > maxRetries) {
+                            throw networkError; // Rethrow if max retries reached
+                        }
+                        console.log(`Retry ${retryCount}/${maxRetries} for chat update...`);
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Increasing backoff
+                    }
                 }
+                
+                if (gotChats > 0 || force) {
+                    // Cache the updated chat data
+                    try {
+                        const chatData = addVersionToData({
+                            chatId: myAccount.keys.address,
+                            chats: myData.chats,
+                            contacts: myData.contacts
+                        });
+                        await saveData(STORES.CHATS, chatData);
+                    } catch (error) {
+                        console.error('Failed to cache chat data:', error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating chat list:', error);
             }
         } else {
             // Offline: Get from cache
@@ -1289,7 +1301,7 @@ async function updateContactsList() {
     if (isOnline) {
         // Online: Get from network and cache
         try {
-            const contactsData = addVersion({
+            const contactsData = addVersionToData({
                 address: myAccount.keys.address,
                 contacts: myData.contacts
             });
@@ -2787,7 +2799,7 @@ async function updateWalletView() {
         // Online: Get from network and cache
         await updateWalletBalances();
         try {
-            const walletCacheData = addVersion({
+            const walletCacheData = addVersionToData({
                 assetId: myAccount.keys.address,
                 wallet: walletData
             });
@@ -4129,11 +4141,15 @@ function createDisplayInfo(contact) {
 }
 
 // Add this function before the ContactInfoModalManager class
-function showToast(message, duration = 2000) {
+function showToast(message, duration = 2000, type = "default") {
     const toastContainer = document.getElementById('toastContainer');
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = `toast ${type}`;
     toast.textContent = message;
+    
+    // Generate a unique ID for this toast
+    const toastId = 'toast-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    toast.id = toastId;
     
     toastContainer.appendChild(toast);
     
@@ -4145,13 +4161,28 @@ function showToast(message, duration = 2000) {
         toast.classList.add('show');
     });
     
-    // Hide and remove the toast after duration
-    setTimeout(() => {
-        toast.classList.remove('show');
+    // If duration is provided, auto-hide the toast
+    if (duration > 0) {
         setTimeout(() => {
+            hideToast(toastId);
+        }, duration);
+    }
+    
+    return toastId;
+}
+
+// Function to hide a specific toast by ID
+function hideToast(toastId) {
+    const toast = document.getElementById(toastId);
+    if (!toast) return;
+    
+    toast.classList.remove('show');
+    setTimeout(() => {
+        const toastContainer = document.getElementById('toastContainer');
+        if (toast.parentNode === toastContainer) {
             toastContainer.removeChild(toast);
-        }, 300); // Match transition duration
-    }, duration);
+        }
+    }, 300); // Match transition duration
 }
 
 // Show update notification to user
@@ -4196,37 +4227,52 @@ async function updateServiceWorker() {
 
 // Handle online/offline events
 async function handleConnectivityChange(event) {
-    if (event.type === 'offline') {
-        const wasOnline = isOnline;
-        // Trust offline events immediately
-        isOnline = false;
+    const wasOffline = !isOnline;
+    isOnline = navigator.onLine;
+    
+    console.log(`Connectivity changed. Online: ${isOnline}`);
+    
+    if (isOnline && wasOffline) {
+        // We just came back online
         updateUIForConnectivity();
-        if (wasOnline) {
-            showToast("You're offline. Some features are unavailable.", 3000, "offline");
-        }
-    } else {
-        // For online events, verify connectivity before updating UI
-        const wasOffline = !isOnline;
-        isOnline = await checkOnlineStatus();
+        showToast("You're back online!", 3000, "online");
 
-        if (isOnline && wasOffline) {
-            updateUIForConnectivity();
-            showToast("You're back online!", 3000, "online");
-            
-            // Verify username is still valid on the network
-            await verifyUsernameOnReconnect();
-            
-            // Sync any pending offline actions
-            const registration = await navigator.serviceWorker.getRegistration();
-            if (registration && 'sync' in registration) {
-                try {
-                    await registration.sync.register('sync-messages');
-                    await registration.sync.register('sync-transactions');
-                } catch (err) {
-                    console.error('Background sync registration failed:', err);
-                }
+        // Verify username is still valid on the network
+        await verifyUsernameOnReconnect();
+        
+        // warmup db
+        await getData(STORES.WALLET);
+
+        // Check database health after reconnection
+        const dbHealthy = await checkDatabaseHealth();
+        if (!dbHealthy) {
+            console.warn('Database appears to be in an unhealthy state, reloading app...');
+            showToast("Database issue detected, reloading application...", 3000, "warning");
+            setTimeout(() => window.location.reload(), 3000);
+            return;
+        }
+        
+        // Force update data with reconnection handling
+        if (myAccount && myAccount.keys) {
+            try {
+                // Update chats with reconnection handling
+                await updateChatList('force');
+                
+                // Update contacts with reconnection handling
+                await updateContactsList();
+                
+                // Update wallet with reconnection handling
+                await updateWalletView();
+
+            } catch (error) {
+                console.error('Failed to update data on reconnect:', error);
+                showToast("Some data couldn't be updated. Please refresh if you notice missing information.", 5000, "warning");
             }
         }
+    } else if (!isOnline) {
+        // We just went offline
+        updateUIForConnectivity();
+        showToast("You're offline. Some features are unavailable.", 3000, "offline");
     }
 }
 
@@ -4384,4 +4430,23 @@ async function verifyUsernameOnReconnect() {
     }
 }
 
-
+async function checkDatabaseHealth() {
+    try {
+        // Try to access each store to verify database is working
+        for (const store of Object.values(STORES)) {
+            try {
+                // Just try to read any data from each store
+                const testKey = await getData(store, null);
+                console.log(`Database store ${store} is accessible`);
+            } catch (error) {
+                console.error(`Database store ${store} access error:`, error);
+                // If there's an error, we might need to reinitialize
+                return false;
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error('Database health check failed:', error);
+        return false;
+    }
+}

@@ -10,7 +10,6 @@ const SW_VERSION = '1.0.0';
 const CACHE_VERSION = '1.0.0';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
-const DATA_CACHE = `data-${CACHE_VERSION}`;
 
 // Resources to precache
 const PRECACHE_URLS = [
@@ -20,18 +19,7 @@ const PRECACHE_URLS = [
   './app.js',
   './manifest.json',
   './offline.html',
-  './images/logo.png',
-  './images/lib.png',
-  './lib.js',
-  './network.js',
   './log-utils.js',
-  './noble-post-quantum.js',
-  './noble-secp256k1.js',
-  './noble-ciphers.js',
-  './blake2b.js',
-  './keccak256.js',
-  './stringify-shardus.js',
-  './qrcode.js',
   './liberdus_logo_50.png',
   './liberdus_logo_250.png'
 ];
@@ -106,8 +94,7 @@ self.addEventListener('activate', (event) => {
           cacheNames
             .filter(cacheName => {
               return cacheName.startsWith('static-') && cacheName !== STATIC_CACHE ||
-                     cacheName.startsWith('dynamic-') && cacheName !== DYNAMIC_CACHE ||
-                     cacheName.startsWith('data-') && cacheName !== DATA_CACHE;
+                     cacheName.startsWith('dynamic-') && cacheName !== DYNAMIC_CACHE;
             })
             .map(cacheName => {
               console.log('[Service Worker] Removing old cache:', cacheName);
