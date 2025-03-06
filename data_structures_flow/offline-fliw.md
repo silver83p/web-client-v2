@@ -4,6 +4,12 @@
 
 This document outlines the comprehensive offline-first strategy for our PWA, ensuring users have a seamless experience regardless of network connectivity. The plan follows best practices from the Offline Cookbook and modern PWA patterns.
 
+Use this diff to see the changes made to the original document:
+
+```
+git diff 1c17a4b7346a790091a68bd7f703a3430417e448 5937e5c41450ec79fcf5a3f52c812e5660ecc79e > diff_output.diff
+```
+
 ## Core Requirements
 
 1. Provide a full offline-first experience with graceful degradation
@@ -14,6 +20,310 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
 6. Ensure data consistency between online/offline states
 7. Handle page refreshes in offline mode
 
+## Offline Feature Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as App
+    participant SW as Service Worker
+    participant IDB as IndexedDB
+    participant LS as LocalStorage
+    participant N as Network
+
+    Note over U,N: Normal Operation (Online)
+    U->>A: Use Application
+    A->>N: Make API Requests
+    N-->>A: Return Data
+    A->>IDB: Cache Data
+    A->>LS: Store Auth State
+
+    Note over U,N: Connection Lost
+    N--xA: Connection Failed
+    A->>A: Detect Offline State
+    A->>U: Show Offline Toast
+    A->>A: Update UI (Disable Features)
+
+    rect rgba(200, 230, 230, 0.15)
+        Note over U,A: Offline Operation
+        U->>A: View Cached Content
+        A->>IDB: Fetch Cached Data
+        IDB-->>A: Return Cached Data
+        A->>A: Display with Offline UI
+
+        U->>A: Attempt Network Action
+        A->>A: Check isOnline
+        A->>U: Show "Requires Connection" Toast
+    end
+
+    Note over U,N: Connection Restored
+    N-->>A: Connection Available
+    A->>A: Detect Online State
+    A->>U: Show Online Toast
+
+    rect rgba(230, 200, 200, 0.15)
+        Note over A: Reconnection Tasks
+        A->>N: Verify Username
+        N-->>A: Username Status
+
+        alt Username Still Valid
+            A->>N: Fetch Fresh Data
+            N-->>A: Return Updated Data
+            A->>IDB: Update Cache
+            A->>A: Enable Features
+            A->>A: Update UI
+        else Username Invalid
+            A->>U: Show Invalid Account Toast
+            A->>A: Trigger Sign Out
+            A->>LS: Clear Auth State
+        end
+    end
+
+    Note over U,N: Resume Normal Operation
+    U->>A: Continue Using App
+    A->>N: Resume API Requests
+    N-->>A: Return Fresh Data
+```
+
+## Implementation Guide
+
+### How Offline Mode Works
+
+When a user goes offline:
+
+1. The app detects the connectivity change through browser events and network checks
+2. UI elements that require connectivity are automatically disabled with visual indicators
+3. A toast notification informs the user they're offline
+4. The app switches to using cached data from IndexedDB
+5. Network-dependent actions show tooltips explaining they require connectivity
+
+When a user comes back online:
+
+1. The app verifies connectivity with a network check
+2. UI elements are re-enabled
+3. A toast notification informs the user they're back online
+4. The app verifies the user's account is still valid on the network
+5. Cached data is refreshed with the latest from the server
+
+### Key Components
+
+1. **Service Worker**
+
+   - Intercepts network requests
+   - Serves cached resources when offline
+   - Provides an offline fallback page when needed
+   - Manages cache versions and updates
+
+2. **IndexedDB**
+
+   - Stores structured data for offline access
+   - Maintains versioning for data consistency
+   - Provides fast access to cached user data
+
+3. **Connectivity Detection**
+
+   - Monitors online/offline status
+   - Performs periodic connectivity checks
+   - Updates UI based on connectivity state
+
+4. **UI Adaptation**
+   - Disables network-dependent elements when offline
+   - Provides visual feedback about offline state
+   - Shows helpful tooltips for disabled actions
+
+### Implementation Details
+
+```javascript
+// Global connectivity state
+let isOnline = true; // Will be updated by connectivity checks
+
+// Setup connectivity detection
+function setupConnectivityDetection() {
+  // Listen for browser online/offline events
+  window.addEventListener("online", handleConnectivityChange);
+  window.addEventListener("offline", handleConnectivityChange);
+
+  // Mark elements that depend on connectivity
+  markConnectivityDependentElements();
+
+  // Check initial status (don't trust the browser's initial state)
+  checkConnectivity();
+
+  // Periodically check connectivity (every 30 seconds)
+  setInterval(checkConnectivity, 30000);
+}
+
+// Check connectivity status
+async function checkConnectivity() {
+  const wasOffline = !isOnline;
+  isOnline = await checkOnlineStatus();
+
+  if (isOnline !== wasOffline) {
+    // Only trigger change handler if state actually changed
+    await handleConnectivityChange({ type: isOnline ? "online" : "offline" });
+  }
+}
+
+// Mark elements that should be disabled when offline
+function markConnectivityDependentElements() {
+  // Elements that require network connectivity
+  const networkDependentElements = [
+    // Chat related
+    "#handleSendMessage",
+    ".message-input",
+    "#newChatButton",
+
+    // Wallet related
+    "#openSendModal",
+    "#refreshBalance",
+    '#sendForm button[type="submit"]',
+
+    // Contact related
+    "#chatRecipient",
+
+    // Profile related
+    '#accountForm button[type="submit"]',
+    '#createAccountForm button[type="submit"]',
+    '#importForm button[type="submit"]',
+  ];
+
+  // Add data attribute to all network-dependent elements
+  networkDependentElements.forEach((selector) => {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach((element) => {
+      element.setAttribute("data-requires-connection", "true");
+
+      // Add tooltip for disabled state
+      element.title = "This feature requires an internet connection";
+
+      // Add aria label for accessibility
+      element.setAttribute("aria-disabled", !isOnline);
+    });
+  });
+}
+
+// Update UI elements based on connectivity status
+function updateUIForConnectivity() {
+  const networkDependentElements = document.querySelectorAll(
+    "[data-requires-connection]"
+  );
+  const offlineIndicator = document.getElementById("offlineIndicator");
+
+  // Update offline indicator in header
+  if (offlineIndicator) {
+    if (!isOnline) {
+      offlineIndicator.style.opacity = "1";
+      offlineIndicator.style.visibility = "visible";
+      offlineIndicator.style.width = "auto";
+      offlineIndicator.style.padding = "4px 8px";
+      offlineIndicator.style.overflow = "visible";
+    } else {
+      offlineIndicator.style.opacity = "0";
+      offlineIndicator.style.visibility = "hidden";
+      offlineIndicator.style.width = "0";
+      offlineIndicator.style.padding = "0";
+      offlineIndicator.style.overflow = "hidden";
+    }
+  }
+
+  networkDependentElements.forEach((element) => {
+    if (!isOnline) {
+      // Disable element
+      element.disabled = true;
+      element.classList.add("offline-disabled");
+
+      // If it's a form, prevent submission
+      if (element.form) {
+        element.form.addEventListener("submit", preventOfflineSubmit);
+      }
+    } else {
+      // Enable element
+      element.disabled = false;
+      element.classList.remove("offline-disabled");
+
+      // Remove form submit prevention
+      if (element.form) {
+        element.form.removeEventListener("submit", preventOfflineSubmit);
+      }
+    }
+
+    // Update aria-disabled state
+    element.setAttribute("aria-disabled", !isOnline);
+  });
+}
+
+// Prevent form submissions when offline
+function preventOfflineSubmit(event) {
+  if (!isOnline) {
+    event.preventDefault();
+    showToast("This action requires an internet connection", 3000, "error");
+  }
+}
+
+// Enhanced username availability check with offline support
+async function checkUsernameAvailability(username, address) {
+  // First check if we're offline
+  if (!isOnline) {
+    console.log("Checking username availability offline");
+    // When offline, check local storage only
+    const { netid } = network;
+    const existingAccounts = parse(
+      localStorage.getItem("accounts") || '{"netids":{}}'
+    );
+    const netidAccounts = existingAccounts.netids[netid];
+
+    // If we have this username locally and the address matches
+    if (
+      netidAccounts?.usernames &&
+      netidAccounts.usernames[username] &&
+      normalizeAddress(netidAccounts.usernames[username].address) ===
+        normalizeAddress(address)
+    ) {
+      console.log("Username found locally and matches address");
+      return "mine";
+    }
+
+    // If we have the username but address doesn't match
+    if (netidAccounts?.usernames && netidAccounts.usernames[username]) {
+      console.log("Username found locally but address does not match");
+      return "taken";
+    }
+
+    // Username not found locally
+    console.log("Username not found locally");
+    return "available";
+  }
+
+  // Online flow - existing implementation
+  const randomGateway =
+    network.gateways[Math.floor(Math.random() * network.gateways.length)];
+  const usernameBytes = utf82bin(normalizeUsername(username));
+  const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32);
+  try {
+    const response = await fetch(
+      `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`
+    );
+    const data = await response.json();
+    if (data && data.address) {
+      if (
+        address &&
+        normalizeAddress(data.address) === normalizeAddress(address)
+      ) {
+        return "mine";
+      }
+      return "taken";
+    }
+    if (!data) {
+      return "error";
+    }
+    return "available";
+  } catch (error) {
+    console.log("Error checking username:", error);
+    return "error2";
+  }
+}
+```
+
 ## Caching Strategy
 
 ### Cache Types
@@ -23,17 +333,11 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - Font files and icons
    - Manifest and other app metadata
 2. **DYNAMIC_CACHE** (v{timestamp})
-
    - API responses
    - Dynamically loaded content
    - User-specific data
 
-3. **DATA_CACHE** (v{timestamp})
-   - IndexedDB for structured data
-   - Chat history
-   - Contact information
-   - Wallet data
-   - Pending transactions
+Note: Structured application data (chats, contacts, wallet information) is stored in IndexedDB rather than in a Service Worker cache. This provides better query capabilities and performance for structured data.
 
 ### Caching Patterns
 
@@ -66,13 +370,17 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
 
    ```javascript
    const PRECACHE_URLS = [
-     "/",
-     "/index.html",
-     "/styles.css",
-     "/app.js",
-     "/manifest.json",
-     "/offline.html",
-     "/images/logo.png",
+     "./",
+     "./index.html",
+     "./styles.css",
+     "./app.js",
+     "./manifest.json",
+     "./offline.html",
+     "./images/logo.png",
+     "./liberdus_logo_50.png",
+     "./liberdus_logo_250.png",
+     "./lib.js",
+     "./network.js",
      // Add all critical assets
    ];
    ```
@@ -80,17 +388,39 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
 2. **Runtime Caching Rules**
 
    ```javascript
-   // Network first for API endpoints
-   registerRoute(
-     ({ url }) => url.pathname.startsWith("/api/"),
-     new NetworkFirst()
-   );
+   // Helper function to determine caching strategy based on request
+   function getCacheStrategy(request) {
+     const url = new URL(request.url);
 
-   // Cache first for static assets
-   registerRoute(
-     ({ request }) => request.destination === "image",
-     new CacheFirst()
-   );
+     // Static assets - Cache First
+     if (
+       request.destination === "style" ||
+       request.destination === "script" ||
+       request.destination === "image" ||
+       request.destination === "font" ||
+       PRECACHE_URLS.includes(url.pathname)
+     ) {
+       return "cache-first";
+     }
+
+     // API endpoints that should not be cached - Network Only
+     if (shouldNotCache(request)) {
+       return "network-only";
+     }
+
+     // API endpoints - Network First
+     if (url.pathname.startsWith("/api/")) {
+       return "network-first";
+     }
+
+     // HTML navigation - Cache First for offline support
+     if (request.mode === "navigate") {
+       return "cache-first";
+     }
+
+     // Default to network first
+     return "network-first";
+   }
    ```
 
 ## Data Management
@@ -153,9 +483,64 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - Show toast when coming back online: "You're back online!"
 
 2. **Action-Specific Feedback**
+
    - Disabled state for offline-incompatible actions
    - Visual indicators for disabled elements
    - Clear error messages for failed operations
+   - Tooltips explaining why features are disabled
+
+3. **Visual Styling**
+
+   ```css
+   /* Offline indicator in header */
+   .offline-indicator {
+     background-color: var(--danger-color);
+     color: white;
+     font-size: 12px;
+     font-weight: 600;
+     padding: 4px 8px;
+     border-radius: 12px;
+     opacity: 0;
+     visibility: hidden;
+     transition: opacity 0.3s ease, width 0.3s ease, padding 0.3s ease;
+     animation: pulse 2s infinite;
+     /* Keep in the normal flow but with zero width when hidden */
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     height: 24px;
+     margin-right: 4px;
+     width: 0;
+     padding: 0;
+     overflow: hidden;
+   }
+
+   /* Disabled elements styling */
+   .offline-disabled {
+     opacity: 0.6;
+     cursor: not-allowed !important;
+     position: relative;
+     pointer-events: none;
+     background-color: var(--hover-background) !important;
+   }
+
+   /* Tooltip for disabled elements */
+   .offline-disabled:hover::after {
+     content: "Requires internet connection";
+     position: absolute;
+     bottom: 100%;
+     left: 50%;
+     transform: translateX(-50%);
+     background: rgba(0, 0, 0, 0.8);
+     color: white;
+     padding: 8px 12px;
+     border-radius: 4px;
+     font-size: 12px;
+     white-space: nowrap;
+     z-index: 1000;
+     pointer-events: none;
+   }
+   ```
 
 ### Progressive Enhancement
 
@@ -175,6 +560,7 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - Fallback content for uncached resources
    - Simplified UI for unsupported features
    - Clear messaging about limited functionality
+   - Offline fallback page with helpful information
 
 ## Error Handling
 
@@ -190,47 +576,6 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - Periodic connectivity checks
    - Automatic UI updates based on connectivity
 
-## Testing Strategy
-
-### Offline Scenarios
-
-1. **Network Conditions**
-
-   - Complete offline
-   - Intermittent connectivity
-
-2. **User Actions**
-   - Page load while offline
-   - Navigation while offline
-   - Form submissions
-   - Data synchronization
-   - Page refresh
-
-### Test Cases
-
-1. **Installation**
-
-   - [ ] Verify precaching of critical resources
-   - [ ] Confirm service worker registration
-   - [ ] Check cache storage initialization
-
-2. **Online → Offline Transition**
-
-   - [ ] Test automatic offline detection
-   - [ ] Verify UI updates
-   - [ ] Confirm cached content accessibility
-   - [ ] Check disabled feature handling
-
-3. **Offline → Online Transition**
-
-   - [ ] Test reconnection detection
-   - [ ] Verify data synchronization
-   - [ ] Check UI restoration
-
-4. **Data Management**
-   - [ ] Verify offline data access
-   - [ ] Confirm data consistency
-
 ## Progress Update
 
 ### Completed Items ✅
@@ -241,12 +586,15 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Added caching strategies for offline access
    - ✅ Implemented update notification system
    - ✅ Added resilient service worker installation that doesn't fail when offline
+   - ✅ Added cache cleanup and maintenance
+   - ✅ Implemented proper cache versioning
 
 2. **Offline Page**
 
    - ✅ Created offline.html fallback page
    - ✅ Implemented proper styling matching app's design system
    - ✅ Added clear user feedback about available/unavailable features
+   - ✅ Added retry connection button
 
 3. **Connectivity Detection**
 
@@ -256,6 +604,7 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Implemented `handleConnectivityChange()` for state updates
    - ✅ Added periodic connectivity checks
    - ✅ Improved online detection with network verification
+   - ✅ Added `checkConnectivity()` function for reliable status checks
 
 4. **UI/UX Implementation**
 
@@ -265,6 +614,8 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Added form submission prevention when offline
    - ✅ Integrated with toast notification system
    - ✅ Added CSS styles for offline states
+   - ✅ Added persistent offline indicator in header
+   - ✅ Implemented update notification UI
 
 5. **Data Storage**
 
@@ -274,6 +625,8 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Implemented caching of contacts data when online
    - ✅ Implemented caching of wallet data when online
    - ✅ Added offline data access for all stores
+   - ✅ Added data validation for IndexedDB operations
+   - ✅ Implemented error handling for database operations
 
 6. **Component Implementation**
 
@@ -281,6 +634,7 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Updated `updateContactsList()` to handle offline mode
    - ✅ Updated `updateWalletView()` to handle offline mode
    - ✅ Added conditional polling based on connectivity
+   - ✅ Improved chat message handling to always include username info
 
 7. **Authentication Improvements**
    - ✅ Enhanced `checkUsernameAvailability()` to support offline sign-in
@@ -288,481 +642,399 @@ This document outlines the comprehensive offline-first strategy for our PWA, ens
    - ✅ Implemented `verifyUsernameOnReconnect()` to validate accounts when coming back online
    - ✅ Added graceful sign-out for invalid accounts after reconnection
 
-### Current Implementation Details
+## Future Work
 
-The following code has been implemented to support offline functionality:
+### High Priority
 
-````javascript
-// Global connectivity state
-let isOnline = true; // Will be updated by connectivity checks
+- [ ] **Data Conflict Resolution**
 
-// Setup connectivity detection
-function setupConnectivityDetection() {
-  // Listen for browser online/offline events
-  window.addEventListener("online", handleConnectivityChange);
-  window.addEventListener("offline", handleConnectivityChange);
+  - Implement strategies for resolving conflicts between cached and server data
+  - Add merge algorithms for data modified while offline
+  - Create versioning system to track changes across devices
 
-  // Mark elements that depend on connectivity
-  markConnectivityDependentElements();
+- [ ] **Enhanced Security**
 
-  // Check initial status (don't trust the browser's initial state)
-  checkConnectivity();
+  - Implement encryption for sensitive cached data
+  - Add secure credential storage for offline authentication
+  - Implement data sanitization for stored content
 
-  // Periodically check connectivity (every 30 seconds)
-  setInterval(checkConnectivity, 30000);
-}
+- [ ] **Comprehensive Testing**
+  - Test service worker installation and updates
+  - Verify caching strategies effectiveness
+  - Test offline page functionality
+  - Validate offline element disabling
+  - Test offline data access and sync
+  - Test offline sign-in and reconnection verification
 
-// Handle online/offline events
-async function handleConnectivityChange(event) {
-  if (event.type === "offline") {
-    const wasOnline = isOnline;
-    // Trust offline events immediately
-    isOnline = false;
-    updateUIForConnectivity();
-    if (wasOnline) {
-      showToast(
-        "You're offline. Some features are unavailable.",
-        3000,
-        "offline"
-      );
-    }
-  } else {
-    // For online events, verify connectivity before updating UI
-    const wasOffline = !isOnline;
-    isOnline = await checkOnlineStatus();
+### Medium Priority
 
-    if (isOnline && wasOffline) {
-      updateUIForConnectivity();
-      showToast("You're back online!", 3000, "online");
+- [ ] **Background Sync**
 
-      // Verify username is still valid on the network
-      await verifyUsernameOnReconnect();
+  - Implement background sync for pending messages
+  - Add offline transaction queue with retry mechanism
+  - Create sync status indicators for users
 
-      // Sync any pending offline actions
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (registration && "sync" in registration) {
-        try {
-          await registration.sync.register("sync-messages");
-          await registration.sync.register("sync-transactions");
-        } catch (err) {
-          console.error("Background sync registration failed:", err);
-        }
-      }
-    }
-  }
-}
+- [ ] **Performance Optimization**
+  - Optimize cache storage usage and management
+  - Implement performance monitoring for offline operations
+  - Add cache pruning for old or infrequently accessed data
 
-// Verify username availability when coming back online
-async function verifyUsernameOnReconnect() {
-  // Only proceed if user is logged in
-  if (!myAccount || !myAccount.username) {
-    console.log('No active account to verify');
-    return;
-  }
+### Low Priority
 
-  console.log('Verifying username on reconnect:', myAccount.username);
+- [ ] **Advanced Offline Features**
 
-  // Check if the username is still valid on the network
-  const availability = await checkUsernameAvailability(myAccount.username, myAccount.keys.address);
+  - Implement offline account creation with pending network registration
+  - Add offline content prefetching based on user behavior
+  - Create offline usage analytics
 
-  if (availability !== 'mine') {
-    console.log('Username verification failed on reconnect:', availability);
+- [ ] **Edge Case Handling**
+  - Handle storage limits and quota exceeded scenarios
+  - Implement recovery mechanisms for corrupted cache
+  - Add fallbacks for unsupported browsers
 
-    // Show a notification to the user
-    showToast('Your account is no longer valid on the network. You will be signed out.', 5000, 'error');
+## User Experience Guide
 
-    // Wait a moment for the user to see the toast
-    setTimeout(() => {
-      // Sign out the user
-      handleSignOut();
-    }, 5000);
-  } else {
-    console.log('Username verified successfully on reconnect');
-  }
-}
+### What Users Can Do Offline
 
-// Enhanced username availability check with offline support
-async function checkUsernameAvailability(username, address) {
-  // First check if we're offline
-  if (!isOnline) {
-    console.log('Checking username availability offline');
-    // When offline, check local storage only
-    const { netid } = network;
-    const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
-    const netidAccounts = existingAccounts.netids[netid];
+- View existing chats and messages
+- Access contact information
+- Check wallet balances and transaction history
+- Navigate between different app sections
+- View profile information
 
-    // If we have this username locally and the address matches
-    if (netidAccounts?.usernames &&
-        netidAccounts.usernames[username] &&
-        normalizeAddress(netidAccounts.usernames[username].address) === normalizeAddress(address)) {
-      console.log('Username found locally and matches address');
-      return 'mine';
-    }
+### What Users Cannot Do Offline
 
-    // If we have the username but address doesn't match
-    if (netidAccounts?.usernames && netidAccounts.usernames[username]) {
-      console.log('Username found locally but address does not match');
-      return 'taken';
-    }
+- Send new messages
+- Make transactions
+- Add or modify contacts
+- Update account information
+- Refresh balances
 
-    // Username not found locally
-    console.log('Username not found locally');
-    return 'available';
-  }
+### How Users Are Informed
 
-  // Online flow - existing implementation
-  const randomGateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
-  const usernameBytes = utf82bin(normalizeUsername(username))
-  const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32)
-  try {
-    const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`);
-    const data = await response.json();
-    if (data && data.address){
-      if (address && normalizeAddress(data.address) === normalizeAddress(address)) {
-        return 'mine';
-      }
-      return 'taken'
-    }
-    if (!data){
-      return 'error'
-    }
-    return 'available'
-  } catch (error) {
-    console.log('Error checking username:', error);
-    return 'error2';
-  }
-}
+- Offline indicator in the header shows "Offline" status
+- Toast notification appears when connectivity changes
+- Network-dependent buttons and inputs are visually disabled
+- Tooltips explain why features are unavailable
+- Offline fallback page provides clear information when navigating to uncached pages
 
-### Offline Sign-In Flow
+## Storage Strategy Summary
+
+### Storage Mechanisms Overview
+
+The offline functionality uses three different types of storage mechanisms, each with a specific purpose:
+
+1. **Service Worker Cache** - For static assets and resources
+2. **IndexedDB** - For structured application data
+3. **LocalStorage** - For account information and authentication
+
+#### Service Worker Cache
+
+The Service Worker manages two main cache types:
+
+- **STATIC_CACHE**: Stores static resources that rarely change
+
+  - HTML, CSS, and JavaScript files
+  - Images, fonts, and icons
+  - The app shell (core UI components)
+  - The offline fallback page
+
+- **DYNAMIC_CACHE**: Stores resources that might change more frequently
+  - API responses that are cacheable
+  - Dynamically loaded content
+
+The caching strategy varies based on the type of resource:
+
+- **Cache First** is used for static assets (CSS, JS, images) - checks the cache first, falls back to network
+- **Network First** is used for API endpoints - tries the network first, falls back to cache if offline
+- **Network Only** is used for sensitive data that shouldn't be cached (authentication endpoints)
+
+#### IndexedDB
+
+IndexedDB is used to store structured application data in three main stores:
+
+- **Chats Store**:
+
+  - Key: `chatId` (user's address)
+  - Value: Contains chat messages, contacts, version info, and timestamps
+
+- **Contacts Store**:
+
+  - Key: `address` (user's address)
+  - Value: Contains contact information, version info, and timestamps
+
+- **Wallet Store**:
+  - Key: `assetId` (user's address)
+  - Value: Contains wallet data, balances, version info, and timestamps
+
+Each data object stored in IndexedDB includes:
+
+- The actual data (chats, contacts, wallet info)
+- A `version` timestamp (when it was created)
+- A `lastUpdated` timestamp (when it was last modified)
+
+#### LocalStorage
+
+LocalStorage is primarily used for:
+
+- Storing account information (usernames, addresses)
+- Maintaining authentication state
+- Storing user preferences
+
+### Storage Interaction Flow
 
 ```mermaid
-sequenceDiagram
-    participant U as User
-    participant A as App
-    participant LS as LocalStorage
-    participant N as Network
+graph TD
+    A[User Opens App] --> B[Load App Shell from Cache]
+    B --> C{Is Online?}
 
-    Note over U,A: User Attempts to Sign In While Offline
+    %% Online Path
+    C -->|Yes| D[Fetch Fresh Data]
+    D --> E[Update UI]
+    D --> F[Cache Data in IndexedDB]
+    D --> G[Update LocalStorage]
 
-    U->>A: Open Sign-In Modal
-    A->>LS: Get Existing Accounts
-    LS-->>A: Return Accounts Data
-    A->>A: Display Username Dropdown
+    %% Offline Path
+    C -->|No| H[Load Cached Data]
+    H --> I[Update UI]
+    H --> J[Show Offline Indicator]
 
-    U->>A: Select Username
-    A->>A: Check Online Status (isOnline)
+    %% Sign-in Paths
+    K[User Signs In] --> L{Is Online?}
+    L -->|Yes| M[Network Auth]
+    L -->|No| N[Check LocalStorage]
+    N --> O{Account Found?}
+    O -->|Yes| P[Load from IndexedDB]
+    O -->|No| Q[Show Error]
 
-    Note over A: App Detects Offline State
+    %% Network Action
+    R[Network Action] --> S{Is Online?}
+    S -->|Yes| T[Process Action]
+    S -->|No| U[Show Error]
 
-    A->>LS: Check Username in Local Storage
-    LS-->>A: Return Account Data
-
-    alt Username Found Locally & Address Matches
-        A->>A: Return 'mine' Status
-        A->>A: Enable Sign-In Button
-        U->>A: Click Sign-In
-        A->>LS: Load User Data
-        LS-->>A: Return User Data
-        A->>A: Set myAccount & myData
-        A->>A: Switch to Chats View
-    else Username Found Locally but Address Doesn't Match
-        A->>A: Return 'taken' Status
-        A->>A: Show "taken" Message
-        A->>A: Disable Sign-In Button
-    else Username Not Found Locally
-        A->>A: Return 'available' Status
-        A->>A: Show "not found" Message
-        A->>A: Enable "Recreate" Option
-    end
-
-    Note over U,A: User Successfully Signs In Offline
-
-    rect rgba(200, 230, 230, 0.15)
-        Note over A: Later: Coming Back Online
-        A->>A: Detect Online Connection
-        A->>A: Call verifyUsernameOnReconnect()
-        A->>N: Check Username Availability on Network
-        N-->>A: Return Availability Status
-
-        alt Username Still Valid ('mine')
-            A->>A: Continue Normal Operation
-        else Username No Longer Valid
-            A->>A: Show Toast Notification
-            A->>A: Wait 5 Seconds
-            A->>A: Sign Out User
-        end
-    end
-````
-
-### Next Steps 🔄
-
-1. **Data Synchronization**
-
-   - [ ] Implement data conflict resolution for cached data
-   - [ ] Add data refresh mechanisms when coming back online
-   - [ ] Implement merge strategies for conflicting changes
-
-2. **UI/UX Polish**
-
-   - [ ] Add persistent offline status indicator in header/navigation
-   - [ ] Enhance update notification styling
-
-3. **Authentication Improvements**
-
-   - [ ] Add secure credential storage for offline authentication
-   - [ ] Implement offline account creation with pending network registration
-   - [ ] Add conflict resolution for accounts modified while offline
-
-4. **Testing**
-   - [ ] Test service worker installation and updates
-   - [ ] Verify caching strategies effectiveness
-   - [ ] Test offline page functionality
-   - [ ] Validate offline element disabling
-   - [ ] Test offline data access and sync
-   - [ ] Test offline sign-in and reconnection verification
-
-## Implementation Phases
-
-### Phase 1: Foundation ✅ (Completed)
-
-- [x] Service Worker setup
-- [x] Basic caching implementation
-- [x] Offline detection
-- [x] Essential UI feedback
-- [x] IndexedDB setup and integration
-
-### Phase 2: Data Management ✅ (Completed)
-
-- [x] IndexedDB setup
-- [x] Offline data access
-- [x] Data versioning
-- [x] Conditional data fetching based on connectivity
-- [x] Simple data refresh on reconnection
-
-### Phase 3: Enhanced Features (Optional - Not Implemented)
-
-- [ ] Background sync for pending actions
-- [ ] Conflict resolution for cached data
-- [ ] Offline transaction queue
-
-### Phase 4: Polish (Optional - Not Implemented)
-
-- [ ] Comprehensive testing
-- [ ] Performance optimization
-- [ ] Edge case handling
-
-## Core Offline Functionality Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant A as App
-    participant SW as Service Worker
-    participant IDB as IndexedDB
-    participant C as Cache Storage
-    participant N as Network
-
-    Note over A: App Initialization
-    U->>A: Open Application
-    A->>SW: Register Service Worker (registerServiceWorker)
-    A->>A: Setup Service Worker Messaging (setupServiceWorkerMessaging)
-    A->>A: Setup App State Management (setupAppStateManagement)
-    A->>A: Setup Connectivity Detection (setupConnectivityDetection)
-
-    rect rgba(200, 230, 200, 0.16)
-        Note over SW: Install Phase
-        SW->>C: Create Cache Storages
-        SW->>C: Precache App Shell
-        SW-->>A: Installation Complete
-    end
-
-    rect rgba(230, 230, 200, 0.02)
-        Note over A: Runtime Phase
-        A->>A: Check Connection Status (checkConnectivity)
-        A->>A: Set isOnline variable
-        A->>A: Mark Network-Dependent Elements (markConnectivityDependentElements)
-
-        alt Online Mode
-            A->>N: Check Version (checkVersion)
-            N-->>A: Return Version
-            A->>A: Process Version Check
-
-            A->>N: Fetch Fresh Data (getChats, updateWalletBalances)
-            N-->>A: Return Data
-            A->>IDB: Cache Data (saveData with addVersion)
-            A->>A: Update UI
-        else Offline Mode
-            A->>A: Show "Version check failed. You are offline." Alert
-            A->>IDB: Load Cached Data (getData)
-            IDB-->>A: Return Cached Data
-            A->>A: Update UI with Cached Data
-            A->>A: Apply Offline UI Styling (updateUIForConnectivity)
-        end
-    end
-
-    rect rgba(230, 200, 200, 0.08)
-        Note over U: User Interactions
-        U->>A: Request Resource/Action
-
-        alt Is Network-Dependent Action (has data-requires-connection)
-            alt Online
-                A->>N: Process Request (postChatMessage, postAssetTransfer)
-                N-->>A: Return Response
-                A->>A: Update UI
-                A->>IDB: Update Cached Data
-            else Offline
-                A->>A: Action Disabled (offline-disabled class)
-                A->>A: Show Tooltip "Requires internet connection"
-                A->>A: Prevent Form Submit (preventOfflineSubmit)
-                A->>A: Show Toast "This action requires an internet connection"
-            end
-        else Is Offline-Compatible Action
-            A->>A: Process Action Locally
-            A->>A: Update UI
-        end
-    end
-
-    rect rgba(200, 230, 230, 0.15)
-        Note over A: Connectivity Changes
-
-        alt Going Offline (handleConnectivityChange)
-            A->>A: Set isOnline = false
-            A->>A: Update UI for Offline Mode (updateUIForConnectivity)
-            A->>A: Show "You're offline" Toast
-        else Coming Online (handleConnectivityChange)
-            A->>A: Check Online Status (checkOnlineStatus)
-            A->>A: Set isOnline = true
-            A->>A: Update UI for Online Mode (updateUIForConnectivity)
-            A->>A: Show "You're back online" Toast
-            A->>A: Register Background Sync (if supported)
-            A->>A: Update Chat List (updateChatList)
-        end
-    end
+    %% Reconnection
+    V[Connection Restored] --> W[Update Status]
+    W --> X[Hide Indicator]
+    W --> Y[Verify Account]
+    Y --> Z{Valid?}
+    Z -->|Yes| AA[Fetch Data]
+    Z -->|No| AB[Sign Out]
+    AA --> AC[Update Cache]
 ```
 
-### Page Refresh While Offline Flow
+### Storage Decision Matrix
+
+| Data Type                  | Primary Storage      | Backup Storage | Caching Strategy                  | Offline Access  |
+| -------------------------- | -------------------- | -------------- | --------------------------------- | --------------- |
+| App Shell (HTML, CSS, JS)  | Service Worker Cache | Network        | Cache First                       | Yes             |
+| Images & Static Assets     | Service Worker Cache | Network        | Cache First                       | Yes             |
+| API Responses              | Dynamic Cache        | IndexedDB      | Network First                     | Yes (if cached) |
+| Chat Messages              | IndexedDB            | LocalStorage   | Network First, Cache Update       | Yes             |
+| Contact Information        | IndexedDB            | LocalStorage   | Network First, Cache Update       | Yes             |
+| Wallet Data                | IndexedDB            | LocalStorage   | Network First, Cache Update       | Yes             |
+| Account Information        | LocalStorage         | IndexedDB      | Network First, Local Verification | Yes             |
+| Sensitive Data (Passwords) | Memory Only          | None           | Network Only                      | No              |
+
+### Cross-Storage Visualization
+
+```mermaid
+graph TD
+    subgraph Browser
+        subgraph "Service Worker"
+            SW[Service Worker Controller]
+            SC[Static Cache]
+            DC[Dynamic Cache]
+        end
+
+        subgraph "Storage"
+            IDB[(IndexedDB)]
+            LS[(LocalStorage)]
+        end
+
+        subgraph "Application"
+            UI[User Interface]
+            DM[Data Manager]
+            CM[Connectivity Monitor]
+        end
+    end
+
+    subgraph Server
+        API[API Endpoints]
+        Auth[Authentication]
+        Data[Data Services]
+    end
+
+    %% Online Flows
+    API -->|Responses| SW
+    SW -->|Cache API Responses| DC
+    SW -->|Serve Static Assets| UI
+    DM -->|Fetch Data| API
+    DM -->|Store Structured Data| IDB
+    DM -->|Store Account Info| LS
+
+    %% Offline Flows
+    CM -->|Monitor Status| UI
+    SW -->|Intercept Requests| DM
+    DC -->|Serve Cached Responses| DM
+    SC -->|Serve Static Assets| UI
+    IDB -->|Provide Cached Data| DM
+    LS -->|Provide Account Info| DM
+
+    %% Styling
+    classDef online fill:#d4f1c5,stroke:#333,stroke-width:1px;
+    classDef offline fill:#f8cecc,stroke:#333,stroke-width:1px;
+    classDef storage fill:#dae8fc,stroke:#333,stroke-width:1px;
+
+    class API,Auth,Data online;
+    class CM,SW offline;
+    class IDB,LS,SC,DC storage;
+```
+
+### Synergy Between Storage Mechanisms
+
+The combination of Service Worker caches, IndexedDB, and LocalStorage creates a robust offline experience that can survive page refreshes and network interruptions. Each storage mechanism has specific strengths that complement the others:
+
+1. **Service Worker Cache**
+
+   - **Strength**: Intercepts network requests and serves cached resources
+   - **Role**: Ensures the application shell and static assets load instantly, even offline
+   - **Limitation**: Not suitable for structured data or user-specific content
+
+2. **IndexedDB**
+
+   - **Strength**: Stores large amounts of structured data with query capabilities
+   - **Role**: Maintains user data (chats, contacts, wallet) across sessions
+   - **Limitation**: More complex API, not ideal for simple key-value pairs
+
+3. **LocalStorage**
+   - **Strength**: Simple, synchronous API for small data items
+   - **Role**: Stores authentication state and user preferences
+   - **Limitation**: Limited storage capacity, no structured data support
+
+When these mechanisms work together:
+
+- **During Page Load**: Service Worker provides the app shell from cache while IndexedDB loads the user's data
+- **During Network Interruptions**: UI remains functional with cached data from IndexedDB
+- **During Page Refreshes**: Authentication persists via LocalStorage, allowing IndexedDB to reload the correct user data
+
+### Page Refresh and Network Interruption Sequence
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant B as Browser
     participant SW as Service Worker
-    participant A as App
-    participant C as Cache Storage
-    participant IDB as IndexedDB
-
-    Note over U: User Refreshes Page While Offline
-
-    U->>B: Refresh Page
-    B->>SW: Request App Resources
-
-    rect rgba(200, 230, 200, 0.16)
-        Note over SW: Service Worker Intercepts
-        SW->>C: Get Cached App Shell
-        C-->>SW: Return Cached Resources
-        SW-->>B: Serve Cached App
-        B-->>U: Display Cached App
-    end
-
-    rect rgba(230, 200, 230, 0.12)
-        Note over A: App Initialization (Offline)
-        A->>A: Initialize Service Worker
-        A->>A: Setup Connectivity Detection
-        A->>A: Check Online Status (checkOnlineStatus)
-        A->>A: Detect Offline State
-
-        Note over A: Version Check Fails
-        A->>A: Show "Version check failed. You are offline." Alert
-        A->>A: Set isOnline = false
-        A->>A: Update UI for Offline Mode (updateUIForConnectivity)
-        A->>A: Mark Network-Dependent Elements (markConnectivityDependentElements)
-    end
-
-    rect rgba(230, 230, 200, 0.08)
-        Note over A: Load Cached Data
-
-        alt User Is Logged In
-            A->>IDB: Get Cached Chat Data (getData from STORES.CHATS)
-            IDB-->>A: Return Cached Chats
-            A->>A: Populate Chat UI (updateChatList)
-
-            A->>IDB: Get Cached Contacts Data (getData from STORES.CONTACTS)
-            IDB-->>A: Return Cached Contacts
-            A->>A: Populate Contacts UI (updateContactsList)
-
-            A->>IDB: Get Cached Wallet Data (getData from STORES.WALLET)
-            IDB-->>A: Return Cached Wallet
-            A->>A: Populate Wallet UI (updateWalletView)
-        else No Cached Login
-            A->>A: Show Login Screen
-            A->>A: Disable Network-Dependent Actions
-        end
-    end
-
-    rect rgba(200, 200, 230, 0.14)
-        Note over A: User Experience
-        A->>A: Apply offline-disabled Class to Network-Dependent Elements
-        A->>A: Add Tooltips "Requires internet connection"
-
-        U->>A: Attempt Network-Dependent Action
-        A->>A: Action Already Disabled (pointer-events: none)
-        A->>A: Show Tooltip on Hover
-    end
-```
-
-### Component Data Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant C as Component (Chat/Contacts/Wallet)
+    participant LS as LocalStorage
     participant IDB as IndexedDB
     participant N as Network
 
-    Note over C: Component Initialization (switchView)
+    Note over U,N: Page Refresh While Offline
 
-    alt Online Mode (isOnline === true)
-        C->>N: Fetch Data (getChats/updateWalletBalances)
-        N-->>C: Return Data
-        C->>C: Update UI
-        C->>IDB: Cache Data (saveData with addVersion)
-    else Offline Mode (isOnline === false)
-        C->>IDB: Get Cached Data (getData)
-        IDB-->>C: Return Cached Data
-        C->>C: Update UI with Cached Data
-        C->>C: Disable Network-Dependent Actions
+    U->>B: Refresh Page
+    B->>N: Attempt to Fetch Resources
+    N--xB: Network Unavailable
+    B->>SW: Intercept Network Requests
+
+    rect rgba(230, 230, 250, 0.4)
+        Note over SW: Phase 1: Load App Shell
+        SW->>SW: Check Cache for Resources
+        SW-->>B: Serve App Shell from STATIC_CACHE
+        B-->>U: Display App Shell
     end
 
-    Note over C: Specific Component Behavior
-
-    alt Chat Component
-        C->>C: Set Polling Interval Based on Connectivity
-        C->>C: Disable Send Message Button When Offline
-    else Wallet Component
-        C->>C: Disable Send/Refresh Buttons When Offline
-        C->>C: Show Cached Balance Information
-    else Contacts Component
-        C->>C: Display Cached Contact Information
+    rect rgba(255, 230, 230, 0.4)
+        Note over B: Phase 2: Authentication
+        B->>LS: Check for Saved Authentication
+        LS-->>B: Return User Credentials
+        B->>B: Authenticate User Locally
     end
 
-    Note over C: User Interaction
+    rect rgba(230, 255, 230, 0.4)
+        Note over B: Phase 3: Load User Data
+        B->>IDB: Request User Data (Chats, Contacts, Wallet)
+        IDB-->>B: Return Cached Data with Timestamps
+        B-->>U: Render UI with Cached Data
+        B-->>U: Show "Offline" Indicator
+        B-->>U: Disable Network-Dependent Features
+    end
 
-    alt Network-Dependent Action
-        U->>C: Attempt Action
-        alt Online
-            C->>N: Process Action
-            N-->>C: Return Result
-            C->>C: Update UI
-            C->>IDB: Update Cache
-        else Offline
-            C->>C: Action Already Disabled (offline-disabled class)
-            C->>C: Show Tooltip "Requires internet connection"
-        end
-    else Offline-Compatible Action (View Only)
-        U->>C: View Data
-        C->>C: Display Cached Data
+    Note over U,N: Network Connection Restored
+
+    rect rgba(230, 240, 255, 0.4)
+        Note over B: Phase 4: Reconnection
+        B->>N: Detect Network Availability
+        B-->>U: Show "Back Online" Toast
+        B->>N: Verify User Authentication
+        N-->>B: Confirm Authentication Valid
+        B->>N: Fetch Fresh Data
+        N-->>B: Return Updated Data
+        B->>IDB: Update Cached Data
+        B-->>U: Update UI with Fresh Data
+        B-->>U: Enable Network-Dependent Features
     end
 ```
+
+### Why This Approach Works
+
+This multi-layered storage approach is necessary because:
+
+1. **No Single Storage Solution** is perfect for all data types:
+
+   - Service Worker caches excel at storing HTTP responses but not structured data
+   - IndexedDB provides robust storage for structured data but has a complex API
+   - LocalStorage offers simplicity but limited capacity
+
+2. **Resilience Through Redundancy**:
+
+   - If one storage mechanism fails, others can compensate
+   - Critical authentication data is available in LocalStorage even if IndexedDB is corrupted
+
+3. **Performance Optimization**:
+
+   - Static assets load instantly from Service Worker cache
+   - Structured data queries are efficient through IndexedDB
+   - Simple preferences are quickly accessible via LocalStorage
+
+4. **Seamless User Experience**:
+   - Users can continue browsing even when offline
+   - Authentication persists across page refreshes
+   - UI adapts appropriately to connectivity changes
+
+This architecture ensures that users experience minimal disruption during network interruptions or page refreshes, maintaining access to their data and a functional interface regardless of connectivity status.
+
+### Practical Examples
+
+#### Example 1: Offline Sign-In Flow
+
+When a user tries to sign in while offline:
+
+1. The app checks `isOnline` and determines it's offline
+2. It retrieves account information from LocalStorage
+3. If the username exists and the address matches, sign-in is allowed
+4. After sign-in, the app loads cached data from IndexedDB
+5. The UI shows that the user is offline and some features are disabled
+6. When coming back online, the app verifies the account is still valid on the network
+
+#### Example 2: Viewing Chats Offline
+
+When a user views chats while offline:
+
+1. The app loads the UI from the Service Worker cache
+2. It retrieves cached chat data from IndexedDB's Chats Store
+3. The UI displays the cached messages with a timestamp of when they were last updated
+4. Send message functionality is disabled with visual feedback
+5. The user can still navigate between different chats and views
+
+#### Example 3: Page Refresh While Offline
+
+When a user refreshes the page while offline:
+
+1. The browser requests resources from the network
+2. The Service Worker intercepts these requests
+3. The Service Worker serves cached versions of the resources
+4. The app initializes and detects it's offline
+5. The app loads cached data from IndexedDB
+6. The UI updates to show offline status and disabled features
 
 ## References
 
