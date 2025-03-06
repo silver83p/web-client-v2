@@ -4308,6 +4308,8 @@ function markConnectivityDependentElements() {
         
         // Contact related
         '#chatRecipient',
+        '#chatAddFriendButton',
+        '#addFriendButton',
         
         // Profile related
         '#accountForm button[type="submit"]',
