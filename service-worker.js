@@ -407,6 +407,34 @@ function longAddress(addr) {
     return addr.padEnd(64, '0');
 }
 
+/**
+ * Gets the appropriate gateway for a request based on configuration
+ * @returns {Object} The selected gateway object
+ */
+function getGatewayForRequest() {
+  // Safety check for state and account
+  if (!state?.account?.network?.gateways?.length) {
+    // Fall back to global network if available
+    if (typeof network !== 'undefined' && network?.gateways?.length) {
+      return network.gateways[Math.floor(Math.random() * network.gateways.length)];
+    }
+    console.error('No gateways available');
+    return null;
+  }
+  
+  const { network } = state.account;
+  
+  // If a default gateway is set and valid, use it
+  if (network.defaultGatewayIndex !== undefined && 
+      network.defaultGatewayIndex >= 0 && 
+      network.defaultGatewayIndex < network.gateways.length) {
+    return network.gateways[network.defaultGatewayIndex];
+  }
+  
+  // Otherwise use random selection
+  return network.gateways[Math.floor(Math.random() * network.gateways.length)];
+}
+
 async function checkForNewMessages() {
     try {
         if (!state.timestamp || !state.account) {
@@ -421,8 +449,12 @@ async function checkForNewMessages() {
             return;
         }
 
-        // Get random gateway
-        const gateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
+        // Get gateway using the selection function
+        const gateway = getGatewayForRequest();
+        if (!gateway) {
+            console.log('❌ No gateway available');
+            return;
+        }
         const paddedAddress = address.padEnd(64, '0');
         
         // Query for new messages
