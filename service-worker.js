@@ -17,6 +17,7 @@ const PRECACHE_URLS = [
   './index.html',
   './styles.css',
   './app.js',
+  './db.js',
   './manifest.json',
   './offline.html',
   './log-utils.js',

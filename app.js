@@ -571,11 +571,23 @@ async function handleSignIn(event) {
 }
 
 function newDataRecord(myAccount){
+    // Process network gateways first
+    const networkGateways = (typeof network !== 'undefined' && network?.gateways?.length)
+        ? network.gateways.map(gateway => ({
+            protocol: gateway.protocol,
+            host: gateway.host,
+            port: gateway.port,
+            name: `${gateway.host} (System)`,
+            isSystem: true,
+            isDefault: false,
+        }))
+        : [];
+
     const myData = {
         timestamp: Date.now(),
         account: myAccount,
         network: {
-            gateways: [],
+            gateways: networkGateways,
             defaultGatewayIndex: -1,  // -1 means use random selection
         },
         contacts: {},
@@ -612,20 +624,6 @@ function newDataRecord(myAccount){
             encrypt: true,
             toll: 1
         }
-    }
-
-    // if network object exists, populate gateways
-    if (typeof network !== 'undefined' && network?.gateways?.length) {
-        network.gateways.forEach(gateway => {
-            myData.network.gateways.push({
-                protocol: gateway.protocol,
-                host: gateway.host,
-                port: gateway.port,
-                name: `${gateway.host} (System)`,
-                isSystem: true,
-                isDefault: false,
-            });
-        });
     }
     
     return myData
@@ -1207,7 +1205,7 @@ async function updateChatList(force) {
                 <div class="chat-content">
                     <div class="chat-header">
                         <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
-                                                <div class="chat-time">${formatTime(message.timestamp)}  <span class="chat-time-chevron"></span></div>
+                        <div class="chat-time">${formatTime(message.timestamp)}  <span class="chat-time-chevron"></span></div>
                     </div>
                     <div class="chat-message">
                         ${message.message}
@@ -2671,7 +2669,14 @@ function handleSignOut() {
     
     handleSignOut.exit = true
 
-    // Reload the page to get fresh welcome page
+    // Add offline fallback
+    if (!navigator.onLine) {
+        // Just reset the UI state without clearing storage
+        document.getElementById('welcomeScreen').classList.add('active');
+        return;
+    }
+
+    // Only reload if online
     window.location.reload();
 }
 handleSignOut.exit = false
@@ -4024,7 +4029,7 @@ async function handleResultClick(contactAddress) {
 
     // Load messages
     const messagesList = chatModal.querySelector('.messages-list');
-    messagesList.innerHTML = '';
+    messagesList.innerHTML = ''; // Clear existing messages
 
     // Add messages if they exist
     if (contact.messages && contact.messages.length > 0) {
@@ -4355,7 +4360,16 @@ function markConnectivityDependentElements() {
         // Profile related
         '#accountForm button[type="submit"]',
         '#createAccountForm button[type="submit"]',
-        '#importForm button[type="submit"]'
+        '#importForm button[type="submit"]',
+
+        // menu list buttons
+        '.menu-item[id="openAccountForm"]',
+        '.menu-item[id="openNetwork"]',
+        '.menu-item[id="openExplorer"]',
+        '.menu-item[id="openMonitor"]',
+        '.menu-item[id="openAbout"]',
+        '.menu-item[id="openRemoveAccount"]',
+        
     ];
 
     // Add data attribute to all network-dependent elements
@@ -4622,7 +4636,7 @@ function updateGatewayList() {
     randomOption.innerHTML = `
         <div class="gateway-info">
             <div class="gateway-name">Random Selection</div>
-            <div class="gateway-url">Automatically selects a gateway for each request (recommended for reliability)</div>
+            <div class="gateway-url">Selects random gateway from list</div>
         </div>
         <div class="gateway-actions">
             <label class="default-toggle">
@@ -4660,8 +4674,21 @@ function updateGatewayList() {
                     <input type="radio" name="defaultGateway" ${isDefault ? 'checked' : ''}>
                     <span>Default</span>
                 </label>
-                <button class="edit-button">Edit</button>
-                ${canRemove ? '<button class="remove-button">Remove</button>' : ''}
+                <button class="icon-button edit-button" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                ${canRemove ? `
+                    <button class="icon-button remove-button" title="Remove">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                ` : ''}
             </div>
         `;
 
