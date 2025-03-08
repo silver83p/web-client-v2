@@ -12,6 +12,13 @@ async function checkVersion(){
     } catch (error) {
         console.error('Version check failed:', error);
         alert('Version check failed. Your Internet connection may be down.')
+        // Only trigger offline UI if it's a network error
+        if (!navigator.onLine || error instanceof TypeError) {
+            isOnline = false;
+            updateUIForConnectivity();
+            markConnectivityDependentElements();
+            console.log(`DEBUG: about to invoke showToast in checkVersion`)
+        }
         newVersion = myVersion  // Allow continuing with the old version
     }
 //console.log('myVersion < newVersion then reload', myVersion, newVersion)
@@ -117,6 +124,9 @@ import { normalizeUsername, generateIdenticon, formatTime,
     big2str, base642bin, bin2base64, hex2bin, bin2hex,
 } from './lib.js';
 
+// Import database functions
+import { STORES, saveData, getData, addVersionToData, closeAllConnections } from './db.js';
+
 const myHashKey = hex2bin('69fa4195670576c0160d660c3be36556ff8d504725be8a59b5a96509e0c994bc')
 const weiDigits = 18; 
 const wei = 10n**BigInt(weiDigits)
@@ -149,8 +159,40 @@ async function checkOnlineStatus() {
 }
 
 async function checkUsernameAvailability(username, address) {
-    // Get random gateway
-    const randomGateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
+    // First check if we're offline
+    if (!isOnline) {
+        console.log('Checking username availability offline');
+        // When offline, check local storage only
+        const { netid } = network;
+        const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+        const netidAccounts = existingAccounts.netids[netid];
+        
+        // If we have this username locally and the address matches
+        if (netidAccounts?.usernames && 
+            netidAccounts.usernames[username] && 
+            normalizeAddress(netidAccounts.usernames[username].address) === normalizeAddress(address)) {
+            console.log('Username found locally and matches address');
+            return 'mine';
+        }
+        
+        // If we have the username but address doesn't match
+        if (netidAccounts?.usernames && netidAccounts.usernames[username]) {
+            console.log('Username found locally but address does not match');
+            return 'taken';
+        }
+        
+        // Username not found locally
+        console.log('Username not found locally');
+        return 'available';
+    }
+    
+    // Online flow - existing implementation
+    const randomGateway = getGatewayForRequest();
+    if (!randomGateway) {
+        console.error('No gateway available for username check');
+        return 'error';
+    }
+    
     const usernameBytes = utf82bin(normalizeUsername(username))
     const usernameHash = blake.blake2bHex(usernameBytes, myHashKey, 32)
     try {
@@ -529,11 +571,24 @@ async function handleSignIn(event) {
 }
 
 function newDataRecord(myAccount){
+    // Process network gateways first
+    const networkGateways = (typeof network !== 'undefined' && network?.gateways?.length)
+        ? network.gateways.map(gateway => ({
+            protocol: gateway.protocol,
+            host: gateway.host,
+            port: gateway.port,
+            name: `${gateway.host} (System)`,
+            isSystem: true,
+            isDefault: false,
+        }))
+        : [];
+
     const myData = {
         timestamp: Date.now(),
         account: myAccount,
         network: {
-            gateways: []
+            gateways: networkGateways,
+            defaultGatewayIndex: -1,  // -1 means use random selection
         },
         contacts: {},
         chats: [],
@@ -570,6 +625,7 @@ function newDataRecord(myAccount){
             toll: 1
         }
     }
+    
     return myData
 }
 
@@ -596,17 +652,17 @@ function closeAboutModal() {
 
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
-
-    checkVersion()
-    document.getElementById('versionDisplay').textContent = myVersion + ' '+version;
-    document.getElementById('networkNameDisplay').textContent = network.name;
-
     // Initialize service worker first
     if ('serviceWorker' in navigator) {
         await registerServiceWorker();
         setupServiceWorkerMessaging(); 
         setupAppStateManagement();
+        setupConnectivityDetection();
     }
+
+    checkVersion()
+    document.getElementById('versionDisplay').textContent = myVersion + ' '+version;
+    document.getElementById('networkNameDisplay').textContent = network.name;
 
     // Add unload handler to save myData
     window.addEventListener('unload', handleUnload)
@@ -640,9 +696,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Add event listeners
-    document.getElementById('search').addEventListener('click', () => {
-        console.log("poll next, last, timer", pollChats.nextPoll, pollChats.lastPoll, pollChats.timer)
-    });
     document.getElementById('toggleMenu').addEventListener('click', toggleMenu);
     document.getElementById('closeMenu').addEventListener('click', toggleMenu);
 
@@ -693,6 +746,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeRemoveAccountModal').addEventListener('click', closeRemoveAccountModal);
     document.getElementById('confirmRemoveAccount').addEventListener('click', handleRemoveAccount);
 
+    // Gateway Menu
+    document.getElementById('openNetwork').addEventListener('click', openGatewayForm);
+    document.getElementById('closeGatewayForm').addEventListener('click', closeGatewayForm);
+    document.getElementById('gatewayForm').addEventListener('submit', handleGatewayForm);
+    document.getElementById('addGatewayButton').addEventListener('click', openAddGatewayForm);
+    document.getElementById('closeAddEditGatewayForm').addEventListener('click', closeAddEditGatewayForm);
+
     // TODO add comment about which send form this is for chat or assets
     document.getElementById('openSendModal').addEventListener('click', openSendModal);
     document.getElementById('closeSendModal').addEventListener('click', closeSendModal);
@@ -721,7 +781,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     document.getElementById('handleSignOut').addEventListener('click', handleSignOut);
     document.getElementById('closeChatModal').addEventListener('click', closeChatModal);
-    document.getElementById('closeContactInfoModal').addEventListener('click', closeContactInfoModal);
+    document.getElementById('closeContactInfoModal').addEventListener('click', () => contactInfoModal.close());
     document.getElementById('handleSendMessage').addEventListener('click', handleSendMessage);
     
     // Add refresh balance button handler
@@ -741,24 +801,98 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 
-    document.getElementById('openLogs').addEventListener('click', openLogsModal);
+    document.getElementById('openLogs').addEventListener('click', () => {
+        // Close the menu modal first
+        document.getElementById('menuModal').classList.remove('active');
+        // Then open the logs modal and update view
+        document.getElementById('logsModal').classList.add('active');
+        updateLogsView();
+    });
+
     document.getElementById('closeLogsModal').addEventListener('click', () => {
         document.getElementById('logsModal').classList.remove('active');
     });
+
+    document.getElementById('refreshLogs').addEventListener('click', () => {
+        updateLogsView();
+    });
+
     document.getElementById('clearLogs').addEventListener('click', async () => {
         await Logger.clearLogs();
         updateLogsView();
     });
-    document.getElementById('refreshLogs').addEventListener('click', async () => {
-        updateLogsView();
+
+    // Add new search functionality
+    const searchInput = document.getElementById('searchInput');
+    const messageSearch = document.getElementById('messageSearch');
+    const searchModal = document.getElementById('searchModal');
+
+    // Close search modal
+    document.getElementById('closeSearchModal').addEventListener('click', () => {
+        searchModal.classList.remove('active');
+        messageSearch.value = '';
+        document.getElementById('searchResults').innerHTML = '';
     });
-    document.getElementById('openLogs').addEventListener('click', () => {
-        // Close the menu modal first
-        document.getElementById('menuModal').classList.remove('active');
-        // Then open the logs modal
-        openLogsModal();
+
+    // Handle search input with debounce
+    messageSearch.addEventListener('input', debounce((e) => {
+        const searchText = e.target.value.trim();
+        if (searchText.length < 2) {
+            displayEmptyState('searchResults', "No messages found");
+            return;
+        }
+
+        const results = searchMessages(searchText);
+        if (results.length === 0) {
+            displayEmptyState('searchResults', "No messages found");
+        } else {
+            displaySearchResults(results);
+        }
+    }, 300));
+
+    document.getElementById('closeChatModal')?.addEventListener('click', () => {
+        document.getElementById('chatModal').classList.remove('active');
     });
+    initializeSearch();
+
     
+
+    // Add contact search functionality
+    const contactSearchInput = document.getElementById("contactSearchInput");
+    const contactSearch = document.getElementById("contactSearch");
+    const contactSearchModal = document.getElementById("contactSearchModal");
+
+    // Open contact search modal when clicking the search bar
+    contactSearchInput.addEventListener("click", () => {
+        contactSearchModal.classList.add("active");
+        contactSearch.focus();
+    });
+
+    // Close contact search modal
+    document.getElementById("closeContactSearchModal").addEventListener("click", () => {
+        contactSearchModal.classList.remove("active");
+        contactSearch.value = "";
+        document.getElementById("contactSearchResults").innerHTML = "";
+    });
+
+    // Handle contact search input with debounce
+    contactSearch.addEventListener("input", debounce((e) => {
+        const searchText = e.target.value.trim();
+
+        // Just clear results if empty
+        if (!searchText) {
+            document.getElementById("contactSearchResults").innerHTML = "";
+            return;
+        }
+
+        const results = searchContacts(searchText);
+        if (results.length === 0) {
+            displayEmptyState('contactSearchResults', "No contacts found");
+        } else {
+            displayContactResults(results, searchText);
+        }
+    }, (searchText) => searchText.length === 1 ? 600 : 300)); // Dynamic wait time
+
     setupAddToHomeScreen()
 });
 
@@ -771,6 +905,7 @@ function handleUnload(e){
     else{
         saveState()
         Logger.forceSave();
+        closeAllConnections();
     }
 }
 
@@ -987,7 +1122,55 @@ function setupAddToHomeScreen(){
 async function updateChatList(force) {
     let gotChats = 0
     if (myAccount && myAccount.keys) {
-        gotChats = await getChats(myAccount.keys);     // populates myData with new chat messages
+        if (isOnline) {
+            // Online: Get from network and cache
+            try {
+                let retryCount = 0;
+                const maxRetries = 2;
+                
+                while (retryCount <= maxRetries) {
+                    try {
+                        gotChats = await getChats(myAccount.keys);
+                        break; // Success, exit the retry loop
+                    } catch (networkError) {
+                        retryCount++;
+                        if (retryCount > maxRetries) {
+                            throw networkError; // Rethrow if max retries reached
+                        }
+                        console.log(`Retry ${retryCount}/${maxRetries} for chat update...`);
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Increasing backoff
+                    }
+                }
+                
+                if (gotChats > 0 || force) {
+                    // Cache the updated chat data
+                    try {
+                        const chatData = addVersionToData({
+                            chatId: myAccount.keys.address,
+                            chats: myData.chats,
+                            contacts: myData.contacts
+                        });
+                        await saveData(STORES.CHATS, chatData);
+                    } catch (error) {
+                        console.error('Failed to cache chat data:', error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating chat list:', error);
+            }
+        } else {
+            // Offline: Get from cache
+            try {
+                const cachedData = await getData(STORES.CHATS, myAccount.keys.address);
+                if (cachedData) {
+                    myData.chats = cachedData.chats;
+                    myData.contacts = cachedData.contacts;
+                    console.log('Using cached chat data from:', new Date(cachedData.lastUpdated));
+                }
+            } catch (error) {
+                console.error('Failed to read cached chat data:', error);
+            }
+        }
     }
     console.log('force gotChats', force === undefined ? 'undefined' : JSON.stringify(force), 
                              gotChats === undefined ? 'undefined' : JSON.stringify(gotChats))
@@ -1022,10 +1205,10 @@ async function updateChatList(force) {
                 <div class="chat-content">
                     <div class="chat-header">
                         <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
-                        <div class="chat-time">${formatTime(message.timestamp)}</div>
+                        <div class="chat-time">${formatTime(message.timestamp)}  <span class="chat-time-chevron"></span></div>
                     </div>
                     <div class="chat-message">
-                        ${message.my ? 'You: ' : ''}${message.message}
+                        ${message.message}
                         ${contact.unread ? `<span class="chat-unread">${contact.unread}</span>` : ''}
                     </div>
                 </div>
@@ -1119,7 +1302,9 @@ async function switchView(view) {
     // Update lists when switching views
     if (view === 'chats') {
         await updateChatList('force');
-        pollChatInterval(pollIntervalNormal)
+        if (isOnline) {
+            pollChatInterval(pollIntervalNormal)
+        }
     } else if (view === 'contacts') {
         await updateContactsList();
     } else if (view === 'wallet') {
@@ -1139,6 +1324,31 @@ async function switchView(view) {
 
 // Update contacts list UI
 async function updateContactsList() {
+    if (isOnline) {
+        // Online: Get from network and cache
+        try {
+            const contactsData = addVersionToData({
+                address: myAccount.keys.address,
+                contacts: myData.contacts
+            });
+            await saveData(STORES.CONTACTS, contactsData);
+            console.log('Successfully cached contacts data:', contactsData);
+        } catch (error) {
+            console.error('Failed to cache contacts data:', error);
+        }
+    } else {
+        // Offline: Get from cache
+        try {
+            const cachedData = await getData(STORES.CONTACTS, myAccount.keys.address);
+            if (cachedData) {
+                myData.contacts = cachedData.contacts;
+                console.log('Using cached contacts data from:', new Date(cachedData.lastUpdated));
+            }
+        } catch (error) {
+            console.error('Failed to read cached contacts data:', error);
+        }
+    }
+
     const contactsList = document.getElementById('contactsList');
 //            const chatsData = myData
     const contacts = myData.contacts;
@@ -1153,29 +1363,82 @@ async function updateContactsList() {
         return;
     }
 
+    // Convert contacts object to array and sort
     const contactsArray = Object.values(contacts);
-    const contactItems = await Promise.all(contactsArray.map(async contact => {
-        const identicon = await generateIdenticon(contact.address);
-        return `
-            <li class="chat-item">
-                <div class="chat-avatar">${identicon}</div>
-                <div class="chat-content">
-                    <div class="chat-header">
-                        <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
-                    </div>
-                    <div class="chat-message">
-                        ${contact.email || contact.x || contact.phone || contact.address}
-                    </div>
-                </div>
-            </li>
-        `;
-    }));
     
-    contactsList.innerHTML = contactItems.join('');
+    // Split into friends and others in a single pass
+    const { friends, others } = contactsArray.reduce((acc, contact) => {
+        const key = contact.friend ? 'friends' : 'others';
+        acc[key].push(contact);
+        return acc;
+    }, { friends: [], others: [] });
+
+    // Sort friends and others by name first, then by username if name is not available
+    const sortByName = (a, b) => {
+        const nameA = a.name || a.username || '';
+        const nameB = b.name || b.username || '';
+        return nameA.localeCompare(nameB);
+    };
+
+    // sort friends and others
+    friends.sort(sortByName);
+    others.sort(sortByName);
+
+    // Build HTML for both sections
+    let html = '';
+
+    // Add friends section if there are friends
+    if (friends.length > 0) {
+        html += `<div class="contact-section-header">Friends</div>`;
+        const friendItems = await Promise.all(friends.map(async contact => {
+            const identicon = await generateIdenticon(contact.address);
+            return `
+                <li class="chat-item">
+                    <div class="chat-avatar">${identicon}</div>
+                    <div class="chat-content">
+                        <div class="chat-header">
+                            <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
+                        </div>
+                        <div class="chat-message">
+                            ${contact.email || contact.x || contact.phone || contact.address}
+                        </div>
+                    </div>
+                </li>
+            `;
+        }));
+        html += friendItems.join('');
+    }
+
+    // Add others section if there are other contacts
+    if (others.length > 0) {
+        html += `<div class="contact-section-header">Others</div>`;
+        const otherItems = await Promise.all(others.map(async contact => {
+            const identicon = await generateIdenticon(contact.address);
+            return `
+                <li class="chat-item">
+                    <div class="chat-avatar">${identicon}</div>
+                    <div class="chat-content">
+                        <div class="chat-header">
+                            <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
+                        </div>
+                        <div class="chat-message">
+                            ${contact.email || contact.x || contact.phone || contact.address}
+                        </div>
+                    </div>
+                </li>
+            `;
+        }));
+        html += otherItems.join('');
+    }
+    
+    contactsList.innerHTML = html;
     
     // Add click handlers to contact items
     document.querySelectorAll('#contactsList .chat-item').forEach((item, index) => {
-        item.onclick = () => openChatModal(contactsArray[index].address);
+        const contact = [...friends, ...others][index];
+        item.onclick = () => {
+            contactInfoModal.open(createDisplayInfo(contact));
+        };
     });
 }
 
@@ -1588,6 +1851,7 @@ function openChatModal(address) {
     const modalAvatar = modal.querySelector('.modal-avatar');
     const modalTitle = modal.querySelector('.modal-title');
     const messagesList = modal.querySelector('.messages-list');
+    const addFriendButton = document.getElementById('chatAddFriendButton');
     document.getElementById('newChatButton').classList.remove('visible');
     const contact = myData.contacts[address]
     // Set user info
@@ -1616,10 +1880,25 @@ function openChatModal(address) {
     const userInfo = modal.querySelector('.chat-user-info');
     userInfo.onclick = () => {
         const contact = myData.contacts[address];
-        if (contact && contact.senderInfo) {
-            openContactInfoModal(contact.senderInfo);
+        if (contact) {
+            contactInfoModal.open(createDisplayInfo(contact));
         }
     };
+
+    // Show or hide add friend button based on friend status
+    const isFriend = contact.friend || false;
+    if (isFriend) {
+        addFriendButton.style.display = 'none';
+    } else {
+        addFriendButton.style.display = 'flex';
+        // Add click handler for add friend button
+        addFriendButton.onclick = () => {
+            contact.friend = true;
+            showToast('Added to friends');
+            addFriendButton.style.display = 'none';
+            saveState();
+        };
+    }
 
     // Show modal
     modal.classList.add('active');
@@ -1634,7 +1913,9 @@ function openChatModal(address) {
     // Setup to update new messages
     appendChatModal.address = address
     appendChatModal.len = messages.length
-    pollChatInterval(pollIntervalChatting) // poll for messages at a faster rate
+    if (isOnline) {
+        pollChatInterval(pollIntervalChatting) // poll for messages at a faster rate
+    }
 }
 
 function appendChatModal(){
@@ -1676,7 +1957,9 @@ function closeChatModal() {
     }
     appendChatModal.address = null
     appendChatModal.len = 0
-    pollChatInterval(pollIntervalNormal) // back to polling at slower rate
+    if (isOnline) {
+        pollChatInterval(pollIntervalNormal) // back to polling at slower rate
+    }
 }
 
 function openReceiveModal() {
@@ -1684,14 +1967,186 @@ function openReceiveModal() {
     modal.classList.add('active');
     
     // Get wallet data
-    const walletData = myData.wallet
+    const walletData = myData.wallet;
+
+    // Store references to elements that will have event listeners
+    const assetSelect = document.getElementById('receiveAsset');
+    const amountInput = document.getElementById('receiveAmount');
+    const memoInput = document.getElementById('receiveMemo');
+    const qrDataPreview = document.getElementById('qrDataPreview');
+    const qrDataToggle = document.getElementById('qrDataToggle');
+    const toggleButton = document.getElementById('toggleQROptions');
+    const optionsContainer = document.getElementById('qrOptionsContainer');
+    const toggleText = document.getElementById('toggleQROptionsText');
+    const toggleIcon = document.getElementById('toggleQROptionsIcon');
+    
+    // Store these references on the modal element for later cleanup
+    modal.receiveElements = {
+        assetSelect,
+        amountInput,
+        memoInput,
+        qrDataPreview,
+        qrDataToggle,
+        toggleButton,
+        optionsContainer,
+        toggleText,
+        toggleIcon
+    };
+    
+    // Define event handlers and store references to them
+    const handleAssetChange = () => updateQRCode();
+    const handleAmountInput = () => updateQRCode();
+    const handleMemoInput = () => updateQRCode();
+    
+    const handleQRDataToggle = () => {
+        qrDataPreview.classList.toggle('minimized');
+        
+        // Adjust height based on state
+        if (qrDataPreview.classList.contains('minimized')) {
+            qrDataPreview.style.height = '40px';
+        } else {
+            // Set height to auto to fit content
+            qrDataPreview.style.height = 'auto';
+        }
+    };
+    
+    const handleOptionsToggle = () => {
+        if (optionsContainer.style.display === 'none') {
+            optionsContainer.style.display = 'block';
+            toggleButton.classList.add('active');
+            toggleText.textContent = 'Hide Payment Request Options';
+        } else {
+            optionsContainer.style.display = 'none';
+            toggleButton.classList.remove('active');
+            toggleText.textContent = 'Show Payment Request Options';
+        }
+    };
+    
+    // Store event handlers on the modal for later removal
+    modal.receiveHandlers = {
+        handleAssetChange,
+        handleAmountInput,
+        handleMemoInput,
+        handleQRDataToggle,
+        handleOptionsToggle
+    };
+    
+    // Populate assets dropdown
+    // Clear existing options
+    assetSelect.innerHTML = '';
+    
+    // Check if wallet assets exist
+    if (walletData && walletData.assets && walletData.assets.length > 0) {
+        // Add options for each asset
+        walletData.assets.forEach((asset, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = `${asset.name} (${asset.symbol})`;
+            assetSelect.appendChild(option);
+        });
+        console.log(`Populated ${walletData.assets.length} assets in dropdown`);
+    } else {
+        // Add a default option if no assets
+        const option = document.createElement('option');
+        option.value = 0;
+        option.textContent = 'Liberdus (LIB)';
+        assetSelect.appendChild(option);
+        console.log('No wallet assets found, using default');
+    }
+
+    // Clear input fields
+    amountInput.value = '';
+    memoInput.value = '';
+
+    // Add event listeners for form fields
+    assetSelect.addEventListener('change', handleAssetChange);
+    amountInput.addEventListener('input', handleAmountInput);
+    memoInput.addEventListener('input', handleMemoInput);
+    
+    // Reset QR data preview state
+    qrDataPreview.classList.remove('minimized');
+    
+    // Add toggle event listener
+    qrDataToggle.addEventListener('click', handleQRDataToggle);
+    
+    // Reset toggle state
+    toggleButton.classList.remove('active');
+    optionsContainer.style.display = 'none';
+    toggleText.textContent = 'Show Payment Request Options';
+    
+    // Add toggle event listener
+    toggleButton.addEventListener('click', handleOptionsToggle);
 
     // Update addresses for first asset
     updateReceiveAddresses();
 }
 
 function closeReceiveModal() {
-    document.getElementById('receiveModal').classList.remove('active');
+    const modal = document.getElementById('receiveModal');
+    
+    // Remove event listeners if they were added
+    if (modal.receiveElements && modal.receiveHandlers) {
+        const { assetSelect, amountInput, memoInput, qrDataToggle, toggleButton } = modal.receiveElements;
+        const { handleAssetChange, handleAmountInput, handleMemoInput, handleQRDataToggle, handleOptionsToggle } = modal.receiveHandlers;
+        
+        // Remove event listeners
+        if (assetSelect) assetSelect.removeEventListener('change', handleAssetChange);
+        if (amountInput) amountInput.removeEventListener('input', handleAmountInput);
+        if (memoInput) memoInput.removeEventListener('input', handleMemoInput);
+        if (qrDataToggle) qrDataToggle.removeEventListener('click', handleQRDataToggle);
+        if (toggleButton) toggleButton.removeEventListener('click', handleOptionsToggle);
+        
+        // Clean up references
+        delete modal.receiveElements;
+        delete modal.receiveHandlers;
+    }
+    
+    // Hide the modal
+    modal.classList.remove('active');
+}
+
+// Show preview of QR data
+function previewQRData(paymentData) {
+    const previewElement = document.getElementById('qrDataPreview');
+    const previewContent = previewElement.querySelector('.preview-content');
+    
+    // Create human-readable preview
+    let preview = `<strong>QR Code Data:</strong><br>`;
+    preview += `<span class="preview-label">Username:</span> ${paymentData.username}<br>`;
+    preview += `<span class="preview-label">Asset:</span> ${paymentData.symbol}<br>`;
+    
+    if (paymentData.amount) {
+        preview += `<span class="preview-label">Amount:</span> ${paymentData.amount} ${paymentData.symbol}<br>`;
+    }
+    
+    if (paymentData.memo) {
+        preview += `<span class="preview-label">Memo:</span> ${paymentData.memo}<br>`;
+    }
+    
+    // Add timestamp in readable format
+    const date = new Date(paymentData.timestamp);
+    preview += `<span class="preview-label">Generated:</span> ${date.toLocaleString()}`;
+    
+    // Create minimized version (single line)
+    let minimizedPreview = `${paymentData.username} • ${paymentData.symbol}`;
+    if (paymentData.amount) {
+        minimizedPreview += ` • ${paymentData.amount} ${paymentData.symbol}`;
+    }
+    if (paymentData.memo) {
+        const shortMemo = paymentData.memo.length > 20 ? 
+            paymentData.memo.substring(0, 20) + '...' : 
+            paymentData.memo;
+        minimizedPreview += ` • Memo: ${shortMemo}`;
+    }
+    
+    // Set preview text
+    previewContent.innerHTML = preview;
+    previewContent.setAttribute('data-minimized', minimizedPreview);
+    
+    // Ensure the container fits the content when maximized
+    if (!previewElement.classList.contains('minimized')) {
+        previewElement.style.height = 'auto';
+    }
 }
 
 function updateReceiveAddresses() {
@@ -1709,12 +2164,121 @@ function updateDisplayAddress() {
     const address = myAccount.keys.address;
     displayAddress.textContent = '0x' + address;
     
-    // Update QR code
-    new QRCode(qrcodeContainer, {
-        text: '0x' + address,
-        width: 200,
-        height: 200
-    });
+    // Generate QR code with payment data
+    try {
+        updateQRCode();
+        console.log("QR code updated with payment data");
+    } catch (error) {
+        console.error("Error updating QR code:", error);
+        
+        // Fallback to basic address QR code if there's an error
+        new QRCode(qrcodeContainer, {
+            text: '0x' + address,
+            width: 200,
+            height: 200
+        });
+        console.log("Fallback to basic address QR code");
+    }
+}
+
+// Create QR payment data object based on form values
+function createQRPaymentData() {
+    // Get selected asset
+    const assetSelect = document.getElementById('receiveAsset');
+    const assetIndex = parseInt(assetSelect.value, 10) || 0;
+    
+    // Default asset info in case we can't find the selected asset
+    let assetId = "liberdus";
+    let symbol = "LIB";
+    
+    // Try to get the selected asset
+    try {
+        if (myData && myData.wallet && myData.wallet.assets && myData.wallet.assets.length > 0) {
+            const asset = myData.wallet.assets[assetIndex];
+            if (asset) {
+                assetId = asset.id || "liberdus";
+                symbol = asset.symbol || "LIB";
+                console.log(`Selected asset: ${asset.name} (${symbol})`);
+            } else {
+                console.log(`Asset not found at index ${assetIndex}, using defaults`);
+            }
+        } else {
+            console.log("Wallet assets not available, using default asset");
+        }
+    } catch (error) {
+        console.error("Error accessing asset data:", error);
+    }
+    
+    // Build payment data object
+    const paymentData = {
+        username: myAccount.username,
+        timestamp: Date.now(),
+        version: "1.0",
+        assetId: assetId,
+        symbol: symbol
+    };
+    
+    // Add optional fields if they have values
+    const amount = document.getElementById('receiveAmount').value.trim();
+    if (amount) {
+        paymentData.amount = amount;
+    }
+    
+    const memo = document.getElementById('receiveMemo').value.trim();
+    if (memo) {
+        paymentData.memo = memo;
+    }
+    
+    return paymentData;
+}
+
+// Update QR code with current payment data
+function updateQRCode() {
+    const qrcodeContainer = document.getElementById('qrcode');
+    qrcodeContainer.innerHTML = '';
+    
+    try {
+        // Get payment data
+        const paymentData = createQRPaymentData();
+        console.log("Created payment data:", JSON.stringify(paymentData, null, 2));
+        
+        // Convert to JSON and encode as base64
+        const jsonData = JSON.stringify(paymentData);
+        const base64Data = btoa(jsonData);
+        
+        // Create URI with liberdus:// prefix
+        const qrText = `liberdus://${base64Data}`;
+        console.log("QR code text length:", qrText.length);
+        console.log("QR code text (first 100 chars):", qrText.substring(0, 100) + (qrText.length > 100 ? "..." : ""));
+        
+        // Generate QR code
+        new QRCode(qrcodeContainer, {
+            text: qrText,
+            width: 200,
+            height: 200
+        });
+        
+        // Update preview
+        previewQRData(paymentData);
+        
+        return qrText;
+    } catch (error) {
+        console.error("Error in updateQRCode:", error);
+        
+        // Fallback to basic address QR code
+        const address = myAccount.keys.address;
+        new QRCode(qrcodeContainer, {
+            text: '0x' + address,
+            width: 200,
+            height: 200
+        });
+        
+        // Show error in preview
+        const previewElement = document.getElementById('qrDataPreview');
+        previewElement.innerHTML = `Error generating QR code: ${error.message}<br>Showing address QR code instead.`;
+        
+        return '0x' + address;
+    }
 }
 
 async function copyAddress() {
@@ -1740,7 +2304,16 @@ function openSendModal() {
     const submitButton = document.querySelector('#sendForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
     submitButton.disabled = true;
-// Check availability on input changes
+    
+    // Add QR code scan button handler
+    const scanButton = document.getElementById('scanQRButton');
+    // Remove any existing event listeners first
+    const newScanButton = scanButton.cloneNode(true);
+    scanButton.parentNode.replaceChild(newScanButton, scanButton);
+    newScanButton.addEventListener('click', scanQRCode);
+    console.log("Added click event listener to scan QR button");
+    
+    // Check availability on input changes
     let checkTimeout;
     usernameInput.addEventListener('input', (e) => {
         const username = normalizeUsername(e.target.value);
@@ -1792,6 +2365,370 @@ function openSendModal() {
 
     // Update addresses for first asset
     updateSendAddresses();
+}
+
+// Function to handle QR code scanning
+async function scanQRCode() {
+    try {
+        console.log("scanQRCode function called");
+        
+        // Get device capabilities
+        const capabilities = getDeviceCapabilities();
+        console.log("Device capabilities:", capabilities);
+        
+        // Check if BarcodeDetector API is supported
+        if (!capabilities.hasBarcodeDetector) {
+            console.log("BarcodeDetector API not supported, falling back to file input");
+            showToast("Your device doesn't support in-app QR scanning. Using file picker instead.", 3000, "info");
+            fallbackToFileInput();
+            return;
+        }
+        
+        // Show the scanner container
+        const scannerContainer = document.getElementById('qrScannerContainer');
+        scannerContainer.style.display = 'block';
+        
+        // Get video element
+        const video = document.getElementById('qrVideo');
+        
+        // Set up event listeners for scanner controls
+        const closeButton = document.getElementById('closeScanner');
+        const switchButton = document.getElementById('switchCamera');
+        
+        // Store current facing mode
+        let currentFacingMode = 'environment';
+        let scanningAnimationFrame;
+        
+        // Function to stop scanning
+        function stopScanning() {
+            console.log("Stopping QR scanner");
+            
+            // Stop all tracks in the stream
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            
+            // Hide the scanner container
+            scannerContainer.style.display = 'none';
+            
+            // Remove event listeners
+            closeButton.removeEventListener('click', stopScanning);
+            switchButton.removeEventListener('click', switchCamera);
+            
+            // Stop the scanning loop
+            if (scanningAnimationFrame) {
+                window.cancelAnimationFrame(scanningAnimationFrame);
+            }
+        }
+        
+        // Function to switch camera
+        async function switchCamera() {
+            console.log("Switching camera");
+            
+            // Stop current stream
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+            
+            // Toggle facing mode
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            console.log("New facing mode:", currentFacingMode);
+            
+            try {
+                // Start new stream with toggled facing mode
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: currentFacingMode }
+                });
+                
+                // Set new stream as video source
+                video.srcObject = stream;
+            } catch (error) {
+                console.error("Error switching camera:", error);
+                showToast("Failed to switch camera", 3000, "error");
+            }
+        }
+        
+        // Add event listeners
+        closeButton.addEventListener('click', stopScanning);
+        switchButton.addEventListener('click', switchCamera);
+        
+        // Check if camera access is available
+        if (!capabilities.hasCamera) {
+            console.log("Camera access not available, falling back to file input");
+            stopScanning();
+            fallbackToFileInput();
+            return;
+        }
+        
+        // Try to access the camera
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' }
+            });
+            
+            // Set the video source to the camera stream
+            video.srcObject = stream;
+            
+            // Wait for video to be ready
+            await new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    resolve();
+                };
+            });
+            
+            // Start playing the video
+            await video.play();
+            
+            console.log("Camera stream started");
+            
+            // Create a BarcodeDetector with QR code format
+            const barcodeDetector = new BarcodeDetector({ 
+                formats: ['qr_code'] 
+            });
+            
+            // Set up scanning loop
+            const scanFrame = async () => {
+                try {
+                    // Check if video is ready
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        // Detect barcodes in the current video frame
+                        const barcodes = await barcodeDetector.detect(video);
+                        
+                        // If a QR code is found
+                        if (barcodes.length > 0) {
+                            console.log("QR code detected:", barcodes[0].rawValue);
+                            
+                            // Process the QR code data
+                            processQRData(barcodes[0].rawValue);
+                            
+                            // Stop scanning
+                            stopScanning();
+                            
+                            // Show success message
+                            showToast('QR code scanned successfully', 2000, 'success');
+                            
+                            // Exit the scanning loop
+                            return;
+                        }
+                    }
+                    
+                    // Continue scanning
+                    scanningAnimationFrame = requestAnimationFrame(scanFrame);
+                } catch (error) {
+                    console.error("Error in scan frame:", error);
+                    scanningAnimationFrame = requestAnimationFrame(scanFrame);
+                }
+            };
+            
+            // Start the scanning loop
+            scanFrame();
+            
+        } catch (error) {
+            console.error("Error accessing camera:", error);
+            showToast('Failed to access camera. Please check permissions.', 3000, 'error');
+            
+            // Stop scanning
+            stopScanning();
+            
+            // Fall back to file input method
+            fallbackToFileInput();
+        }
+    } catch (error) {
+        console.error('Error in scanQRCode:', error);
+        showToast('Failed to scan QR code. Please try again.', 3000, 'error');
+    }
+}
+
+// Detect device capabilities
+function getDeviceCapabilities() {
+    return {
+        hasCamera: 'mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices,
+        hasBarcodeDetector: 'BarcodeDetector' in window,
+        isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream,
+        isPWA: window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches
+    };
+}
+
+// Fallback to file input method if camera access fails or BarcodeDetector is not supported
+function fallbackToFileInput() {
+    console.log("Falling back to file input method");
+    
+    const fileInput = document.getElementById('qrFileInput');
+    
+    // Clone and replace to remove any existing listeners
+    const newFileInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(newFileInput, fileInput);
+    
+    // Add change event listener
+    newFileInput.addEventListener('change', async (event) => {
+        if (event.target.files && event.target.files[0]) {
+            const file = event.target.files[0];
+            await processQRCodeImage(file);
+        }
+    });
+    
+    // Trigger file input
+    newFileInput.click();
+}
+
+// Process QR code image and extract data
+async function processQRCodeImage(file) {
+    try {
+        // Show processing message
+        showToast("Processing QR code...", 2000);
+        
+        // Process with Barcode Detection API
+        await processWithBarcodeAPI(file);
+    } catch (error) {
+        console.error('Error processing QR code image:', error);
+        showToast('Failed to read QR code. Please try again.', 3000, 'error');
+    }
+}
+
+// Process QR code using the Barcode Detection API
+async function processWithBarcodeAPI(file) {
+    try {
+        console.log("Using Barcode Detection API to scan QR code");
+        
+        // Create a BarcodeDetector with QR code format
+        const barcodeDetector = new BarcodeDetector({ 
+            formats: ['qr_code'] 
+        });
+        
+        // Create a blob URL for the file
+        const imageUrl = URL.createObjectURL(file);
+        console.log("Created blob URL for image");
+        
+        // Load the image
+        const img = new Image();
+        
+        // Create a promise to wait for the image to load
+        const imageLoaded = new Promise((resolve, reject) => {
+            img.onload = () => {
+                console.log(`Image loaded: ${img.width}x${img.height} pixels`);
+                resolve();
+            };
+            img.onerror = (e) => {
+                console.error("Error loading image:", e);
+                reject(new Error('Failed to load image'));
+            };
+        });
+        
+        // Set the image source
+        img.src = imageUrl;
+        
+        // Wait for the image to load
+        await imageLoaded;
+        
+        // Detect barcodes in the image
+        console.log("Detecting barcodes in image...");
+        const barcodes = await barcodeDetector.detect(img);
+        console.log(`Detected ${barcodes.length} barcodes`);
+        
+        // Release the blob URL
+        URL.revokeObjectURL(imageUrl);
+        
+        // Check if any barcodes were detected
+        if (barcodes.length === 0) {
+            console.log("No QR codes found in the image");
+            showToast("No QR code found in the image. Please try again.", 3000, "warning");
+            return;
+        }
+        
+        // Process the first detected barcode
+        const qrData = barcodes[0].rawValue;
+        console.log("QR code detected with Barcode API:", qrData);
+        
+        // Process the QR code data
+        processQRData(qrData);
+    } catch (error) {
+        console.error('Error with Barcode API:', error);
+        showToast('Error processing QR code. Please try again.', 3000, 'error');
+    }
+}
+
+// Process QR data and fill the send form
+function processQRData(qrText) {
+    try {
+        // Check if the QR code has the correct format
+        if (!qrText.startsWith('liberdus://')) {
+            // Try to handle it as a plain address or username
+            if (qrText.startsWith('0x') || /^[a-zA-Z0-9_-]+$/.test(qrText)) {
+                document.getElementById('sendToAddress').value = qrText;
+                document.getElementById('sendToAddress').dispatchEvent(new Event('input'));
+                showToast('QR code processed as address/username', 2000, 'success');
+                return;
+            }
+            
+            showToast('Invalid QR code format', 3000, 'error');
+            return;
+        }
+        
+        // Extract the base64 data
+        const base64Data = qrText.substring('liberdus://'.length);
+        
+        // Decode the base64 data to JSON
+        let jsonData;
+        try {
+            jsonData = atob(base64Data);
+        } catch (e) {
+            console.error('Failed to decode base64 data:', e);
+            showToast('Invalid QR code data format', 3000, 'error');
+            return;
+        }
+        
+        // Parse the JSON data
+        let qrData;
+        try {
+            qrData = JSON.parse(jsonData);
+        } catch (e) {
+            console.error('Failed to parse JSON data:', e);
+            showToast('Invalid QR code data structure', 3000, 'error');
+            return;
+        }
+        
+        // Validate required fields
+        if (!qrData.username) {
+            showToast('QR code missing required username', 3000, 'error');
+            return;
+        }
+        
+        // Fill the form fields
+        document.getElementById('sendToAddress').value = qrData.username;
+        
+        if (qrData.amount) {
+            document.getElementById('sendAmount').value = qrData.amount;
+        }
+        
+        if (qrData.memo) {
+            document.getElementById('sendMemo').value = qrData.memo;
+        }
+        
+        // If asset info provided, select matching asset
+        if (qrData.assetId && qrData.symbol) {
+            const assetSelect = document.getElementById('sendAsset');
+            const assetOption = Array.from(assetSelect.options).find((opt) =>
+                opt.text.includes(qrData.symbol)
+            );
+            if (assetOption) {
+                assetSelect.value = assetOption.value;
+                console.log(`Selected asset: ${assetOption.text} (value: ${assetOption.value})`);
+            } else {
+                console.log(`Asset with symbol ${qrData.symbol} not found in dropdown`);
+            }
+        }
+        
+        // Trigger username validation
+        document.getElementById('sendToAddress').dispatchEvent(new Event('input'));
+        
+        showToast('QR code scanned successfully', 2000, 'success');
+    } catch (error) {
+        console.error('Error processing QR data:', error);
+        showToast('Failed to process QR code data', 3000, 'error');
+    }
 }
 
 async function closeSendModal() {
@@ -1998,24 +2935,359 @@ console.log('payload is', payload)
     }
 }
 
-function openContactInfoModal(senderInfo) {
-    const modal = document.getElementById('contactInfoModal');
-    
-    // Set values
-    document.getElementById('contactInfoUsername').textContent = senderInfo.username || 'Not provided';
-    document.getElementById('contactInfoName').textContent = senderInfo.name || 'Not provided';
-    document.getElementById('contactInfoEmail').textContent = senderInfo.email || 'Not provided';
-    document.getElementById('contactInfoPhone').textContent = senderInfo.phone || 'Not provided';
-    document.getElementById('contactInfoLinkedin').textContent = senderInfo.linkedin || 'Not provided';
-    document.getElementById('contactInfoX').textContent = senderInfo.x || 'Not provided';
-    
-    // Show modal
-    modal.classList.add('active');
+// Contact Info Modal Management
+class ContactInfoModalManager {
+    constructor() {
+        this.modal = document.getElementById('contactInfoModal');
+        this.menuDropdown = document.getElementById('contactInfoMenuDropdown');
+        this.currentContactAddress = null;
+        this.needsContactListUpdate = false;  // track if we need to update the contact list
+        this.isEditing = false;
+        this.originalName = null;
+        this.setupEventListeners();
+    }
+
+    // Initialize event listeners that only need to be set up once
+    setupEventListeners() {
+        // Back button
+        this.modal.querySelector('.back-button').addEventListener('click', () => {
+            if (this.isEditing) {
+                this.exitEditMode(false);
+            } else {
+                this.close();
+            }
+        });
+
+        // Menu toggle
+        const menuButton = document.getElementById('contactInfoMenuButton');
+        menuButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.menuDropdown.classList.toggle('active');
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            this.menuDropdown.classList.remove('active');
+        });
+
+        // Edit button
+        document.getElementById('editContactButton').addEventListener('click', () => {
+            this.enterEditMode();
+            this.menuDropdown.classList.remove('active');
+        });
+
+        // Add friend button
+        document.getElementById('addFriendButton').addEventListener('click', () => {
+            if (!this.currentContactAddress) return;
+            
+            const contact = myData.contacts[this.currentContactAddress];
+            if (!contact) return;
+
+            // Toggle friend status
+            contact.friend = !contact.friend;
+
+            // Show appropriate toast message
+            showToast(contact.friend ? 'Added to friends' : 'Removed from friends');
+
+            // Update button text
+            this.updateFriendButton(contact.friend);
+
+            // Close the dropdown
+            this.menuDropdown.classList.remove('active');
+
+            // Mark that we need to update the contact list
+            this.needsContactListUpdate = true;
+
+            // Save state
+            saveState();
+        });
+
+        // Add keyboard event listener for Escape key
+        this.modal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isEditing) {
+                this.exitEditMode(false);
+            }
+        });
+    }
+
+    enterEditMode() {
+        this.isEditing = true;
+        const contact = myData.contacts[this.currentContactAddress];
+        this.originalName = contact?.name || '';
+        
+        // Update header
+        const header = this.modal.querySelector('.modal-header');
+        header.innerHTML = `
+            <button class="icon-button cancel-button" id="cancelEdit" aria-label="Cancel"></button>
+            <div class="modal-title">Edit Contact</div>
+            <button class="icon-button save-button" id="saveEdit" aria-label="Save"></button>
+        `;
+
+        // Setup header button listeners
+        header.querySelector('#cancelEdit').addEventListener('click', () => this.exitEditMode(false));
+        header.querySelector('#saveEdit').addEventListener('click', () => this.exitEditMode(true));
+
+        // Transform name field to edit mode
+        this.updateNameFieldToEditMode();
+    }
+
+    updateNameFieldToEditMode() {
+        const nameField = document.getElementById('contactInfoName');
+        const contact = myData.contacts[this.currentContactAddress];
+        const currentValue = contact?.name || '';
+        
+        nameField.innerHTML = `
+            <div class="contact-info-value editing">
+                <input 
+                    type="text" 
+                    class="edit-field-input"
+                    value="${currentValue}"
+                    placeholder="Enter contact name"
+                >
+                <button class="field-action-button ${currentValue ? 'clear' : 'add'}" aria-label="${currentValue ? 'Clear' : 'Add'}"></button>
+            </div>
+        `;
+
+        // Add event listeners
+        const input = nameField.querySelector('input');
+        const actionButton = nameField.querySelector('.field-action-button');
+
+        // Handle input changes
+        input.addEventListener('input', () => {
+            const hasValue = input.value.trim().length > 0;
+            actionButton.className = `field-action-button ${hasValue ? 'clear' : 'add'}`;
+            actionButton.setAttribute('aria-label', hasValue ? 'Clear' : 'Add');
+        });
+
+        // Handle action button clicks
+        actionButton.addEventListener('click', () => {
+            if (input.value.trim()) {
+                input.value = '';
+                actionButton.className = 'field-action-button add';
+                actionButton.setAttribute('aria-label', 'Add');
+            }
+            input.focus();
+        });
+
+        // Handle enter key
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.exitEditMode(true);
+            }
+        });
+    }
+
+    exitEditMode(save = false) {
+        if (save) {
+            // Save changes
+            const input = document.querySelector('.edit-field-input');
+            const newName = input.value.trim();
+            const contact = myData.contacts[this.currentContactAddress];
+            if (contact) {
+                contact.name = newName || null;
+                saveState();
+                this.needsContactListUpdate = true;
+            }
+        } else {
+            // Restore original name
+            const contact = myData.contacts[this.currentContactAddress];
+            if (contact) {
+                contact.name = this.originalName;
+            }
+        }
+
+        // Reset edit state
+        this.isEditing = false;
+        
+        // Restore original header
+        this.restoreHeader();
+        
+        // Update display
+        this.updateContactInfo(createDisplayInfo(myData.contacts[this.currentContactAddress]));
+    }
+
+    restoreHeader() {
+        const header = this.modal.querySelector('.modal-header');
+        header.innerHTML = `
+            <button class="back-button" id="closeContactInfoModal"></button>
+            <div class="modal-title">Contact Info</div>
+            <div class="header-actions">
+                <button class="icon-button chat-icon" id="contactInfoChatButton"></button>
+                <div class="dropdown">
+                    <button class="dropdown-menu-button" id="contactInfoMenuButton"></button>
+                    <div class="dropdown-menu" id="contactInfoMenuDropdown">
+                        <button class="dropdown-item" id="editContactButton">
+                            <span class="dropdown-icon edit-icon"></span>
+                            <span class="dropdown-text">Edit</span>
+                        </button>
+                        <button class="dropdown-item add-friend" id="addFriendButton">
+                            <span class="dropdown-icon add-friend-icon"></span>
+                            <span class="dropdown-text">Add Friend</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Reattach all necessary event listeners
+        const menuButton = document.getElementById('contactInfoMenuButton');
+        const menuDropdown = document.getElementById('contactInfoMenuDropdown');
+        const editButton = document.getElementById('editContactButton');
+        const addFriendButton = document.getElementById('addFriendButton');
+
+        // Menu button click handler
+        menuButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menuDropdown.classList.toggle('active');
+        });
+
+        // Edit button click handler
+        editButton.addEventListener('click', () => {
+            this.enterEditMode();
+            menuDropdown.classList.remove('active');
+        });
+
+        // Add friend button click handler
+        addFriendButton.addEventListener('click', () => {
+            if (!this.currentContactAddress) return;
+            const contact = myData.contacts[this.currentContactAddress];
+            if (!contact) return;
+            contact.friend = !contact.friend;
+            this.updateFriendButton(contact.friend);
+            menuDropdown.classList.remove('active');
+            this.needsContactListUpdate = true;
+            saveState();
+        });
+
+        // Back button click handler
+        this.modal.querySelector('.back-button').addEventListener('click', () => {
+            if (this.isEditing) {
+                this.exitEditMode(false);
+            } else {
+                this.close();
+            }
+        });
+
+        // Document click handler to close dropdown
+        document.addEventListener('click', () => {
+            menuDropdown.classList.remove('active');
+        });
+
+        // Restore chat button functionality and friend status
+        const contact = myData.contacts[this.currentContactAddress];
+        if (contact) {
+            this.setupChatButton({ address: this.currentContactAddress });
+            this.updateFriendButton(contact.friend || false);
+        }
+    }
+
+    // Update friend button text based on current status
+    updateFriendButton(isFriend) {
+        const button = document.getElementById('addFriendButton');
+        const textSpan = button.querySelector('.dropdown-text');
+        const iconSpan = button.querySelector('.dropdown-icon');
+        textSpan.textContent = isFriend ? 'Remove Friend' : 'Add Friend';
+        
+        // Toggle the removing class based on friend status
+        if (isFriend) {
+            button.classList.add('removing');
+            iconSpan.classList.add('removing');
+        } else {
+            button.classList.remove('removing');
+            iconSpan.classList.remove('removing');
+        }
+    }
+
+    // Update contact info values
+    async updateContactInfo(displayInfo) {
+        // Add avatar section at the top
+        const contactInfoList = this.modal.querySelector('.contact-info-list');
+        const avatarSection = document.createElement('div');
+        avatarSection.className = 'contact-avatar-section';
+        
+        // Generate identicon for the contact
+        const identicon = await generateIdenticon(displayInfo.address, 96);
+        
+        avatarSection.innerHTML = `
+            <div class="avatar">${identicon}</div>
+            <div class="name">${displayInfo.name !== 'Not provided' ? displayInfo.name : displayInfo.username}</div>
+            <div class="subtitle">${displayInfo.address}</div>
+        `;
+
+        // Remove existing avatar section if it exists
+        const existingAvatarSection = contactInfoList.querySelector('.contact-avatar-section');
+        if (existingAvatarSection) {
+            existingAvatarSection.remove();
+        }
+
+        // Add new avatar section at the top
+        contactInfoList.insertBefore(avatarSection, contactInfoList.firstChild);
+
+        const fields = {
+            'Username': 'contactInfoUsername',
+            'Name': 'contactInfoName',
+            'Email': 'contactInfoEmail',
+            'Phone': 'contactInfoPhone',
+            'LinkedIn': 'contactInfoLinkedin',
+            'X': 'contactInfoX'
+        };
+
+        Object.entries(fields).forEach(([field, elementId]) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                const value = displayInfo[field.toLowerCase()] || 'Not provided';
+                element.textContent = value;
+            }
+        });
+    }
+
+    // Set up chat button functionality
+    setupChatButton(displayInfo) {
+        const chatButton = document.getElementById('contactInfoChatButton');
+        if (displayInfo.address) {
+            chatButton.addEventListener('click', () => {
+                this.close();
+                openChatModal(displayInfo.address);
+            });
+            chatButton.style.display = 'block';
+        } else {
+            chatButton.style.display = 'none';
+        }
+    }
+
+    // Open the modal
+    async open(displayInfo) {
+        this.currentContactAddress = displayInfo.address;
+        await this.updateContactInfo(displayInfo);
+        this.setupChatButton(displayInfo);
+
+        // Update friend button status
+        const contact = myData.contacts[displayInfo.address];
+        if (contact) {
+            this.updateFriendButton(contact.friend || false);
+        }
+
+        this.modal.classList.add('active');
+    }
+
+    // Close the modal
+    close() {
+        this.currentContactAddress = null;
+        this.modal.classList.remove('active');
+        this.menuDropdown.classList.remove('active');
+
+        // If we made changes that affect the contact list, update it
+        if (this.needsContactListUpdate) {
+            updateContactsList();
+            this.needsContactListUpdate = false;
+        }
+    }
 }
 
-function closeContactInfoModal() {
-    document.getElementById('contactInfoModal').classList.remove('active');
-}
+// Create a singleton instance
+const contactInfoModal = new ContactInfoModalManager();
+
 
 function handleSignOut() {
 //    const shouldLeave = confirm('Do you want to leave this page?');
@@ -2051,7 +3323,14 @@ function handleSignOut() {
     
     handleSignOut.exit = true
 
-    // Reload the page to get fresh welcome page
+    // Add offline fallback
+    if (!navigator.onLine) {
+        // Just reset the UI state without clearing storage
+        document.getElementById('welcomeScreen').classList.add('active');
+        return;
+    }
+
+    // Only reload if online
     window.location.reload();
 }
 handleSignOut.exit = false
@@ -2114,27 +3393,34 @@ async function handleSendMessage() {
     // Encrypt message using shared secret
     const encMessage = encryptChacha(dhkey, message)
 
-    // Create sender info object
-    const senderInfo = {
-        username: myAccount.username,
-        name: myData.account.name,
-        email: myData.account.email,
-        phone: myData.account.phone,
-        linkedin: myData.account.linkedin,
-        x: myData.account.x
-    };
-    // Encrypt sender info
-    const encSenderInfo = encryptChacha(dhkey, stringify(senderInfo));
-
     // Create message payload
     const payload = {
         message: encMessage,
-        senderInfo: encSenderInfo,
         encrypted: true,
         encryptionMethod: 'xchacha20poly1305',
         pqEncSharedKey: bin2base64(cipherText),
         sent_timestamp: Date.now()
     };
+
+    // Always include username, but only include other info if recipient is a friend
+    const contact = myData.contacts[currentAddress];
+    // Create basic sender info with just username
+    const senderInfo = {
+        username: myAccount.username
+    };
+    
+    // Add additional info only if recipient is a friend
+    if (contact && contact.friend) {
+        // Add more personal details for friends
+        senderInfo.name = myData.account.name;
+        senderInfo.email = myData.account.email;
+        senderInfo.phone = myData.account.phone;
+        senderInfo.linkedin = myData.account.linkedin;
+        senderInfo.x = myData.account.x;
+    }
+    
+    // Always encrypt and send senderInfo (which will contain at least the username)
+    payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
 
     try {
 //console.log('payload is', payload)
@@ -2186,12 +3472,6 @@ async function handleSendMessage() {
         // Scroll to bottom of chat modal
         messagesList.parentElement.scrollTop = messagesList.parentElement.scrollHeight;
 
-/*  This is probably not needed
-        // Update chat list if visible
-        if (document.getElementById('chatsScreen').classList.contains('active')) {
-            updateChatList();
-        }
-*/
     } catch (error) {
         console.error('Message error:', error);
         alert('Failed to send message. Please try again.');
@@ -2202,7 +3482,31 @@ async function handleSendMessage() {
 async function updateWalletView() {
     const walletData = myData.wallet
     
-    await updateWalletBalances()
+    if (isOnline) {
+        // Online: Get from network and cache
+        await updateWalletBalances();
+        try {
+            const walletCacheData = addVersionToData({
+                assetId: myAccount.keys.address,
+                wallet: walletData
+            });
+            await saveData(STORES.WALLET, walletCacheData);
+            console.log('Successfully cached wallet data:', walletCacheData);
+        } catch (error) {
+            console.error('Failed to cache wallet data:', error);
+        }
+    } else {
+        // Offline: Get from cache
+        try {
+            const cachedData = await getData(STORES.WALLET, myAccount.keys.address);
+            if (cachedData) {
+                myData.wallet = cachedData.wallet;
+                console.log('Using cached wallet data from:', new Date(cachedData.lastUpdated));
+            }
+        } catch (error) {
+            console.error('Failed to read cached wallet data:', error);
+        }
+    }
 
     // Update total networth
     document.getElementById('walletTotalBalance').textContent = (walletData.networth || 0).toFixed(2);
@@ -2379,18 +3683,23 @@ function handleAccountUpdate(event) {
 
 async function queryNetwork(url) {
 //console.log('query', url)
-    if (! checkOnlineStatus()){ 
+    if (!await checkOnlineStatus()) {
 //TODO show user we are not online
         console.log("not online")
         alert('not online')
         return null 
     }
-    const randomGateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
+    const randomGateway = getGatewayForRequest();
+    if (!randomGateway) {
+        console.error('No gateway available for network query');
+        return null;
+    }
+    
     try {
         const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}${url}`);
-console.log('query', `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}${url}`)
+        console.log('query', `${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}${url}`)
         const data = await response.json();
-console.log('response', data)
+        console.log('response', data)
         return data
     } catch (error) {
         console.error(`Error fetching balance for address ${addr.address}:`, error);
@@ -2760,24 +4069,31 @@ async function postRegisterAlias(alias, keys){
 }
 
 async function injectTx(tx, keys){
-    const txid = await signObj(tx, keys)  // add the sign obj to tx
-    // Get random gateway
-    const randomGateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
-    const options = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: stringify({tx: stringify(tx)})
+    if (!isOnline) {
+        return null 
     }
+    const randomGateway = getGatewayForRequest();
+    if (!randomGateway) {
+        console.error('No gateway available for transaction injection');
+        return null;
+    }
+    
     try {
+        const txid = await signObj(tx, keys)  // add the sign obj to tx
+        const options = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: stringify({tx: stringify(tx)})
+        }
         const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/inject`, options);
         const data = await response.json();     
         data.txid = txid           
         return data
     } catch (error) {
-        console.error('Error injecting tx:', error, tx);
-        return error;
+        console.error('Error injecting transaction:', error);
+        return null
     }
 }
 
@@ -2851,38 +4167,67 @@ function decryptChacha(key, encrypted) {
     }
 }
 
-// Service Worker Management
+// Service Worker Registration and Management
 async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) {
         console.log('Service Worker not supported');
+        Logger.log('Service Worker not supported');
         return;
     }
 
     try {
-        // Check if there's an existing registration
-        const existingReg = await navigator.serviceWorker.getRegistration();
-        if (existingReg) {
-            // If service worker is already registered and active
-            if (existingReg.active) {
-                console.log('Service Worker already registered and active');
-                return existingReg;
+        // Get the current service worker registration
+        const registration = await navigator.serviceWorker.getRegistration();
+        
+        // If there's an existing service worker
+        if (registration?.active) {
+            console.log('Service Worker already registered and active');
+            Logger.log('Service Worker already registered and active');
+            
+            // Set up message handling for the active worker
+            setupServiceWorkerMessaging(registration.active);
+            
+            // Check if there's a new version waiting
+            if (registration.waiting) {
+                // Notify user about new version
+                showUpdateNotification(registration);
             }
-            // If not active, unregister and re-register
-            await existingReg.unregister();
+            
+            return registration;
         }
 
-        // Register new service worker with correct path and scope
-        const registration = await navigator.serviceWorker.register('./service-worker.js', {
-            scope: './'
+        // Explicitly unregister any existing registration
+        if (registration) {
+            await registration.unregister();
+        }
+
+        // Register new service worker
+        const newRegistration = await navigator.serviceWorker.register('./service-worker.js', {
+            scope: './',
+            updateViaCache: 'none' // Don't cache service worker file
         });
-        console.log('Service Worker registered successfully:', registration.scope);
-        Logger.log('Service Worker registered successfully:', registration.scope);
+
+        console.log('Service Worker registered successfully:', newRegistration.scope);
+        Logger.log('Service Worker registered successfully:', newRegistration.scope);
+
+        // Set up new service worker handling
+        newRegistration.addEventListener('updatefound', () => {
+            const newWorker = newRegistration.installing;
+            
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New service worker available
+                    showUpdateNotification(newRegistration);
+                }
+            });
+        });
 
         // Wait for the service worker to be ready
         await navigator.serviceWorker.ready;
         console.log('Service Worker ready');
+        Logger.log('Service Worker ready');
 
-        return registration;
+        return newRegistration;
     } catch (error) {
         console.error('Service Worker registration failed:', error);
         Logger.error('Service Worker registration failed:', error);
@@ -2890,10 +4235,8 @@ async function registerServiceWorker() {
     }
 }
 
-// Add service worker message handling
+// Handle service worker messages
 function setupServiceWorkerMessaging() {
-    if (!('serviceWorker' in navigator)) return;
-
     // Listen for messages from service worker
     navigator.serviceWorker.addEventListener('message', (event) => {
         const data = event.data;
@@ -2902,6 +4245,25 @@ function setupServiceWorkerMessaging() {
         switch (data.type) {
             case 'error':
                 console.error('Service Worker error:', data.error);
+                break;
+            case 'OFFLINE_MODE':
+                console.warn('Service worker detected offline mode:', data.url);
+                Logger.warn('Service worker detected offline mode:', data.url);
+                isOnline = false;
+                updateUIForConnectivity();
+                markConnectivityDependentElements();
+                break;
+            case 'CACHE_UPDATED':
+                console.log('Cache updated:', data.url);
+                break;
+            case 'CACHE_ERROR':
+                console.error('Cache error:', data.error);
+                break;
+            case 'OFFLINE_READY':
+                showToast('App ready for offline use');
+                break;
+            case 'NEW_CONTENT':
+                showUpdateNotification();
                 break;
         }
     });
@@ -2934,7 +4296,8 @@ function setupAppStateManagement() {
             const accountData = {
                 address: myAccount.keys.address,
                 network: {
-                    gateways: network.gateways
+                    gateways: myData.network.gateways,
+                    defaultGatewayIndex: myData.network.defaultGatewayIndex
                 }
             };
             
@@ -3002,11 +4365,6 @@ function requestNotificationPermission() {
     }
 }
 
-function openLogsModal() {
-  const modal = document.getElementById('logsModal');
-  modal.classList.add('active');
-  updateLogsView();
-}
 
 async function updateLogsView() {
     const logsContainer = document.getElementById('logsContainer');
@@ -3077,3 +4435,1102 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function debounce(func, waitFn) {
+    let timeout;
+    return function executedFunction(...args) {
+        const wait = typeof waitFn === 'function' ? waitFn(args[0]) : waitFn;
+        
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function truncateMessage(message, maxLength = 50) {
+    return message.length > maxLength
+        ? message.substring(0, maxLength) + '...'
+        : message;
+}
+
+// Add these search-related functions
+function searchMessages(searchText) {
+    if (!searchText || !myData?.contacts) return [];
+    
+    const results = [];
+    const searchLower = searchText.toLowerCase();
+    
+    // Search through all contacts and their messages
+    Object.entries(myData.contacts).forEach(([address, contact]) => {
+        if (!contact.messages) return;
+        
+        contact.messages.forEach((message, index) => {
+            if (message.message.toLowerCase().includes(searchLower)) {
+                // Highlight matching text
+                const messageText = message.message;
+                const highlightedText = messageText.replace(
+                    new RegExp(searchText, 'gi'),
+                    match => `<mark>${match}</mark>`
+                );
+                
+                results.push({
+                    contactAddress: address,
+                    username: contact.username || address,
+                    messageId: index,
+                    message: message,  // Pass the entire message object
+                    timestamp: message.timestamp,
+                    preview: truncateMessage(highlightedText, 100),
+                    my: message.my  // Include the my property
+                });
+            }
+        });
+    });
+    
+    return results.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function displaySearchResults(results) {
+    const searchResults = document.getElementById('searchResults');
+    // Create a ul element to properly contain the list items
+    const resultsList = document.createElement('ul');
+    resultsList.className = 'chat-list';
+    
+    results.forEach(async result => {
+        const resultElement = document.createElement('li');
+        resultElement.className = 'chat-item search-result-item';
+        
+        // Generate identicon for the contact
+        const identicon = await generateIdenticon(result.contactAddress);
+        
+        // Format message preview with "You:" prefix if it's a sent message
+        const messagePreview = result.my ? `You: ${result.preview}` : result.preview;
+        
+        resultElement.innerHTML = `
+            <div class="chat-avatar">
+                ${identicon}
+            </div>
+            <div class="chat-content">
+                <div class="chat-header">
+                    <div class="chat-name">${result.username}</div>
+                    <div class="chat-time">${formatTime(result.timestamp)}</div>
+                </div>
+                <div class="chat-message">
+                    ${messagePreview}
+                </div>
+            </div>
+        `;
+
+        resultElement.addEventListener('click', () => {
+            handleSearchResultClick(result);
+        });
+
+        resultsList.appendChild(resultElement);
+    });
+
+    // Clear and append the new list
+    searchResults.innerHTML = '';
+    searchResults.appendChild(resultsList);
+}
+
+function displayEmptyState(containerId, message = "No results found") {
+    const resultsContainer = document.getElementById(containerId);
+    resultsContainer.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-message">${message}</div>
+        </div>
+    `;
+}
+
+function handleSearchResultClick(result) {
+    try {
+        // Close search modal
+        document.getElementById('searchModal').classList.remove('active');
+        
+        // Switch to chats view if not already there
+        switchView('chats');
+        
+        // Open the chat with this contact
+        handleResultClick(result.contactAddress);
+        
+        // Scroll to and highlight the message
+        setTimeout(() => {
+            const messageElement = document.querySelector(`[data-message-id="${result.messageId}"]`);
+            if (messageElement) {
+                messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                messageElement.classList.add('highlighted');
+                setTimeout(() => messageElement.classList.remove('highlighted'), 2000);
+            } else {
+                console.error('Message not found');
+                // Could add a toast notification here
+            }
+        }, 300);
+    } catch (error) {
+        console.error('Error handling search result:', error);
+        // Could add error notification here
+    }
+}
+
+// Add the search input handler
+function initializeSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const messageSearch = document.getElementById('messageSearch');
+    const searchResults = document.getElementById('searchResults');
+    const searchModal = document.getElementById('searchModal');
+    
+    // Debounced search function
+    const debouncedSearch = debounce((searchText) => {
+        const trimmedText = searchText.trim();
+        
+        if (!trimmedText) {
+            searchResults.innerHTML = '';
+            return;
+        }
+
+        const results = searchMessages(trimmedText);
+        if (results.length === 0) {
+            displayEmptyState('searchResults', "No messages found");
+        } else {
+            displaySearchResults(results);
+        }
+    }, (searchText) => searchText.length === 1 ? 600 : 300); // Dynamic wait time
+    
+    // Connect search input to modal input
+    searchInput.addEventListener('click', () => {
+        searchModal.classList.add('active');
+        messageSearch.focus();
+    });
+    
+    // Handle search input
+    messageSearch.addEventListener('input', (e) => {
+        debouncedSearch(e.target.value);
+    });
+}
+
+// Add loading state display function
+function displayLoadingState() {
+    const searchResults = document.getElementById('searchResults');
+    searchResults.innerHTML = `
+        <div class="search-loading">
+            Searching messages
+        </div>
+    `;
+}
+
+async function handleResultClick(contactAddress) {
+    // Get the contact info
+    const contact = myData.contacts[contactAddress];
+    if (!contact) return;
+
+    // Open chat modal
+    const chatModal = document.getElementById('chatModal');
+    chatModal.classList.add('active');
+
+    // Generate the identicon first
+    const identicon = await generateIdenticon(contactAddress);
+
+    // Update chat header with contact info and avatar - match exact structure from chat view
+    const modalHeader = chatModal.querySelector('.modal-header');
+    modalHeader.innerHTML = `
+        <button class="back-button" id="closeChatModal"></button>
+        <div class="chat-user-info">
+            <div class="modal-avatar">${identicon}</div>
+            <div class="modal-title">${contact.username || contactAddress}</div>
+        </div>
+        <div class="header-actions">
+            <button
+              class="icon-button add-friend-icon"
+              id="chatAddFriendButton"
+              aria-label="Add friend"
+              style="display: ${contact.friend ? 'none' : 'flex'}"
+            ></button>
+        </div>
+    `;
+
+    // Re-attach close button event listener
+    document.getElementById('closeChatModal').addEventListener('click', () => {
+        chatModal.classList.remove('active');
+    });
+
+    // Add click handler for username to show contact info
+    const userInfo = chatModal.querySelector('.chat-user-info');
+    userInfo.onclick = () => {
+        if (contact) {
+            contactInfoModal.open(createDisplayInfo(contact));
+        }
+    };
+
+    // Add click handler for add friend button if visible
+    const addFriendButton = document.getElementById('chatAddFriendButton');
+    if (addFriendButton && !contact.friend) {
+        addFriendButton.onclick = () => {
+            contact.friend = true;
+            showToast('Added to friends');
+            addFriendButton.style.display = 'none';
+            saveState();
+        };
+    }
+
+    // Ensure messages container structure matches
+    const messagesContainer = chatModal.querySelector('.messages-container');
+    if (!messagesContainer) {
+        const container = document.createElement('div');
+        container.className = 'messages-container';
+        container.innerHTML = '<div class="messages-list"></div>';
+        chatModal.appendChild(container);
+    }
+
+    // Load messages
+    const messagesList = chatModal.querySelector('.messages-list');
+    messagesList.innerHTML = ''; // Clear existing messages
+
+    // Add messages if they exist
+    if (contact.messages && contact.messages.length > 0) {
+        contact.messages.forEach((msg, index) => {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${msg.my ? 'sent' : 'received'}`;
+            messageElement.setAttribute('data-message-id', index);
+            messageElement.innerHTML = `
+                <div class="message-content">${msg.message}</div>
+                <div class="message-time">${formatTime(msg.timestamp)}</div>
+            `;
+            messagesList.appendChild(messageElement);
+        });
+        
+        // Scroll to bottom of messages
+        messagesList.scrollTop = messagesList.scrollHeight;
+    }
+
+    // Ensure input container exists
+    const inputContainer = chatModal.querySelector('.message-input-container');
+    if (!inputContainer) {
+        const container = document.createElement('div');
+        container.className = 'message-input-container';
+        container.innerHTML = `
+            <textarea class="message-input" placeholder="Type a message..."></textarea>
+            <button class="send-button" id="handleSendMessage">
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                </svg>
+            </button>
+        `;
+        chatModal.appendChild(container);
+    }
+
+    // Store current contact for message sending
+    handleResultClick.currentContact = contactAddress;
+}
+
+// Contact search functions
+function searchContacts(searchText) {
+    if (!searchText || !myData?.contacts) return [];
+
+    const results = [];
+    const searchLower = searchText.toLowerCase();
+
+    // Search through all contacts
+    Object.entries(myData.contacts).forEach(([address, contact]) => {
+        // Fields to search through
+        const searchFields = [
+            contact.username,
+            contact.name,
+            contact.email,
+            contact.phone,
+            contact.linkedin,
+            contact.x,
+        ].filter(Boolean); // Remove null/undefined values
+
+        // Check if any field matches
+        const matches = searchFields.some((field) =>
+            field.toLowerCase().includes(searchLower)
+        );
+
+        if (matches) {
+            // Determine match type for sorting
+            const exactMatch = searchFields.some(
+                (field) => field.toLowerCase() === searchLower
+            );
+            const startsWithMatch = searchFields.some((field) =>
+                field.toLowerCase().startsWith(searchLower)
+            );
+
+            results.push({
+                ...contact,
+                address,
+                matchType: exactMatch ? 2 : startsWithMatch ? 1 : 0,
+            });
+        }
+    });
+
+    // Sort results by match type and then alphabetically by username
+    return results.sort((a, b) => {
+        if (a.matchType !== b.matchType) {
+            return b.matchType - a.matchType;
+        }
+        return (a.username || "").localeCompare(b.username || "");
+    });
+}
+
+function displayContactResults(results, searchText) {
+    const resultsContainer = document.getElementById("contactSearchResults");
+    resultsContainer.innerHTML = "";
+
+    results.forEach(async (contact) => {
+        const contactElement = document.createElement("div");
+        contactElement.className = "chat-item contact-item";
+        
+        // Generate identicon for the contact
+        const identicon = await generateIdenticon(contact.address);
+        
+        // Determine which field matched for display
+        const matchedField = [
+            { field: 'username', value: contact.username },
+            { field: 'name', value: contact.name },
+            { field: 'email', value: contact.email },
+            { field: 'phone', value: contact.phone },
+            { field: 'linkedin', value: contact.linkedin },
+            { field: 'x', value: contact.x }
+        ].find(f => f.value && f.value.toLowerCase().includes(searchText.toLowerCase()));
+
+        // Create match preview with label and highlighted matched value
+        const matchPreview = matchedField 
+            ? `${matchedField.field}: ${matchedField.value.replace(
+                new RegExp(searchText, 'gi'),
+                match => `<mark>${match}</mark>`
+              )}`
+            : '';
+        
+        contactElement.innerHTML = `
+            <div class="chat-avatar">
+                ${identicon}
+            </div>
+            <div class="chat-content">
+                <div class="chat-header">
+                    <span class="chat-name">${contact.username || "Unknown"}</span>
+                </div>
+                <div class="chat-message">
+                    <span class="match-label">${matchPreview}</span>
+                </div>
+            </div>
+        `;
+
+        // Add click handler to show contact info
+        contactElement.addEventListener("click", () => {
+            // Create display info and open contact info modal
+            contactInfoModal.open(createDisplayInfo(contact));
+            // Close the search modal
+            document.getElementById("contactSearchModal").classList.remove("active");
+        });
+
+        resultsContainer.appendChild(contactElement);
+    });
+}
+
+// Create a display info object from a contact object
+function createDisplayInfo(contact) {
+    return {
+        username: contact.senderInfo?.username || contact.username || contact.address.slice(0,8) + '...' + contact.address.slice(-6),
+        name: contact.name || contact.senderInfo?.name || 'Not provided',
+        email: contact.senderInfo?.email || 'Not provided',
+        phone: contact.senderInfo?.phone || 'Not provided',
+        linkedin: contact.senderInfo?.linkedin || 'Not provided',
+        x: contact.senderInfo?.x || 'Not provided',
+        address: contact.address
+    };
+}
+
+// Add this function before the ContactInfoModalManager class
+function showToast(message, duration = 2000, type = "default") {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    // Generate a unique ID for this toast
+    const toastId = 'toast-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    toast.id = toastId;
+    
+    toastContainer.appendChild(toast);
+    
+    // Force reflow to enable transition
+    toast.offsetHeight;
+    
+    // Show the toast
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+    
+    // If duration is provided, auto-hide the toast
+    if (duration > 0) {
+        setTimeout(() => {
+            hideToast(toastId);
+        }, duration);
+    }
+    
+    return toastId;
+}
+
+// Function to hide a specific toast by ID
+function hideToast(toastId) {
+    const toast = document.getElementById(toastId);
+    if (!toast) return;
+    
+    toast.classList.remove('show');
+    setTimeout(() => {
+        const toastContainer = document.getElementById('toastContainer');
+        if (toast.parentNode === toastContainer) {
+            toastContainer.removeChild(toast);
+        }
+    }, 300); // Match transition duration
+}
+
+// Show update notification to user
+function showUpdateNotification(registration) {
+    // Create update notification
+    const updateNotification = document.createElement('div');
+    updateNotification.className = 'update-notification';
+    updateNotification.innerHTML = `
+        <div class="update-message">
+            A new version is available
+            <button class="update-button">
+                Update Now
+            </button>
+        </div>
+    `;
+    
+    // Add click handler directly to the button
+    updateNotification.querySelector('.update-button').addEventListener('click', () => {
+        updateServiceWorker();
+    });
+    
+    document.body.appendChild(updateNotification);
+}
+
+// Update the service worker
+async function updateServiceWorker() {
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) return;
+
+    // If there's a waiting worker, activate it
+    if (registration.waiting) {
+        // Send message to service worker to skip waiting
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        
+        // Reload once the new service worker takes over
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('New service worker activated, reloading...');
+            window.location.reload();
+        });
+    }
+}
+
+// Handle online/offline events
+async function handleConnectivityChange(event) {
+    const wasOffline = !isOnline;
+    isOnline = navigator.onLine;
+    
+    console.log(`Connectivity changed. Online: ${isOnline}`);
+    
+    if (isOnline && wasOffline) {
+        // We just came back online
+        updateUIForConnectivity();
+        showToast("You're back online!", 3000, "online");
+
+        // Verify username is still valid on the network
+        await verifyUsernameOnReconnect();
+        
+        // warmup db
+        await getData(STORES.WALLET);
+
+        // Check database health after reconnection
+        const dbHealthy = await checkDatabaseHealth();
+        if (!dbHealthy) {
+            console.warn('Database appears to be in an unhealthy state, reloading app...');
+            showToast("Database issue detected, reloading application...", 3000, "warning");
+            setTimeout(() => window.location.reload(), 3000);
+            return;
+        }
+        
+        // Force update data with reconnection handling
+        if (myAccount && myAccount.keys) {
+            try {
+                // Update chats with reconnection handling
+                await updateChatList('force');
+                
+                // Update contacts with reconnection handling
+                await updateContactsList();
+                
+                // Update wallet with reconnection handling
+                await updateWalletView();
+
+            } catch (error) {
+                console.error('Failed to update data on reconnect:', error);
+                showToast("Some data couldn't be updated. Please refresh if you notice missing information.", 5000, "warning");
+            }
+        }
+    } else if (!isOnline) {
+        // We just went offline
+        updateUIForConnectivity();
+        showToast("You're offline. Some features are unavailable.", 3000, "offline");
+    }
+}
+
+// Setup connectivity detection
+function setupConnectivityDetection() {
+    // Listen for browser online/offline events
+    window.addEventListener('online', handleConnectivityChange);
+    window.addEventListener('offline', handleConnectivityChange);
+
+    // Mark elements that depend on connectivity
+    markConnectivityDependentElements();
+
+    // Check initial status (don't trust the browser's initial state)
+    checkConnectivity();
+
+    // Periodically check connectivity (every 30 seconds)
+    setInterval(checkConnectivity, 30000);
+}
+
+// Mark elements that should be disabled when offline
+function markConnectivityDependentElements() {
+    // Elements that require network connectivity
+    const networkDependentElements = [
+        // Chat related
+        '#handleSendMessage',
+        '.message-input',
+        '#newChatButton',
+        
+        // Wallet related
+        '#openSendModal',
+        '#refreshBalance',
+        '#sendForm button[type="submit"]',
+        
+        // Contact related
+        '#chatRecipient',
+        '#chatAddFriendButton',
+        '#addFriendButton',
+        
+        // Profile related
+        '#accountForm button[type="submit"]',
+        '#createAccountForm button[type="submit"]',
+        '#importForm button[type="submit"]',
+
+        // menu list buttons
+        '.menu-item[id="openAccountForm"]',
+        '.menu-item[id="openNetwork"]',
+        '.menu-item[id="openExplorer"]',
+        '.menu-item[id="openMonitor"]',
+        '.menu-item[id="openAbout"]',
+        '.menu-item[id="openRemoveAccount"]',
+        
+    ];
+
+    // Add data attribute to all network-dependent elements
+    networkDependentElements.forEach(selector => {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(element => {
+            element.setAttribute('data-requires-connection', 'true');
+            
+            // Add tooltip for disabled state
+            element.title = 'This feature requires an internet connection';
+            
+            // Add aria label for accessibility
+            element.setAttribute('aria-disabled', !isOnline);
+        });
+    });
+}
+
+// Update UI elements based on connectivity status
+function updateUIForConnectivity() {
+    const networkDependentElements = document.querySelectorAll('[data-requires-connection]');
+    const offlineIndicator = document.getElementById('offlineIndicator');
+    
+    // Update offline indicator in header
+    if (offlineIndicator) {
+        if (!isOnline) {
+            offlineIndicator.style.opacity = '1';
+            offlineIndicator.style.visibility = 'visible';
+            offlineIndicator.style.width = 'auto';
+            offlineIndicator.style.padding = '4px 8px';
+            offlineIndicator.style.overflow = 'visible';
+        } else {
+            offlineIndicator.style.opacity = '0';
+            offlineIndicator.style.visibility = 'hidden';
+            offlineIndicator.style.width = '0';
+            offlineIndicator.style.padding = '0';
+            offlineIndicator.style.overflow = 'hidden';
+        }
+    }
+    
+    networkDependentElements.forEach(element => {
+        if (!isOnline) {
+            // Disable element
+            element.disabled = true;
+            element.classList.add('offline-disabled');
+            
+            // If it's a form, prevent submission
+            if (element.form) {
+                element.form.addEventListener('submit', preventOfflineSubmit);
+            }
+        } else {
+            // Enable element
+            element.disabled = false;
+            element.classList.remove('offline-disabled');
+            
+            // Remove form submit prevention
+            if (element.form) {
+                element.form.removeEventListener('submit', preventOfflineSubmit);
+            }
+        }
+        
+        // Update aria-disabled state
+        element.setAttribute('aria-disabled', !isOnline);
+    });
+}
+
+// Prevent form submissions when offline
+function preventOfflineSubmit(event) {
+    if (!isOnline) {
+        event.preventDefault();
+        showToast('This action requires an internet connection', 3000, 'error');
+    }
+}
+
+
+// Add global isOnline variable at the top with other globals
+let isOnline = true; // Will be updated by connectivity checks
+
+// Add checkConnectivity function before setupConnectivityDetection
+async function checkConnectivity() {
+    const wasOffline = !isOnline;
+    isOnline = await checkOnlineStatus();
+    
+    if (isOnline !== wasOffline) {
+        // Only trigger change handler if state actually changed
+        await handleConnectivityChange({ type: isOnline ? 'online' : 'offline' });
+    }
+}
+
+// Verify username availability when coming back online
+async function verifyUsernameOnReconnect() {
+    // Only proceed if user is logged in
+    if (!myAccount || !myAccount.username) {
+        console.log('No active account to verify');
+        return;
+    }
+    
+    console.log('Verifying username on reconnect:', myAccount.username);
+    
+    // Check if the username is still valid on the network
+    const availability = await checkUsernameAvailability(myAccount.username, myAccount.keys.address);
+    
+    if (availability !== 'mine') {
+        console.log('Username verification failed on reconnect:', availability);
+        
+        // Show a notification to the user
+        showToast('Your account is no longer valid on the network. You will be signed out.', 5000, 'error');
+        
+        // Wait a moment for the user to see the toast
+        setTimeout(() => {
+            // Sign out the user
+            handleSignOut();
+        }, 5000);
+    } else {
+        console.log('Username verified successfully on reconnect');
+    }
+}
+
+async function checkDatabaseHealth() {
+    try {
+        // Try to access each store to verify database is working
+        for (const store of Object.values(STORES)) {
+            try {
+                // Just try to read any data from each store
+                const testKey = await getData(store, null);
+                console.log(`Database store ${store} is accessible`);
+            } catch (error) {
+                console.error(`Database store ${store} access error:`, error);
+                // If there's an error, we might need to reinitialize
+                return false;
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error('Database health check failed:', error);
+        return false;
+    }
+}
+
+// Gateway Management Functions
+
+// Function to initialize the gateway configuration
+// TODO: can remove this eventually since new account creation does this
+function initializeGatewayConfig() {
+    // Safety check for myData
+    if (!myData) {
+        console.error('Cannot initialize gateway config: myData is null');
+        return;
+    }
+
+    // Ensure network property exists
+    if (!myData.network) {
+        myData.network = {};
+    }
+
+    // Ensure gateways array exists
+    if (!myData.network.gateways) {
+        myData.network.gateways = [];
+    }
+
+    // Ensure defaultGatewayIndex property exists and set to -1 (random selection)
+    if (myData.network.defaultGatewayIndex === undefined) {
+        myData.network.defaultGatewayIndex = -1; // -1 means use random selection
+    }
+
+    // If no gateways, initialize with system gateways
+    if (myData.network.gateways.length === 0) {
+        // Add system gateways from the global network object
+        if (network && network.gateways) {
+            network.gateways.forEach(gateway => {
+                myData.network.gateways.push({
+                    protocol: gateway.protocol,
+                    host: gateway.host,
+                    port: gateway.port,
+                    name: `${gateway.host} (System)`,
+                    isSystem: true,
+                    isDefault: false
+                });
+            });
+        }
+    }
+}
+
+// Function to open the gateway form
+function openGatewayForm() {
+    // Close menu modal
+    document.getElementById('menuModal').classList.remove('active');
+
+    // Initialize gateway configuration if needed
+    initializeGatewayConfig();
+
+    // Show gateway modal
+    document.getElementById('gatewayModal').classList.add('active');
+
+    // Populate gateway list
+    updateGatewayList();
+}
+
+// Function to close the gateway form
+function closeGatewayForm() {
+    document.getElementById('gatewayModal').classList.remove('active');
+}
+
+// Function to open the add gateway form
+function openAddGatewayForm() {
+    // Hide gateway modal
+    document.getElementById('gatewayModal').classList.remove('active');
+    
+    // Reset form
+    document.getElementById('gatewayForm').reset();
+    document.getElementById('gatewayEditIndex').value = -1;
+    document.getElementById('addEditGatewayTitle').textContent = 'Add Gateway';
+    
+    // Show add/edit gateway modal
+    document.getElementById('addEditGatewayModal').classList.add('active');
+}
+
+// Function to open the edit gateway form
+function openEditGatewayForm(index) {
+    // Hide gateway modal
+    document.getElementById('gatewayModal').classList.remove('active');
+    
+    // Get gateway data
+    const gateway = myData.network.gateways[index];
+    
+    // Populate form
+    document.getElementById('gatewayName').value = gateway.name;
+    document.getElementById('gatewayProtocol').value = gateway.protocol;
+    document.getElementById('gatewayHost').value = gateway.host;
+    document.getElementById('gatewayPort').value = gateway.port;
+    document.getElementById('gatewayEditIndex').value = index;
+    document.getElementById('addEditGatewayTitle').textContent = 'Edit Gateway';
+    
+    // Show add/edit gateway modal
+    document.getElementById('addEditGatewayModal').classList.add('active');
+}
+
+// Function to close the add/edit gateway form
+function closeAddEditGatewayForm() {
+    document.getElementById('addEditGatewayModal').classList.remove('active');
+    document.getElementById('gatewayModal').classList.add('active');
+    updateGatewayList();
+}
+
+// Function to update the gateway list display
+function updateGatewayList() {
+    const gatewayList = document.getElementById('gatewayList');
+
+    // Clear existing list
+    gatewayList.innerHTML = '';
+
+    // If no gateways, show empty state
+    if (myData.network.gateways.length === 0) {
+        gatewayList.innerHTML = `
+            <div class="empty-state">
+                <div style="font-weight: bold; margin-bottom: 0.5rem">No Gateways</div>
+                <div>Add a gateway to get started</div>
+            </div>`;
+        return;
+    }
+
+    // Add "Use Random Selection" option first
+    const randomOption = document.createElement('div');
+    randomOption.className = 'gateway-item random-option';
+    randomOption.innerHTML = `
+        <div class="gateway-info">
+            <div class="gateway-name">Random Selection</div>
+            <div class="gateway-url">Selects random gateway from list</div>
+        </div>
+        <div class="gateway-actions">
+            <label class="default-toggle">
+                <input type="radio" name="defaultGateway" ${myData.network.defaultGatewayIndex === -1 ? 'checked' : ''}>
+                <span>Default</span>
+            </label>
+        </div>
+    `;
+
+    // Add event listener for random selection
+    const randomToggle = randomOption.querySelector('input[type="radio"]');
+    randomToggle.addEventListener('change', () => {
+        if (randomToggle.checked) {
+            setDefaultGateway(-1);
+        }
+    });
+
+    gatewayList.appendChild(randomOption);
+
+    // Add each gateway to the list
+    myData.network.gateways.forEach((gateway, index) => {
+        const isDefault = index === myData.network.defaultGatewayIndex;
+        const canRemove = !gateway.isSystem;
+
+        const gatewayItem = document.createElement('div');
+        gatewayItem.className = 'gateway-item';
+        gatewayItem.innerHTML = `
+            <div class="gateway-info">
+                <div class="gateway-name">${escapeHtml(gateway.name)}</div>
+                <div class="gateway-url">${gateway.protocol}://${escapeHtml(gateway.host)}:${gateway.port}</div>
+                ${gateway.isSystem ? '<span class="system-badge">System</span>' : ''}
+            </div>
+            <div class="gateway-actions">
+                <label class="default-toggle">
+                    <input type="radio" name="defaultGateway" ${isDefault ? 'checked' : ''}>
+                    <span>Default</span>
+                </label>
+                <button class="icon-button edit-button" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                ${canRemove ? `
+                    <button class="icon-button remove-button" title="Remove">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                ` : ''}
+            </div>
+        `;
+
+        // Add event listeners
+        const defaultToggle = gatewayItem.querySelector('input[type="radio"]');
+        defaultToggle.addEventListener('change', () => {
+            if (defaultToggle.checked) {
+                setDefaultGateway(index);
+            }
+        });
+
+        const editButton = gatewayItem.querySelector('.edit-button');
+        editButton.addEventListener('click', () => {
+            openEditGatewayForm(index);
+        });
+
+        if (canRemove) {
+            const removeButton = gatewayItem.querySelector('.remove-button');
+            removeButton.addEventListener('click', () => {
+                confirmRemoveGateway(index);
+            });
+        }
+
+        gatewayList.appendChild(gatewayItem);
+    });
+}
+
+// Function to add a new gateway
+function addGateway(protocol, host, port, name) {
+    // Initialize if needed
+    initializeGatewayConfig();
+
+    // Add the new gateway
+    myData.network.gateways.push({
+        protocol,
+        host,
+        port,
+        name,
+        isSystem: false,
+        isDefault: false
+    });
+
+    // Update the UI
+    updateGatewayList();
+
+    // Show success message
+    showToast('Gateway added successfully');
+}
+
+// Function to update an existing gateway
+function updateGateway(index, protocol, host, port, name) {
+    // Check if index is valid
+    if (index >= 0 && index < myData.network.gateways.length) {
+        const gateway = myData.network.gateways[index];
+
+        // Update gateway properties
+        gateway.protocol = protocol;
+        gateway.host = host;
+        gateway.port = port;
+        gateway.name = name;
+
+        // Update the UI
+        updateGatewayList();
+
+        // Show success message
+        showToast('Gateway updated successfully');
+    }
+}
+
+// Function to confirm gateway removal
+function confirmRemoveGateway(index) {
+    if (confirm('Are you sure you want to remove this gateway?')) {
+        removeGateway(index);
+    }
+}
+
+// Function to remove a gateway
+function removeGateway(index) {
+    // Check if index is valid
+    if (index >= 0 && index < myData.network.gateways.length) {
+        const gateway = myData.network.gateways[index];
+
+        // Only allow removing non-system gateways
+        if (!gateway.isSystem) {
+            // If this was the default gateway, reset to random selection
+            if (myData.network.defaultGatewayIndex === index) {
+                myData.network.defaultGatewayIndex = -1;
+            } else if (myData.network.defaultGatewayIndex > index) {
+                // Adjust default gateway index if needed
+                myData.network.defaultGatewayIndex--;
+            }
+
+            // Remove the gateway
+            myData.network.gateways.splice(index, 1);
+
+            // Update the UI
+            updateGatewayList();
+
+            // Show success message
+            showToast('Gateway removed successfully');
+        }
+    }
+}
+
+// Function to set the default gateway
+function setDefaultGateway(index) {
+    // Reset all gateways to non-default
+    myData.network.gateways.forEach(gateway => {
+        gateway.isDefault = false;
+    });
+
+    // Set the new default gateway index
+    myData.network.defaultGatewayIndex = index;
+
+    // If setting a specific gateway as default, mark it
+    if (index >= 0 && index < myData.network.gateways.length) {
+        myData.network.gateways[index].isDefault = true;
+    }
+
+    // Update the UI
+    updateGatewayList();
+
+    // Show success message
+    const message = index === -1 
+        ? 'Using random gateway selection for better reliability' 
+        : 'Default gateway set';
+    showToast(message);
+}
+
+// Function to get the gateway to use for a request
+function getGatewayForRequest() {
+    //TODO: ask Omar if we should just let use edit network.js or keep current logic where when we sign in it uses network.js and when signed in we use myData.network.gateways
+    // Check if myData exists
+    if (!myData) {
+        // Fall back to global network if available
+        if (typeof network !== 'undefined' && network?.gateways?.length) {
+            return network.gateways[Math.floor(Math.random() * network.gateways.length)];
+        }
+        console.error('No myData or network available');
+        return null;
+    }
+
+    // Initialize if needed
+    initializeGatewayConfig();
+
+    // If we have a default gateway set, use it
+    if (
+        myData.network.defaultGatewayIndex >= 0 &&
+        myData.network.defaultGatewayIndex < myData.network.gateways.length
+    ) {
+        return myData.network.gateways[myData.network.defaultGatewayIndex];
+    }
+
+    // Otherwise use random selection
+    return myData.network.gateways[
+        Math.floor(Math.random() * myData.network.gateways.length)
+    ];
+}
+
+// Function to handle the gateway form submission
+function handleGatewayForm(event) {
+    event.preventDefault();
+
+    // Get form data
+    const formData = {
+        protocol: document.getElementById('gatewayProtocol').value,
+        host: document.getElementById('gatewayHost').value,
+        port: parseInt(document.getElementById('gatewayPort').value),
+        name: document.getElementById('gatewayName').value
+    };
+
+    // Get the edit index (if editing)
+    const editIndex = parseInt(document.getElementById('gatewayEditIndex').value);
+
+    if (editIndex >= 0) {
+        // Update existing gateway
+        updateGateway(
+            editIndex,
+            formData.protocol,
+            formData.host,
+            formData.port,
+            formData.name
+        );
+    } else {
+        // Add new gateway
+        addGateway(formData.protocol, formData.host, formData.port, formData.name);
+    }
+
+    // Close the form
+    closeAddEditGatewayForm();
+}
