@@ -650,14 +650,26 @@ function closeAboutModal() {
     document.getElementById('aboutModal').classList.remove('active');
 }
 
+// Check if app is running as installed PWA
+function checkIsInstalledPWA() {
+    return window.matchMedia('(display-mode: standalone)').matches || 
+           window.navigator.standalone || 
+           document.referrer.includes('android-app://');
+}
+
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize service worker first
-    if ('serviceWorker' in navigator) {
+    const isInstalledPWA = checkIsInstalledPWA();
+    
+    // Initialize service worker only if running as installed PWA
+    if (isInstalledPWA && 'serviceWorker' in navigator) {
         await registerServiceWorker();
         setupServiceWorkerMessaging(); 
         setupAppStateManagement();
         setupConnectivityDetection();
+    } else {
+        // Web-only mode
+        console.log('Running in web-only mode, skipping service worker initialization');
     }
 
     checkVersion()
