@@ -9,9 +9,9 @@ const network = {
     },
   ],
   "monitor": {
-    "url": "http://test.liberdus.com:3000"
+    "url": "https://test.liberdus.com/monitor"
   },
   "explorer": {
-    "url": "http://test.liberdus.com:6001"
+    "url": "https://test.liberdus.com/explorer"
   }
 }
