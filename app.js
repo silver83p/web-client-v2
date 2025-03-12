@@ -4990,6 +4990,12 @@ async function handleConnectivityChange(event) {
 
 // Setup connectivity detection
 function setupConnectivityDetection() {
+    // Only setup offline detection if running as installed PWA
+    if (!checkIsInstalledPWA()) {
+        isOnline = true; // Always consider online in web mode
+        return;
+    }
+
     // Listen for browser online/offline events
     window.addEventListener('online', handleConnectivityChange);
     window.addEventListener('offline', handleConnectivityChange);
