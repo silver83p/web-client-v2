@@ -23,7 +23,7 @@ async function checkVersion(){
     }
 //console.log('myVersion < newVersion then reload', myVersion, newVersion)
 console.log(parseInt(myVersion.replace(/\D/g, '')), parseInt(newVersion.replace(/\D/g, '')))
-    if (parseInt(myVersion.replace(/\D/g, '')) < parseInt(newVersion.replace(/\D/g, ''))) {
+    if (parseInt(myVersion.replace(/\D/g, '')) != parseInt(newVersion.replace(/\D/g, ''))) {
         if (parseInt(myVersion.replace(/\D/g, '')) > 0){
             alert('Updating to new version: ' + newVersion)
         }
