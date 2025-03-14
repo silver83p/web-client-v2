@@ -2860,7 +2860,8 @@ async function handleSendAsset(event) {
     let dhkey = ecSharedKey(keys.secret, recipientPubKey)
     const  { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey)
     const combined = new Uint8Array(dhkey.length + sharedSecret.length)
-    combined.set(dhkey).set(sharedSecret, dhkey.length)
+    combined.set(dhkey)
+    combined.set(sharedSecret, dhkey.length)
     dhkey = blake.blake2b(combined, myHashKey, 32)
 
 
