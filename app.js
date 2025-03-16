@@ -138,6 +138,7 @@ const pollIntervalChatting = 5000  // in millseconds
 
 let myData = null
 let myAccount = null        // this is set to myData.account for convience
+let wsManager = null        // this is set to new WSManager() for convience
 
 // TODO - get the parameters from the network
 // mock network parameters
@@ -517,6 +518,16 @@ async function handleCreateAccount(event) {
 
     requestNotificationPermission();
 
+    console.log('initializing WebSocket connection')
+    // Initialize WebSocket connection
+    if (!wsManager) {
+        console.log('new WSManager')
+        wsManager = new WSManager();
+    }
+    if (!wsManager.isConnected){
+        wsManager.connect();
+    }
+
     // Close modal and proceed to app
     closeCreateAccountModal();
     document.getElementById('welcomeScreen').style.display = 'none';
@@ -563,6 +574,14 @@ async function handleSignIn(event) {
     myAccount = myData.account;
 
     requestNotificationPermission();
+
+    // Initialize WebSocket connection
+    if (!wsManager) {
+        console.log('new WSManager')
+        wsManager = new WSManager();
+    }
+    console.log('connecting to WSManager')
+    wsManager.connect();
 
     // Close modal and proceed to app
     closeSignInModal();
@@ -684,6 +703,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check for existing accounts and arrange welcome buttons
     const usernames = getAvailableUsernames()
     const hasAccounts = usernames.length > 0
+
+    if (!wsManager) {
+        wsManager = new WSManager();
+    }
 
     const signInBtn = document.getElementById('signInButton');
     const createAccountBtn = document.getElementById('createAccountButton');
@@ -920,6 +943,12 @@ function handleUnload(e){
         return 
     } // User selected to Signout; state was already saved
     else{
+        // Clean up WebSocket connection
+        if (wsManager) {
+            wsManager.unsubscribe();
+            wsManager.disconnect();
+        }
+        
         saveState()
         Logger.forceSave();
         closeAllConnections();
@@ -929,6 +958,12 @@ function handleUnload(e){
 // Add unload handler to save myData
 function handleBeforeUnload(e){
 console.log('in handleBeforeUnload', e)
+    // Clean up WebSocket connection
+    if (wsManager) {
+        wsManager.unsubscribe();
+        wsManager.disconnect();
+    }
+    
     saveState()
     Logger.saveState();
     if (handleSignOut.exit){ 
@@ -950,6 +985,11 @@ function handleVisibilityChange(e) {
         if (handleSignOut.exit) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             return;
+        }
+    } else if (document.visibilityState === 'visible') {
+        // Reconnect WebSocket if needed
+        if (wsManager && !wsManager.isConnected() && myAccount) {
+            wsManager.connect();
         }
     }
 }
@@ -1936,7 +1976,7 @@ function openChatModal(address) {
 }
 
 function appendChatModal(){
-console.log('appendChatModal')
+    console.log('appendChatModal')
     if (! appendChatModal.address){ return }
 //console.log(2)
 //    if (document.getElementById('chatModal').classList.contains('active')) { return }
@@ -1948,7 +1988,7 @@ console.log('appendChatModal')
     const messagesList = modal.querySelector('.messages-list');
 
     for (let i=appendChatModal.len; i<messages.length; i++) {
-console.log(5, i)
+        console.log(5, i)
         const m = messages[i]
         m.type = m.my ? 'sent' : 'received'
         // Add message to UI
@@ -3349,6 +3389,13 @@ function handleSignOut() {
 //    const shouldLeave = confirm('Do you want to leave this page?');
 //    if (shouldLeave == false) { return }
 
+    // Clean up WebSocket connection
+    if (wsManager) {
+        wsManager.unsubscribe();
+        wsManager.disconnect();
+        wsManager = null;
+    }
+
     // Save myData to localStorage if it exists
     saveState()
 /*
@@ -3769,6 +3816,10 @@ async function pollChatInterval(milliseconds) {
 }
 
 async function pollChats(){
+    // only poll if IOS PWA is installed
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (!isIOS){ return }
+
     if (pollChats.nextPoll < 100){ return } // can be used to stop polling; pollChatInterval(0)
     const now = Date.now()
     if (pollChats.lastPoll + pollChats.nextPoll <= now){
@@ -3821,7 +3872,7 @@ async function processChats(chats, keys) {
     for (let sender in chats) {
         const timestamp = myAccount.chatTimestamp || 0
         const res = await queryNetwork(`/messages/${chats[sender]}/${timestamp}`)
-console.log("processChats sender", sender)
+        console.log("processChats sender", sender)
         if (res && res.messages){  
             const from = normalizeAddress(sender)
             if (!myData.contacts[from]){ createNewContact(from) }
@@ -3829,6 +3880,13 @@ console.log("processChats sender", sender)
 //            contact.address = from        // not needed since createNewContact does this
             let added = 0
             let newTimestamp = 0
+            let hasNewTransfer = false;
+            
+            // This check determines if we're currently chatting with the sender
+            // We ONLY want to avoid notifications if we're actively viewing this exact chat
+            const inActiveChatWithSender = appendChatModal.address === from && 
+                document.getElementById('chatModal').classList.contains('active');
+            
             for (let i in res.messages){
                 const tx = res.messages[i] // the messages are actually the whole tx
 //console.log('message tx is')
@@ -3945,6 +4003,14 @@ console.log("processChats sender", sender)
                     history.unshift(newPayment);
                     //  sort history array based on timestamp field in descending order
                     history.sort((a, b) => b.timestamp - a.timestamp);
+                    
+                    // Mark that we have a new transfer for toast notification
+                    hasNewTransfer = true
+                    
+                    // Update wallet view if it's active
+                    if (document.getElementById("walletScreen").classList.contains("active")) {
+                        updateWalletView()
+                    }
                 }
             }
             if (newTimestamp > 0){
@@ -3980,6 +4046,28 @@ console.log("processChats sender", sender)
                     // Insert at correct position to maintain order
                     myData.chats.splice(insertIndex, 0, chatUpdate);
                 }
+                
+                // Show toast notification for new messages
+                // Only suppress notification if we're ACTIVELY viewing this chat
+                if (!inActiveChatWithSender) {
+                    // Get name of sender
+                    const senderName = contact.name || contact.username || `${from.slice(0,8)}...`
+                    
+                    if (added > 0) {
+                        showToast(`New message from ${senderName}`, 3000, 'info');
+                    }
+                }
+            }
+            
+            // Show transfer notification even if no messages were added
+            if (hasNewTransfer && !inActiveChatWithSender) {
+                const senderName = contact.name || contact.username || `${from.slice(0,8)}...`        
+                showToast(`New transfer received from ${senderName}`, 3000, 'success');
+            }
+            
+            if (newTimestamp > 0){
+                // Update the timestamp
+                myAccount.chatTimestamp = newTimestamp
             }
         }
     }
@@ -4912,17 +5000,16 @@ function showToast(message, duration = 2000, type = "default") {
     // Force reflow to enable transition
     toast.offsetHeight;
     
-    // Show the toast
-    requestAnimationFrame(() => {
+    // Show with a slight delay to ensure rendering
+    setTimeout(() => {
         toast.classList.add('show');
-    });
-    
-    // If duration is provided, auto-hide the toast
-    if (duration > 0) {
-        setTimeout(() => {
-            hideToast(toastId);
-        }, duration);
-    }
+        // Set hide timeout
+        if (duration > 0) {
+            setTimeout(() => {
+                hideToast(toastId);
+            }, duration);
+        }
+    }, 10);
     
     return toastId;
 }
@@ -5741,3 +5828,281 @@ function stopCamera() {
 //        statusMessage.textContent = 'Camera stopped.';
     }
 }
+
+// WebSocket Manager Class
+class WSManager {
+  constructor() {
+    this.ws = null;
+    this.isSubscribed = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 1000; // Start with 1s delay
+    this.maxReconnectDelay = 30000; // Maximum 30s delay
+    this.subscriptionTimeout = null;
+    this.connectionState = 'disconnected'; // disconnected, connecting, connected
+  }
+
+  connect() {
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      console.log('WebSocket already connecting or connected');
+      return;
+    }
+
+    this.connectionState = 'connecting';
+    console.log('Connecting to WebSocket server:', network.websocket.url);
+    
+    try {
+      this.ws = new WebSocket(network.websocket.url);
+      this.setupEventHandlers();
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
+      this.handleConnectionFailure();
+    }
+  }
+
+  setupEventHandlers() {
+    this.ws.onopen = () => {
+      console.log('WebSocket connection established');
+      this.connectionState = 'connected';
+      this.reconnectAttempts = 0;
+      this.reconnectDelay = 1000;
+      this.subscribe();
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        // Handle subscription confirmation
+        if (data.result === true && data.account_id) {
+          console.log('Subscription confirmed for account:', data.account_id);
+          this.isSubscribed = true;
+          if (this.subscriptionTimeout) {
+            clearTimeout(this.subscriptionTimeout);
+            this.subscriptionTimeout = null;
+          }
+          return;
+        }
+        
+        // Handle chat event messages
+        if (data.account_id && data.timestamp) {
+          console.log('WebSocket notification received - New message available at timestamp:', data.timestamp);
+          this.handleChatEvent(data);
+        } else {
+          // Log other types of messages for debugging
+          console.log('WebSocket received non-chat event message:', data);
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error, event.data);
+      }
+    };
+
+    this.ws.onclose = (event) => {
+      console.log('WebSocket connection closed:', event.code, event.reason);
+      this.connectionState = 'disconnected';
+      this.isSubscribed = false;
+      
+      if (event.code !== 1000) { // Not a normal closure
+        this.handleConnectionFailure();
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      this.connectionState = 'disconnected';
+    };
+  }
+
+  subscribe() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log('Cannot subscribe: WebSocket not open');
+      return;
+    }
+
+    if (this.isSubscribed) {
+      console.log('Already subscribed');
+      return;
+    }
+
+    if (!myAccount || !myAccount.keys || !myAccount.keys.address) {
+      console.error('Cannot subscribe: No account address available');
+      return;
+    }
+
+    // Use the longAddress function to format the address correctly
+    const accountAddress = longAddress(myAccount.keys.address);
+
+    const subscribeMsg = {
+      method: network.websocket.subscribeMessage.method,
+      params: [
+        network.websocket.subscribeMessage.params[0],
+        accountAddress
+      ]
+    };
+
+    console.log('Subscribing to chat events');
+    this.ws.send(JSON.stringify(subscribeMsg));
+    
+    // Set timeout for subscription confirmation
+    this.subscriptionTimeout = setTimeout(() => {
+      console.error('Subscription confirmation timeout');
+      this.isSubscribed = false;
+      this.reconnect();
+    }, 5000);
+  }
+
+  unsubscribe() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSubscribed) {
+      return;
+    }
+
+    // Use the longAddress function to format the address correctly
+    const accountAddress = longAddress(myAccount.keys.address);
+
+    const unsubscribeMsg = {
+      method: "ChatEvent",
+      params: ["unsubscribe", accountAddress]
+    };
+
+    console.log('Unsubscribing from chat events');
+    this.ws.send(JSON.stringify(unsubscribeMsg));
+    this.isSubscribed = false;
+  }
+
+  disconnect() {
+    if (this.subscriptionTimeout) {
+      clearTimeout(this.subscriptionTimeout);
+      this.subscriptionTimeout = null;
+    }
+    
+    if (this.ws) {
+      this.ws.close(1000, "Normal closure");
+      this.ws = null;
+    }
+    
+    this.isSubscribed = false;
+    this.connectionState = 'disconnected';
+    console.log('WebSocket disconnected');
+  }
+
+  handleConnectionFailure() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('Maximum reconnection attempts reached');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), this.maxReconnectDelay);
+    
+    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    setTimeout(() => this.connect(), delay);
+  }
+
+  reconnect() {
+    this.disconnect();
+    this.connect();
+  }
+
+  isConnected() {
+    return this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  handleChatEvent(data) {
+    // Skip if timestamp is older than or equal to what we already have
+    const storedTimestamp = myAccount.chatTimestamp || 0;
+    
+    if (data.timestamp <= storedTimestamp) {
+      console.log('Skipping WebSocket notification - Already processed timestamp:', data.timestamp, '<=', storedTimestamp);
+      return;
+    }
+
+    console.log('Processing WebSocket notification for new message at timestamp:', data.timestamp, '(stored timestamp:', storedTimestamp, ')');
+    // Process message immediately if we have an active connection
+    if (this.connectionState === 'connected' && this.isSubscribed) {
+      console.log('Connection active, processing notification and updating UI');
+      this.processNewMessage(data);
+    } else {
+      console.log('Connection not active, skipping message processing');
+    }
+  }
+
+  async processNewMessage(data) {
+    if (!myAccount || !myAccount.keys) {
+      console.error('Cannot process message: No account available');
+      return;
+    }
+
+    try {
+      // First, we need to get the actual chat information
+      // The WebSocket event only tells us there's a new message, but not the chat ID
+      
+      // Use the timestamp from the WebSocket notification
+      const wsTimestamp = data.timestamp;
+      // Get the stored timestamp for comparison
+      const storedTimestamp = myAccount.chatTimestamp || 0;
+      
+      console.log('Fetching chat information - WebSocket timestamp:', wsTimestamp, 'Stored timestamp:', storedTimestamp);
+      
+      // Get the latest chat information right away - no delay needed
+      const accountAddress = longAddress(myAccount.keys.address);
+      let senders = await queryNetwork(`/account/${accountAddress}/chats/${storedTimestamp}`);
+      
+      // Retry logic for empty responses - just try once more for speed
+      if (!senders || !senders.chats || Object.keys(senders.chats).length === 0) {
+        console.log(`No chats found, retrying...`);
+        // Brief delay before retry
+        await new Promise(resolve => setTimeout(resolve, 300));
+        // Retry the query
+        senders = await queryNetwork(`/account/${accountAddress}/chats/${storedTimestamp}`);
+      }
+      
+      // Always update the timestamp to avoid processing the same notification multiple times
+      if (wsTimestamp > storedTimestamp) {
+        console.log('Updating chat timestamp from', storedTimestamp, 'to', wsTimestamp);
+        myAccount.chatTimestamp = wsTimestamp;
+      }
+      
+      // Remember the active chat address for notifications
+      const activeChatAddress = appendChatModal.address;
+      console.log('Current active chat address:', activeChatAddress);
+      
+      // Process the new messages if we have chats
+      if (senders && senders.chats && Object.keys(senders.chats).length > 0) {
+        console.log('Processing chats from WebSocket notification:', senders.chats);
+        // Process the chats using the existing function
+        await processChats(senders.chats, myAccount.keys);
+        
+        // Always update the chat list UI, regardless of which screen is active
+        // This ensures unread counts are updated everywhere
+        await updateChatList(true);
+        
+        // If the chat modal is open, always update it with new messages
+        if (activeChatAddress) {
+          console.log('Chat modal is open, updating with new messages for:', activeChatAddress);
+          // Make sure modal updates with new messages
+          const chatModal = document.getElementById('chatModal');
+          if (chatModal && chatModal.classList.contains('active')) {
+            appendChatModal();
+            
+            // Scroll to the bottom of the messages
+            const messagesContainer = chatModal.querySelector('.messages-container');
+            if (messagesContainer) {
+              setTimeout(() => {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+              }, 100);
+            }
+          }
+        }
+        
+        // Force a wallet view update - transfers affect the wallet
+        await updateWalletView();
+
+      } else {
+        console.log('No new chats found after WebSocket notification and retries');
+      }
+    } catch (error) {
+      console.error('Error processing WebSocket message:', error);
+    }
+  }
+}
+
