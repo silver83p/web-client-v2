@@ -3816,10 +3816,18 @@ async function pollChatInterval(milliseconds) {
 }
 
 async function pollChats(){
-    
+    if(!wsManager) {
+        console.log('no wsManager, creating new one in pollChats')
+        wsManager = new WebSocketManager()
+        wsManager.connect()
+    }
+
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    // skip polling if IOS PWA is installed or if ws is connected
-    if (!isIOS || wsManager.isConnected()){ return }
+    // skip polling if not an installed IOS PWA or skip if subscription is active
+    if (wsManager.isSubscribed) { 
+        console.log('skipping pollChats because subscription is active')
+        return 
+    }
 
     if (pollChats.nextPoll < 100){ return } // can be used to stop polling; pollChatInterval(0)
     const now = Date.now()
@@ -6126,4 +6134,3 @@ class WSManager {
     }
   }
 }
-
