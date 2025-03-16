@@ -907,7 +907,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     // Omar added
-    document.getElementById('scanQRButton').addEventListener('click', scanQRCode);
+    document.getElementById('scanQRButton').addEventListener('click', openQRScanModal);
     document.getElementById('closeQRScanModal').addEventListener('click', closeQRScanModal);    
 
     setupAddToHomeScreen()
@@ -2321,6 +2321,7 @@ function openSendModal() {
     const submitButton = document.querySelector('#sendForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
     submitButton.disabled = true;
+    openQRScanModal.fill = fillPaymentFromQR  // set function to handle filling the payment form from QR data
     
 /* This is now done in the DOMContentLoaded funtion
     // Add QR code scan button handler
@@ -2387,13 +2388,34 @@ function openSendModal() {
 }
 
 // Function to handle QR code scanning Omar
-function scanQRCode() {
+function openQRScanModal() {
     const modal = document.getElementById('qrScanModal');
     modal.classList.add('active');
+    startCamera(openQRScanModal.fill)
 }
+openQRScanModal.fill = null
 
 function closeQRScanModal(){
     document.getElementById('qrScanModal').classList.remove('active');
+    stopCamera()
+}
+
+function fillPaymentFromQR(data){
+    console.log('in fill', data)
+    data = data.replace('liberdus://', '')
+    const paymentData = JSON.parse(atob(data))
+    console.log("Read payment data:", JSON.stringify(paymentData, null, 2));
+    if (paymentData.username){
+        document.getElementById('sendToAddress').value = paymentData.username
+    }
+    if (paymentData.amount){
+        document.getElementById('sendAmount').value = paymentData.amount
+    }
+    if (paymentData.memo){
+        document.getElementById('sendMemo').value = paymentData.memo
+    }
+    // Trigger username validation
+    document.getElementById('sendToAddress').dispatchEvent(new Event('input'));
 }
 
 // this was the old scanQRCode function; not needed anymore
@@ -5570,4 +5592,149 @@ function handleGatewayForm(event) {
 
     // Close the form
     closeAddEditGatewayForm();
+}
+
+async function startCamera() {
+    const video = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvas = canvasElement.getContext('2d', { willReadFrequently: true }); // Optimized for frequent getImageData calls
+    const scanHighlight = document.getElementById('scan-highlight');
+    try {
+        // Stop any existing stream
+        if (startCamera.stream) {
+            stopCamera();
+        }
+        
+        // Hide previous results
+//        resultContainer.classList.add('hidden');
+        
+//        statusMessage.textContent = 'Accessing camera...';
+        
+        // Request camera access
+        startCamera.stream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                facingMode: 'environment', // Use back camera
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false
+        });
+        
+        // Connect the camera stream to the video element
+        video.srcObject = startCamera.stream;
+        video.setAttribute('playsinline', true); // required for iOS Safari
+        
+        // When video is ready to play
+        video.onloadedmetadata = function() {
+            video.play();
+            
+            // Enable scanning and update button
+            startCamera.scanning = true;
+//            toggleButton.textContent = 'Stop Camera';
+            
+            // Start scanning for QR codes
+            // Use interval instead of requestAnimationFrame for better control over scan frequency
+            startCamera.scanInterval = setInterval(readQRCode, 100); // scan every 100ms (10 times per second)
+            
+//            statusMessage.textContent = 'Camera active. Point at a QR code.';
+        };
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+//        statusMessage.textContent = `Camera error: ${error.message}`;
+    }
+}
+startCamera.stream = null;
+startCamera.scanning = false;
+startCamera.scanInterval = null;
+        
+
+function readQRCode(){
+    if (!startCamera.scanning) return;
+
+    // Check if video is ready for capture
+    const video = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvas = canvasElement.getContext('2d', { willReadFrequently: true }); // Optimized for frequent getImageData calls
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        // Set canvas size to match video
+        canvasElement.height = video.videoHeight;
+        canvasElement.width = video.videoWidth;
+        
+        // Draw video frame to canvas
+        canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+        
+        // Get image data for QR processing
+        const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+        
+        try {
+            // Process image with jsQR
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
+            });
+            
+            // If QR code found
+            if (code) {
+                console.log("QR Code detected:", code.data);
+                handleSuccessfulScan(code.data);
+            }
+        } catch (error) {
+            console.error('QR scanning error:', error);
+        }
+    }
+}
+
+// Handle successful scan
+function handleSuccessfulScan(data) {
+    if (! data.match(/^liberdus:\/\//)){ return }  // should start with liberdus://
+    const scanHighlight = document.getElementById('scan-highlight');
+    // Stop scanning
+    if (startCamera.scanInterval) {
+        clearInterval(startCamera.scanInterval);
+        startCamera.scanInterval = null;
+    }
+    
+    startCamera.scanning = false;
+    
+    // Stop the camera
+    stopCamera();
+    
+/*
+    // Show highlight effect
+    scanHighlight.classList.add('active');
+    setTimeout(() => {
+        scanHighlight.classList.remove('active');
+    }, 500);
+*/
+
+    // Display the result
+//    qrResult.textContent = data;
+//    resultContainer.classList.remove('hidden');
+    console.log(data) 
+    if (openQRScanModal.fill){
+        openQRScanModal.fill(data)
+    }
+
+    closeQRScanModal()
+
+    // Update status
+//    statusMessage.textContent = 'QR code detected! Camera stopped.';
+}
+
+// Stop camera
+function stopCamera() {
+    const video = document.getElementById('video');
+    if (startCamera.scanInterval) {
+        clearInterval(startCamera.scanInterval);
+        startCamera.scanInterval = null;
+    }
+    
+    if (startCamera.stream) {
+        startCamera.stream.getTracks().forEach(track => track.stop());
+        startCamera.stream = null;
+        video.srcObject = null;
+        startCamera.scanning = false;
+//        toggleButton.textContent = 'Start Camera';
+//        statusMessage.textContent = 'Camera stopped.';
+    }
 }

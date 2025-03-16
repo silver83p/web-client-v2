@@ -2017,10 +2017,12 @@ mark {
 
 /* Specific search result item styling */
 .chat-list .search-result-item {
+  border: none;
 }
 
 /* Last item border removal */
 .chat-list .search-result-item:last-child {
+  border: none;
 }
 
 /* Hover effect */
