@@ -1009,9 +1009,9 @@ function handleVisibilityChange(e) {
 
 
 function saveState(){
-console.log('in saveState')
+    console.log('in saveState')
     if (myData && myAccount && myAccount.username && myAccount.netid) {
-console.log('saving state')
+        console.log('saving state')
         localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
     }
 }
@@ -5907,6 +5907,14 @@ class WSManager {
    */
   connect() {
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      console.log('WebSocket connection already established');
+      return;
+    }
+
+    // Check if WebSockets are supported before attempting to connect
+    if (!this.checkWebSocketSupport()) {
+      console.error('WebSockets not supported, falling back to polling');
+      this.connectionState = 'disconnected';
       return;
     }
 
@@ -5914,10 +5922,18 @@ class WSManager {
     console.log('Connecting to WebSocket server:', network.websocket.url);
     
     try {
+      console.log('Creating new WebSocket instance');
       this.ws = new WebSocket(network.websocket.url);
+      
+      // Add error event handler before setupEventHandlers
+      this.ws.onerror = (error) => {
+        console.error('WebSocket error occurred:', error);
+        this.handleConnectionFailure();
+      };
+      
       this.setupEventHandlers();
     } catch (error) {
-      console.error('WebSocket connection error:', error);
+      console.error('WebSocket connection creation error:', error);
       this.handleConnectionFailure();
     }
   }
@@ -5968,10 +5984,6 @@ class WSManager {
       }
     };
 
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      this.connectionState = 'disconnected';
-    };
   }
 
   /**
@@ -6056,8 +6068,22 @@ class WSManager {
    * Handle connection failures with exponential backoff retry logic
    */
   handleConnectionFailure() {
+    console.error('WebSocket connection failed. Current state:', this.connectionState);
+    console.log('Browser information:', navigator.userAgent);
+    console.log('Protocol used:', window.location.protocol);
+    
+    // Check if Firefox might be blocking WebSockets
+    if (navigator.userAgent.includes('Firefox')) {
+      console.log('Firefox detected - checking for potential WebSocket issues');
+      // Additional Firefox-specific debugging information
+      console.log('Firefox may have different security policies for WebSockets');
+      console.log('Check if mixed content is blocked (HTTPS site with WS instead of WSS)');
+    }
+    
+    this.connectionState = 'disconnected';
+    
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('Maximum reconnection attempts reached');
+      console.log('Maximum reconnection attempts reached. Falling back to polling.');
       return;
     }
 
@@ -6175,5 +6201,27 @@ class WSManager {
     } catch (error) {
       console.error('Error processing WebSocket message:', error);
     }
+  }
+
+  /**
+   * Check if WebSockets are supported in the current browser
+   * @returns {boolean} True if WebSockets are supported, false otherwise
+   */
+  checkWebSocketSupport() {
+    if (typeof WebSocket === 'undefined') {
+      console.error('WebSockets are not supported in this browser');
+      return false;
+    }
+    
+    // Check for secure context if using wss://
+    if (network.websocket.url.startsWith('wss://') && 
+        window.location.protocol !== 'https:' && 
+        window.location.hostname !== 'localhost') {
+      console.error('Secure WebSockets (wss://) require a secure context (https)');
+      return false;
+    }
+    
+    console.log('WebSockets are supported in this browser');
+    return true;
   }
 }
