@@ -2954,9 +2954,9 @@ async function handleSendAsset(event) {
     let recipientPubKey = myData.contacts[toAddress]?.public;
     let pqRecPubKey = myData.contacts[toAddress]?.pqPublic
     if (!recipientPubKey || !pqRecPubKey) {
-        const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
+        const recipientInfo = await queryNetwork(`/account/${longAddress(toAddress)}`)
         if (!recipientInfo?.account?.publicKey){
-            console.log(`no public key found for recipient ${currentAddress}`)
+            console.log(`no public key found for recipient ${toAddress}`)
             return
         }
         recipientPubKey = recipientInfo.account.publicKey
@@ -3859,8 +3859,9 @@ async function pollChats(){
     }
 
     //const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    console.log('pollChats isSubscribed:', JSON.stringify(wsManager?.isSubscribed, null, 4))
     // skip polling if subscription is active
-    if (wsManager.isSubscribed) { 
+    if (wsManager?.isSubscribed) { 
         console.log('skipping pollChats because subscription is active')
         return 
     }
