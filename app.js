@@ -139,6 +139,7 @@ const pollIntervalChatting = 5000  // in millseconds
 let myData = null
 let myAccount = null        // this is set to myData.account for convience
 let wsManager = null        // this is set to new WSManager() for convience
+let isInstalledPWA = false
 
 // TODO - get the parameters from the network
 // mock network parameters
@@ -520,12 +521,14 @@ async function handleCreateAccount(event) {
 
     console.log('initializing WebSocket connection')
     // Initialize WebSocket connection
-    if (!wsManager) {
-        console.log('new WSManager')
-        wsManager = new WSManager();
-    }
-    if (!wsManager.isConnected){
+    try {
+        if (!wsManager) {
+            console.log('new WSManager')
+            wsManager = new WSManager();
+        }
         wsManager.connect();
+    } catch (error) {
+        console.error('error initializing WebSocket connection', error)
     }
 
     // Close modal and proceed to app
@@ -576,12 +579,15 @@ async function handleSignIn(event) {
     requestNotificationPermission();
 
     // Initialize WebSocket connection
-    if (!wsManager) {
-        console.log('new WSManager')
-        wsManager = new WSManager();
+    try {
+        if (!wsManager) {
+            console.log('new WSManager')
+            wsManager = new WSManager();
+        }
+        wsManager.connect();
+    } catch (error) {
+        console.error('error initializing WebSocket connection', error)
     }
-    console.log('connecting to WSManager')
-    wsManager.connect();
 
     // Close modal and proceed to app
     closeSignInModal();
@@ -681,7 +687,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await checkVersion()  // version needs to be checked before anything else happens
     
     // Initialize service worker only if running as installed PWA
-    const isInstalledPWA = checkIsInstalledPWA();
+    isInstalledPWA = checkIsInstalledPWA(); // Set the global variable
     if (isInstalledPWA && 'serviceWorker' in navigator) {
         await registerServiceWorker();
         setupServiceWorkerMessaging(); 
@@ -704,8 +710,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const usernames = getAvailableUsernames()
     const hasAccounts = usernames.length > 0
 
-    if (!wsManager) {
-        wsManager = new WSManager();
+    try {
+        if (!wsManager) {
+            console.log('new WSManager')
+            wsManager = new WSManager();
+        }
+    } catch (error) {
+        console.error('error initializing WebSocket connection in DOMContentLoaded', error)
     }
 
     const signInBtn = document.getElementById('signInButton');
@@ -951,7 +962,9 @@ function handleUnload(e){
         
         saveState()
         Logger.forceSave();
-        closeAllConnections();
+        if (isInstalledPWA) {
+            closeAllConnections();
+        }
     }
 }
 
@@ -1199,8 +1212,8 @@ async function updateChatList(force) {
                     }
                 }
                 
-                if (gotChats > 0 || force) {
-                    // Cache the updated chat data
+                if ((gotChats > 0 || force) && isInstalledPWA) {
+                    // Cache the updated chat data if installed as PWA
                     try {
                         const chatData = addVersionToData({
                             chatId: myAccount.keys.address,
@@ -1217,15 +1230,19 @@ async function updateChatList(force) {
             }
         } else {
             // Offline: Get from cache
-            try {
-                const cachedData = await getData(STORES.CHATS, myAccount.keys.address);
-                if (cachedData) {
-                    myData.chats = cachedData.chats;
-                    myData.contacts = cachedData.contacts;
-                    console.log('Using cached chat data from:', new Date(cachedData.lastUpdated));
+            if (isInstalledPWA) {
+                try {
+                    const cachedData = await getData(STORES.CHATS, myAccount.keys.address);
+                    if (cachedData) {
+                        myData.chats = cachedData.chats;
+                        myData.contacts = cachedData.contacts;
+                        console.log('Using cached chat data from:', new Date(cachedData.lastUpdated));
+                    }
+                } catch (error) {
+                    console.error('Failed to read cached chat data:', error);
                 }
-            } catch (error) {
-                console.error('Failed to read cached chat data:', error);
+            } else {
+                console.log('Not installed PWA. No cached chat data to use for offline mode.');
             }
         }
     }
@@ -1381,28 +1398,38 @@ async function switchView(view) {
 
 // Update contacts list UI
 async function updateContactsList() {
+
+    // cache system
     if (isOnline) {
         // Online: Get from network and cache
-        try {
-            const contactsData = addVersionToData({
-                address: myAccount.keys.address,
-                contacts: myData.contacts
-            });
-            await saveData(STORES.CONTACTS, contactsData);
-            console.log('Successfully cached contacts data:', contactsData);
-        } catch (error) {
-            console.error('Failed to cache contacts data:', error);
+        if (isInstalledPWA) {
+            try {
+                const contactsData = addVersionToData({
+                    address: myAccount.keys.address,
+                    contacts: myData.contacts
+                });
+                await saveData(STORES.CONTACTS, contactsData);
+                console.log('Successfully cached contacts data:', contactsData);
+            } catch (error) {
+                console.error('Failed to cache contacts data:', error);
+            }
+        } else {
+            console.log('Not installed PWA. Not caching contacts data.');
         }
     } else {
         // Offline: Get from cache
-        try {
-            const cachedData = await getData(STORES.CONTACTS, myAccount.keys.address);
-            if (cachedData) {
-                myData.contacts = cachedData.contacts;
-                console.log('Using cached contacts data from:', new Date(cachedData.lastUpdated));
+        if (isInstalledPWA) {
+            try {
+                const cachedData = await getData(STORES.CONTACTS, myAccount.keys.address);
+                if (cachedData) {
+                    myData.contacts = cachedData.contacts;
+                    console.log('Using cached contacts data from:', new Date(cachedData.lastUpdated));
+                }
+            } catch (error) {
+                console.error('Failed to read cached contacts data:', error);
             }
-        } catch (error) {
-            console.error('Failed to read cached contacts data:', error);
+        } else {
+            console.log('Not installed PWA. No cached contacts data.');
         }
     }
 
@@ -2927,9 +2954,9 @@ async function handleSendAsset(event) {
     let recipientPubKey = myData.contacts[toAddress]?.public;
     let pqRecPubKey = myData.contacts[toAddress]?.pqPublic
     if (!recipientPubKey || !pqRecPubKey) {
-        const recipientInfo = await queryNetwork(`/account/${longAddress(toAddress)}`)
+        const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
         if (!recipientInfo?.account?.publicKey){
-            console.log(`no public key found for recipient ${toAddress}`)
+            console.log(`no public key found for recipient ${currentAddress}`)
             return
         }
         recipientPubKey = recipientInfo.account.publicKey
@@ -3585,29 +3612,38 @@ async function handleSendMessage() {
 async function updateWalletView() {
     const walletData = myData.wallet
     
+    // cache system
     if (isOnline) {
-        // Online: Get from network and cache
-        await updateWalletBalances();
-        try {
-            const walletCacheData = addVersionToData({
-                assetId: myAccount.keys.address,
-                wallet: walletData
-            });
-            await saveData(STORES.WALLET, walletCacheData);
-            console.log('Successfully cached wallet data:', walletCacheData);
-        } catch (error) {
-            console.error('Failed to cache wallet data:', error);
+        if (isInstalledPWA) {
+            // Online: Get from network and cache
+            await updateWalletBalances();
+            try {
+                const walletCacheData = addVersionToData({
+                    assetId: myAccount.keys.address,
+                    wallet: walletData
+                });
+                await saveData(STORES.WALLET, walletCacheData);
+                console.log('Successfully cached wallet data:', walletCacheData);
+            } catch (error) {
+                console.error('Failed to cache wallet data:', error);
+            }
+        } else {
+            console.log('Not installed PWA. Not caching wallet data.');
         }
     } else {
         // Offline: Get from cache
-        try {
-            const cachedData = await getData(STORES.WALLET, myAccount.keys.address);
-            if (cachedData) {
-                myData.wallet = cachedData.wallet;
-                console.log('Using cached wallet data from:', new Date(cachedData.lastUpdated));
+        if (isInstalledPWA) {
+            try {
+                const cachedData = await getData(STORES.WALLET, myAccount.keys.address);
+                if (cachedData) {
+                    myData.wallet = cachedData.wallet;
+                    console.log('Using cached wallet data from:', new Date(cachedData.lastUpdated));
+                }
+            } catch (error) {
+                console.error('Failed to read cached wallet data:', error);
             }
-        } catch (error) {
-            console.error('Failed to read cached wallet data:', error);
+        } else {
+            console.log('Not installed PWA. No cached wallet data to use for offline mode.');
         }
     }
 
@@ -3822,8 +3858,8 @@ async function pollChats(){
         wsManager.connect()
     }
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    // skip polling if not an installed IOS PWA or skip if subscription is active
+    //const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    // skip polling if subscription is active
     if (wsManager.isSubscribed) { 
         console.log('skipping pollChats because subscription is active')
         return 
@@ -5093,7 +5129,9 @@ async function handleConnectivityChange(event) {
         await verifyUsernameOnReconnect();
         
         // warmup db
-        await getData(STORES.WALLET);
+        if (isInstalledPWA) {
+            await getData(STORES.WALLET);
+        }
 
         // Check database health after reconnection
         const dbHealthy = await checkDatabaseHealth();
@@ -5300,6 +5338,10 @@ async function verifyUsernameOnReconnect() {
 }
 
 async function checkDatabaseHealth() {
+    if (!isInstalledPWA) {
+        return true;
+    }
+
     try {
         // Try to access each store to verify database is working
         for (const store of Object.values(STORES)) {
