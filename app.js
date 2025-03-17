@@ -1856,7 +1856,7 @@ function createNewContact(addr, username){
     if (myData.contacts[address]){ return }  // already exists
     const c = myData.contacts[address] = {}
     c.address = address
-    if (username){ c.username = username }
+    if (username){ c.username = normalizeUsername(username) }
     c.messages = []
     c.timestamp = Date.now()
     c.unread = 0
@@ -2881,13 +2881,15 @@ async function handleSendAsset(event) {
         return;
     }
 
+    if (!myData.contacts[toAddress]) { createNewContact(toAddress, username) }
+
     // Get recipient's public key from contacts
     let recipientPubKey = myData.contacts[toAddress]?.public;
     let pqRecPubKey = myData.contacts[toAddress]?.pqPublic
     if (!recipientPubKey || !pqRecPubKey) {
-        const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
+        const recipientInfo = await queryNetwork(`/account/${longAddress(toAddress)}`)
         if (!recipientInfo?.account?.publicKey){
-            console.log(`no public key found for recipient ${currentAddress}`)
+            console.log(`no public key found for recipient ${toAddress}`)
             return
         }
         recipientPubKey = recipientInfo.account.publicKey
@@ -2947,6 +2949,7 @@ console.log('payload is', payload)
         // Create contact if it doesn't exit
         if (!myData.contacts[toAddress].messages) {
             createNewContact(toAddress)
+            // TODO can pass the username to createNewConact and get rid of the following line
             myData.contacts[toAddress].username = normalizeUsername(recipientInput)
         }
 
