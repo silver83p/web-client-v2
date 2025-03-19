@@ -3761,6 +3761,52 @@ async function pollChatInterval(milliseconds) {
     pollChats()
 }
 
+// Called every 30 seconds if we are online and not subscribed to WebSocket
+async function pollChats() {
+    // Step 1: Attempt WebSocket connection if needed
+    console.log('Attempting WebSocket connection in pollChats');
+    await attemptWebSocketConnection();
+    
+    // Step 2: Check if we need to poll
+    const isSubscribed = wsManager && wsManager.subscribed && wsManager.isConnected();
+    
+    // Step 3: Poll if we are not subscribed to WebSocket
+    if (!isSubscribed) {
+        // Skip if no valid account
+        if (!myAccount?.keys?.address) {
+            console.log('Poll skipped: No valid account');
+            return;
+        }
+
+        try {
+            await updateChatList();
+
+            if (document.getElementById('walletScreen')?.classList.contains('active')) {
+                await updateWalletView();
+            }
+        } catch (error) {
+            console.error('Chat polling error:', error);
+        }
+
+        scheduleNextPoll();
+    } else if (window.chatUpdateTimer) {
+        // Clear polling if WebSocket is subscribed
+        clearTimeout(window.chatUpdateTimer);
+        window.chatUpdateTimer = null;
+        console.log('Poll status: Stopped - WebSocket subscribed');
+    }
+    
+    const wsStatus = await checkWebSocketStatus();
+    // Step 4: Log final status
+    const pollStatus = {
+        wsStatus,
+        accountValid: Boolean(myAccount?.keys?.address),
+        subscriptionStatus: isSubscribed ? 'subscribed' : 'not subscribed',
+        pollingStatus: window.chatUpdateTimer ? 'polling' : 'not polling'
+    };
+    console.log('Poll Status:', JSON.stringify(pollStatus, null, 2));
+}
+
 // Helper function to check WebSocket status and log diagnostics if needed
 async function checkWebSocketStatus() {
     if (!wsManager) return "not initialized";
@@ -3809,60 +3855,15 @@ function scheduleNextPoll() {
         clearTimeout(window.chatUpdateTimer);
     }
     
+    const interval = pollChats.nextPoll || pollIntervalNormal;
     const now = Date.now();
     console.log('Poll schedule:', JSON.stringify({
         timestamp: now,
-        nextPollIn: '30000ms',
+        nextPollIn: `${interval}ms`,
         reason: 'WebSocket not subscribed'
     }, null, 2));
     
-    window.chatUpdateTimer = setTimeout(pollChats, 30000);
-}
-
-// Called every 30 seconds if we are online and not subscribed to WebSocket
-async function pollChats() {
-    // Step 1: Attempt WebSocket connection if needed
-    console.log('Attempting WebSocket connection in pollChats');
-    await attemptWebSocketConnection();
-    
-    // Step 2: Check if we need to poll
-    const isSubscribed = wsManager && wsManager.subscribed && wsManager.isConnected();
-    
-    if (!isSubscribed) {
-        // Skip if no valid account
-        if (!myAccount?.keys?.address) {
-            console.log('Poll skipped: No valid account');
-            return;
-        }
-
-        try {
-            // poll chat
-            await updateChatList();
-            // poll if walletScreen is active
-            if (document.getElementById('walletScreen')?.classList.contains('active')) {
-                await updateWalletView();
-            }
-        } catch (error) {
-            console.error('Chat polling error:', error);
-        }
-
-        scheduleNextPoll();
-    } else if (window.chatUpdateTimer) {
-        // Clear polling if WebSocket is subscribed
-        clearTimeout(window.chatUpdateTimer);
-        window.chatUpdateTimer = null;
-        console.log('Poll status: Stopped - WebSocket subscribed');
-    }
-    
-    const wsStatus = await checkWebSocketStatus();
-    // Step 3: Log final status
-    const pollStatus = {
-        wsStatus,
-        accountValid: Boolean(myAccount?.keys?.address),
-        subscriptionStatus: isSubscribed ? 'subscribed' : 'not subscribed',
-        pollingStatus: window.chatUpdateTimer ? 'polling' : 'not polling'
-    };
-    console.log('Poll Status:', JSON.stringify(pollStatus, null, 2));
+    window.chatUpdateTimer = setTimeout(pollChats, interval);
 }
 
 async function getChats(keys) {  // needs to return the number of chats that need to be processed
