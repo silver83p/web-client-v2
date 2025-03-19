@@ -765,6 +765,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('addGatewayButton').addEventListener('click', openAddGatewayForm);
     document.getElementById('closeAddEditGatewayForm').addEventListener('click', closeAddEditGatewayForm);
 
+    // Validator Staking Modal
+    document.getElementById('openValidatorStaking').addEventListener('click', openValidatorStakingModal);
+    document.getElementById('closeValidatorStaking').addEventListener('click', closeValidatorStakingModal);
+    document.getElementById('submitValidatorStaking').addEventListener('click', submitValidatorStakingTx);
+    document.getElementById('validatorStakingOptionStake').addEventListener('click', setToStake);
+    document.getElementById('validatorStakingOptionUnstake').addEventListener('click', setToUnstake);
+
     // TODO add comment about which send form this is for chat or assets
     document.getElementById('openSendModal').addEventListener('click', openSendModal);
     document.getElementById('closeSendModal').addEventListener('click', closeSendModal);
@@ -5551,4 +5558,29 @@ function handleGatewayForm(event) {
 
     // Close the form
     closeAddEditGatewayForm();
+}
+
+let validatorShouldUnstake = false;
+
+function openValidatorStakingModal() {
+    document.getElementById('validatorStakingModal').classList.add('active');
+}
+
+function closeValidatorStakingModal() {
+    document.getElementById('validatorStakingModal').classList.remove('active');
+}
+
+function setToStake() {
+    validatorShouldUnstake = false
+    document.getElementById('validatorStakingOptionStake').classList.add('active');
+    document.getElementById('validatorStakingOptionUnstake').classList.remove('active');
+}
+
+function setToUnstake() {
+    validatorShouldUnstake = true
+    document.getElementById('validatorStakingOptionStake').classList.remove('active');
+    document.getElementById('validatorStakingOptionUnstake').classList.add('active');
+}
+
+function submitValidatorStakingTx() {
 }
