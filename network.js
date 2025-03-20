@@ -16,9 +16,5 @@ const network = {
   },
   websocket: {
     url: "ws://localhost:3031",
-    subscribeMessage: {
-      method: "ChatEvent",
-      params: ["subscribe", "$ACCOUNT_ID"]
-    }
   }
 }
