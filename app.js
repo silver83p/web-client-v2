@@ -1336,7 +1336,7 @@ async function switchView(view) {
     if (view === 'chats') {
         await updateChatList('force');
         if (isOnline) {
-            if (!wsManager.isSubscribed()) {
+            if (wsManager && !wsManager.isSubscribed()) {
                 pollChatInterval(pollIntervalNormal)
             }
         }
@@ -1933,7 +1933,7 @@ function openChatModal(address) {
     appendChatModal.address = address
     appendChatModal.len = messages.length
     if (isOnline) {
-        if (!wsManager.isSubscribed()) {
+        if (wsManager && !wsManager.isSubscribed()) {
             pollChatInterval(pollIntervalChatting) // poll for messages at a faster rate
         }
     }
@@ -1979,7 +1979,7 @@ function closeChatModal() {
     appendChatModal.address = null
     appendChatModal.len = 0
     if (isOnline) {
-        if (!wsManager.isSubscribed()) {
+        if (wsManager && !wsManager.isSubscribed()) {
             pollChatInterval(pollIntervalNormal) // back to polling at slower rate
         }
     }
