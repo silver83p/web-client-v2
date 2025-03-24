@@ -3556,7 +3556,6 @@ async function handleClickToCopy(e) {
     if (!messageEl) return;
     
     try {
-        // Get text directly from the message-content div instead of data attribute
         const messageText = messageEl.querySelector('.message-content').textContent;
         await navigator.clipboard.writeText(messageText);
         showToast('Message copied to clipboard', 2000, 'success');
