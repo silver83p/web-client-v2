@@ -1219,7 +1219,7 @@ async function updateChatList(force) {
         chatList.innerHTML = `
             <div class="empty-state">
                 <div style="font-size: 2rem; margin-bottom: 1rem"></div>
-                <div style="font-weight: bold; margin-bottom: 0.5rem">No Chats Yet</div>
+                <div style="font-weight: bold; margin-bottom: 0.5rem">Click the + button to start a chat</div>
                 <div>Your conversations will appear here</div>
             </div>`;
         return;
