@@ -2850,7 +2850,10 @@ function fillAmount() {
 // The recipient account may not exist in myData.contacts and might have to be created
 async function handleSendAsset(event) {
     event.preventDefault();
-    
+    if (Date.now() - handleSendAsset.timestamp < 2000) {
+        return;
+    }
+    handleSendAsset.timestamp = Date.now()
     const wallet = myData.wallet;
     const assetIndex = document.getElementById('sendAsset').value;  // TODO include the asset id and symbol in the tx
     const fromAddress = myAccount.keys.address;
@@ -3009,6 +3012,7 @@ console.log('payload is', payload)
         alert('Transaction failed. Please try again.');
     }
 }
+handleSendAsset.timestamp = Date.now()
 
 // Contact Info Modal Management
 class ContactInfoModalManager {
