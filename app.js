@@ -809,18 +809,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('handleSendMessage').addEventListener('click', handleSendMessage);
     
     // Add message click-to-copy handler
-    document.querySelector('.messages-list')?.addEventListener('click', async (e) => {
-        const messageEl = e.target.closest('.message');
-        if (!messageEl) return;
-        
-        try {
-            const messageText = messageEl.dataset.message;
-            await navigator.clipboard.writeText(messageText);
-            showToast('Message copied to clipboard', 2000, 'success');
-        } catch (err) {
-            showToast('Failed to copy message', 2000, 'error');
-        }
-    });
+    document.querySelector('.messages-list')?.addEventListener('click', handleClickToCopy);
     
     // Add refresh balance button handler
     document.getElementById('refreshBalance').addEventListener('click', async () => {
@@ -3559,6 +3548,19 @@ async function handleSendMessage() {
     } catch (error) {
         console.error('Message error:', error);
         alert('Failed to send message. Please try again.');
+    }
+}
+
+async function handleClickToCopy(e) {
+    const messageEl = e.target.closest('.message');
+    if (!messageEl) return;
+    
+    try {
+        const messageText = messageEl.dataset.message;
+        await navigator.clipboard.writeText(messageText);
+        showToast('Message copied to clipboard', 2000, 'success');
+    } catch (err) {
+        showToast('Failed to copy message', 2000, 'error');
     }
 }
 
