@@ -808,6 +808,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeContactInfoModal').addEventListener('click', () => contactInfoModal.close());
     document.getElementById('handleSendMessage').addEventListener('click', handleSendMessage);
     
+    // Add message click-to-copy handler
+    document.querySelector('.messages-list')?.addEventListener('click', async (e) => {
+        const messageEl = e.target.closest('.message');
+        if (!messageEl) return;
+        
+        try {
+            const messageText = messageEl.dataset.message;
+            await navigator.clipboard.writeText(messageText);
+            showToast('Message copied to clipboard', 2000, 'success');
+        } catch (err) {
+            showToast('Failed to copy message', 2000, 'error');
+        }
+    });
+    
     // Add refresh balance button handler
     document.getElementById('refreshBalance').addEventListener('click', async () => {
 //        await updateWalletBalances();
@@ -1884,9 +1898,9 @@ function openChatModal(address) {
     // Get messages from contacts data
     const messages = contact?.messages || [];
 
-    // Display messages
+    // Display messages and click-to-copy feature
     messagesList.innerHTML = messages.map(msg => `
-        <div class="message ${msg.my ? 'sent' : 'received'}">
+        <div class="message ${msg.my ? 'sent' : 'received'}" data-message="${msg.message.replace(/"/g, '&quot;')}">
             <div class="message-content">${msg.message}</div>
             <div class="message-time">${formatTime(msg.timestamp)}</div>
         </div>
