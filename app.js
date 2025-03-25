@@ -1880,7 +1880,7 @@ function openChatModal(address) {
     const modalAvatar = modal.querySelector('.modal-avatar');
     const modalTitle = modal.querySelector('.modal-title');
     const messagesList = modal.querySelector('.messages-list');
-    const addFriendButton = document.getElementById('chatAddFriendButton');
+    const editButton = document.getElementById('chatEditButton');
     document.getElementById('newChatButton').classList.remove('visible');
     const contact = myData.contacts[address]
     // Set user info
@@ -1914,20 +1914,13 @@ function openChatModal(address) {
         }
     };
 
-    // Show or hide add friend button based on friend status
-    const isFriend = contact.friend || false;
-    if (isFriend) {
-        addFriendButton.style.display = 'none';
-    } else {
-        addFriendButton.style.display = 'flex';
-        // Add click handler for add friend button
-        addFriendButton.onclick = () => {
-            contact.friend = true;
-            showToast('Added to friends');
-            addFriendButton.style.display = 'none';
-            saveState();
-        };
-    }
+    // Add click handler for edit button
+    editButton.onclick = () => {
+        const contact = myData.contacts[address];
+        if (contact) {
+            contactInfoModal.open(createDisplayInfo(contact));
+        }
+    };
 
     // Show modal
     modal.classList.add('active');
