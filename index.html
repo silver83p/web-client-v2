@@ -797,10 +797,6 @@
                 aria-label="More options"
               ></button>
               <div class="dropdown-menu" id="contactInfoMenuDropdown">
-                <button class="dropdown-item" id="editContactButton">
-                  <span class="dropdown-icon edit-icon"></span>
-                  <span class="dropdown-text">Edit</span>
-                </button>
                 <button class="dropdown-item add-friend" id="addFriendButton">
                   <span class="dropdown-icon add-friend-icon"></span>
                   <span class="dropdown-text">Add Friend</span>
@@ -825,7 +821,14 @@
             </div>
             <div class="contact-info-item">
               <div class="contact-info-label">Name</div>
-              <div class="contact-info-value" id="contactInfoName"></div>
+              <div class="contact-info-value-container">
+                <div class="contact-info-value" id="contactInfoName"></div>
+                <button
+                  class="icon-button edit-icon"
+                  id="nameEditButton"
+                  aria-label="Edit name"
+                ></button>
+              </div>
             </div>
             <div class="contact-info-item">
               <div class="contact-info-label">Email</div>

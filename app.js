@@ -3042,12 +3042,6 @@ class ContactInfoModalManager {
             this.menuDropdown.classList.remove('active');
         });
 
-        // Edit button
-        document.getElementById('editContactButton').addEventListener('click', () => {
-            this.enterEditMode();
-            this.menuDropdown.classList.remove('active');
-        });
-
         // Add friend button
         document.getElementById('addFriendButton').addEventListener('click', () => {
             if (!this.currentContactAddress) return;
@@ -3080,6 +3074,11 @@ class ContactInfoModalManager {
                 this.exitEditMode(false);
             }
         });
+
+        // Name edit button TODO - for Mar 25 task
+/*         document.getElementById('nameEditButton').addEventListener('click', () => {
+            this.enterEditMode();
+        }); */
     }
 
     enterEditMode() {
@@ -3189,10 +3188,6 @@ class ContactInfoModalManager {
                 <div class="dropdown">
                     <button class="dropdown-menu-button" id="contactInfoMenuButton"></button>
                     <div class="dropdown-menu" id="contactInfoMenuDropdown">
-                        <button class="dropdown-item" id="editContactButton">
-                            <span class="dropdown-icon edit-icon"></span>
-                            <span class="dropdown-text">Edit</span>
-                        </button>
                         <button class="dropdown-item add-friend" id="addFriendButton">
                             <span class="dropdown-icon add-friend-icon"></span>
                             <span class="dropdown-text">Add Friend</span>
@@ -3205,19 +3200,12 @@ class ContactInfoModalManager {
         // Reattach all necessary event listeners
         const menuButton = document.getElementById('contactInfoMenuButton');
         const menuDropdown = document.getElementById('contactInfoMenuDropdown');
-        const editButton = document.getElementById('editContactButton');
         const addFriendButton = document.getElementById('addFriendButton');
 
         // Menu button click handler
         menuButton.addEventListener('click', (e) => {
             e.stopPropagation();
             menuDropdown.classList.toggle('active');
-        });
-
-        // Edit button click handler
-        editButton.addEventListener('click', () => {
-            this.enterEditMode();
-            menuDropdown.classList.remove('active');
         });
 
         // Add friend button click handler
