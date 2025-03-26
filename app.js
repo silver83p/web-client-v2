@@ -1439,7 +1439,7 @@ async function updateContactsList() {
                             <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
                         </div>
                         <div class="chat-message">
-                            ${contact.email || contact.x || contact.phone || contact.address}
+                            ${contact.email || contact.x || contact.phone || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}
                         </div>
                     </div>
                 </li>
@@ -1461,7 +1461,7 @@ async function updateContactsList() {
                             <div class="chat-name">${contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
                         </div>
                         <div class="chat-message">
-                            ${contact.email || contact.x || contact.phone || contact.address}
+                            ${contact.email || contact.x || contact.phone || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}
                         </div>
                     </div>
                 </li>
@@ -1989,13 +1989,12 @@ appendChatModal.len = 0
 function closeChatModal() {
     document.getElementById('chatModal').classList.remove('active');
     if (document.getElementById('chatsScreen').classList.contains('active')) {
-        await updateChatList('force')
+        updateChatList('force')
         document.getElementById('newChatButton').classList.add('visible');
     }
     if (document.getElementById('contactsScreen').classList.contains('active')) {
-        await updateContactsList()
+        updateContactsList()
         document.getElementById('newChatButton').classList.add('visible');
-
     }
     appendChatModal.address = null
     appendChatModal.len = 0
