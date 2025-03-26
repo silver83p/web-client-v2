@@ -3066,6 +3066,11 @@ class ContactInfoModalManager {
         // Add close button handler for edit contact modal
         document.getElementById('closeEditContactModal').addEventListener('click', () => {
             document.getElementById('editContactModal').classList.remove('active');
+            
+            // Clean up event listeners
+            const nameInput = document.getElementById('editContactNameInput');
+            const nameActionButton = nameInput.parentElement.querySelector('.field-action-button');
+            cleanupEventListeners(nameInput, nameActionButton);
         });
     }
 
@@ -3331,6 +3336,15 @@ async function openEditContactModal() {
     // Create display info object using the same format as contactInfoModal
     const displayInfo = createDisplayInfo(myData.contacts[currentContactAddress]);
     
+    // Setup UI elements
+    await setupEditContactUI(displayInfo);
+    
+    // Setup input field and event handlers
+    setupNameFieldHandlers(displayInfo);
+}
+
+// Sets up the UI elements of the edit contact modal
+async function setupEditContactUI(displayInfo) {
     // Get the avatar section elements
     const avatarSection = document.querySelector('#editContactModal .contact-avatar-section');
     const avatarDiv = avatarSection.querySelector('.avatar');
@@ -3345,18 +3359,142 @@ async function openEditContactModal() {
     nameDiv.textContent = displayInfo.name !== 'Not provided' ? displayInfo.name : displayInfo.username;
     subtitleDiv.textContent = displayInfo.address;
     
-    // Copy current contact info to edit modal
+    // Copy current contact info to editContactUsername
     document.getElementById('editContactUsername').textContent = displayInfo.username;
-    document.getElementById('editContactName').textContent = displayInfo.name;
-    document.getElementById('editContactEmail').textContent = displayInfo.email;
-    document.getElementById('editContactPhone').textContent = displayInfo.phone;
-    document.getElementById('editContactLinkedin').textContent = displayInfo.linkedin;
-    document.getElementById('editContactX').textContent = displayInfo.x;
+}
+
+// Sets up event handlers for the name input field
+function setupNameFieldHandlers(displayInfo) {
+    // Set up the Name field with current value and event handlers
+    const nameInput = document.getElementById('editContactNameInput');
+    const nameActionButton = nameInput.parentElement.querySelector('.field-action-button');
+    
+    // Set initial value and store original value for comparison
+    nameInput.value = displayInfo.name !== 'Not provided' ? displayInfo.name : '';
+    const originalNameValue = nameInput.value;
+    
+    // Set initial button state - always show clear button initially
+    nameActionButton.className = 'field-action-button clear';
+    nameActionButton.setAttribute('aria-label', 'Clear');
+
+    // Focus on the name input with a slight delay
+    setTimeout(() => {
+        nameInput.focus();
+    }, 1000);
+    
+    // Define event handler functions
+    const handleInput = createInputHandler(nameInput, nameActionButton, originalNameValue);
+    const handleButtonClick = createButtonClickHandler(nameInput, nameActionButton, originalNameValue);
+    const handleKeydown = createKeydownHandler(nameInput);
+    
+    // Add event listeners
+    nameInput.addEventListener('input', handleInput);
+    nameActionButton.addEventListener('click', handleButtonClick);
+    nameInput.addEventListener('keydown', handleKeydown);
+    
+    // Store the handlers on the elements themselves for later cleanup
+    nameInput._inputHandler = handleInput;
+    nameActionButton._clickHandler = handleButtonClick;
+    nameInput._keydownHandler = handleKeydown;
+}
+
+// Creates a handler for input changes
+function createInputHandler(nameInput, nameActionButton, originalNameValue) {
+    return () => {
+        const currentValue = nameInput.value.trim();
+        // If current value matches original value, show clear button
+        // Otherwise show add/save button
+        const valueChanged = currentValue !== originalNameValue;
+        
+        if (valueChanged) {
+            nameActionButton.className = 'field-action-button add';
+            nameActionButton.setAttribute('aria-label', 'Save');
+        } else {
+            nameActionButton.className = 'field-action-button clear';
+            nameActionButton.setAttribute('aria-label', 'Clear');
+        }
+    };
+}
+
+// Creates a handler for action button clicks
+function createButtonClickHandler(nameInput, nameActionButton, originalNameValue) {
+    return () => {
+        // If button is in clear mode, clear the input and focus
+        if (nameActionButton.classList.contains('clear')) {
+            nameInput.value = '';
+            // If original was empty, keep clear button, otherwise show save
+            if (originalNameValue === '') {
+                nameActionButton.className = 'field-action-button clear';
+                nameActionButton.setAttribute('aria-label', 'Clear');
+            } else {
+                nameActionButton.className = 'field-action-button add';
+                nameActionButton.setAttribute('aria-label', 'Save');
+            }
+            nameInput.focus();
+        } else {
+            // Button is in add/save mode, save the contact
+            handleSaveEditContact();
+        }
+    };
+}
+
+// Creates a handler for keydown events
+function createKeydownHandler() {
+    return (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSaveEditContact();
+        }
+    };
+}
+
+// Handles saving contact changes
+function handleSaveEditContact() {
+    const nameInput = document.getElementById('editContactNameInput');
+    const nameActionButton = nameInput.parentElement.querySelector('.field-action-button');
+    const currentContactAddress = contactInfoModal.currentContactAddress;
+    
+    // Save changes
+    const newName = nameInput.value.trim();
+    const contact = myData.contacts[currentContactAddress];
+    if (contact) {
+        contact.name = newName || null;
+        saveState();
+        contactInfoModal.needsContactListUpdate = true;
+    }
+    
+    // Close the modal
+    document.getElementById('editContactModal').classList.remove('active');
+    
+    // Clean up event listeners
+    cleanupEventListeners(nameInput, nameActionButton);
+    
+    // Update the contact info modal display if it's still open
+    if (contactInfoModal.currentContactAddress) {
+        contactInfoModal.updateContactInfo(createDisplayInfo(myData.contacts[currentContactAddress]));
+    }
+}
+
+// Removes event listeners to prevent memory leaks
+function cleanupEventListeners(nameInput, nameActionButton) {
+    if (nameInput._inputHandler) {
+        nameInput.removeEventListener('input', nameInput._inputHandler);
+        nameInput._inputHandler = null;
+    }
+    
+    if (nameInput._keydownHandler) {
+        nameInput.removeEventListener('keydown', nameInput._keydownHandler);
+        nameInput._keydownHandler = null;
+    }
+    
+    if (nameActionButton._clickHandler) {
+        nameActionButton.removeEventListener('click', nameActionButton._clickHandler);
+        nameActionButton._clickHandler = null;
+    }
 }
 
 // Create a singleton instance
 const contactInfoModal = new ContactInfoModalManager();
-
 
 function handleSignOut() {
 //    const shouldLeave = confirm('Do you want to leave this page?');
