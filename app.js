@@ -1344,6 +1344,8 @@ async function switchView(view) {
     const newChatButton = document.getElementById('newChatButton');
     if (view === 'chats') {
         newChatButton.classList.add('visible');
+    } else if (view === 'contacts') {
+        newChatButton.classList.add('visible');
     } else {
         newChatButton.classList.remove('visible');
     }
@@ -1746,6 +1748,9 @@ function closeNewChatModal() {
     document.getElementById('newChatForm').reset();
     if (document.getElementById('chatsScreen').classList.contains('active')) {
         document.getElementById('newChatButton').classList.add('visible');
+    } 
+    if (document.getElementById('contactsScreen').classList.contains('active')) {
+        document.getElementById('newChatButton').classList.add('visible');
     }
 }
 
@@ -1984,8 +1989,13 @@ appendChatModal.len = 0
 function closeChatModal() {
     document.getElementById('chatModal').classList.remove('active');
     if (document.getElementById('chatsScreen').classList.contains('active')) {
-        updateChatList('force')
+        await updateChatList('force')
         document.getElementById('newChatButton').classList.add('visible');
+    }
+    if (document.getElementById('contactsScreen').classList.contains('active')) {
+        await updateContactsList()
+        document.getElementById('newChatButton').classList.add('visible');
+
     }
     appendChatModal.address = null
     appendChatModal.len = 0
