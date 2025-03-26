@@ -3075,8 +3075,8 @@ class ContactInfoModalManager {
             }
         });
 
-        // Name edit button TODO - for Mar 25 task
-        document.getElementById('nameEditButton').addEventListener('click', handleEditContactClick);
+
+        document.getElementById('nameEditButton').addEventListener('click', openEditContactModal);
 
         // Add close button handler for edit contact modal
         document.getElementById('closeEditContactModal').addEventListener('click', () => {
@@ -3339,7 +3339,7 @@ class ContactInfoModalManager {
     }
 }
 
-async function handleEditContactClick() {
+async function openEditContactModal() {
     // Show the edit contact modal
     document.getElementById('editContactModal').classList.add('active');
     
