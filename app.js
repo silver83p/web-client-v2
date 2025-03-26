@@ -3360,6 +3360,9 @@ async function openEditContactModal() {
     const nameInput = document.getElementById('editContactNameInput');
     nameInput.value = originalName;
 
+    // field-action-button should be clear
+    nameInput.parentElement.querySelector('.field-action-button').className = 'field-action-button clear';
+
     // Show the edit contact modal
     document.getElementById('editContactModal').classList.add('active');
     
