@@ -3030,18 +3030,6 @@ class ContactInfoModalManager {
             }
         });
 
-        // Menu toggle
-        const menuButton = document.getElementById('contactInfoMenuButton');
-        menuButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.menuDropdown.classList.toggle('active');
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', () => {
-            this.menuDropdown.classList.remove('active');
-        });
-
         // Add friend button
         document.getElementById('addFriendButton').addEventListener('click', () => {
             if (!this.currentContactAddress) return;
@@ -3055,11 +3043,8 @@ class ContactInfoModalManager {
             // Show appropriate toast message
             showToast(contact.friend ? 'Added to friends' : 'Removed from friends');
 
-            // Update button text
+            // Update button appearance
             this.updateFriendButton(contact.friend);
-
-            // Close the dropdown
-            this.menuDropdown.classList.remove('active');
 
             // Mark that we need to update the contact list
             this.needsContactListUpdate = true;
@@ -3248,17 +3233,10 @@ class ContactInfoModalManager {
     // Update friend button text based on current status
     updateFriendButton(isFriend) {
         const button = document.getElementById('addFriendButton');
-        const textSpan = button.querySelector('.dropdown-text');
-        const iconSpan = button.querySelector('.dropdown-icon');
-        textSpan.textContent = isFriend ? 'Remove Friend' : 'Add Friend';
-        
-        // Toggle the removing class based on friend status
         if (isFriend) {
             button.classList.add('removing');
-            iconSpan.classList.add('removing');
         } else {
             button.classList.remove('removing');
-            iconSpan.classList.remove('removing');
         }
     }
 
