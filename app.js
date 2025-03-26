@@ -3074,6 +3074,14 @@ class ContactInfoModalManager {
                 this.exitEditMode(false);
             }
         });
+
+        // Name edit button TODO - for Mar 25 task
+        document.getElementById('nameEditButton').addEventListener('click', handleEditContactClick);
+
+        // Add close button handler for edit contact modal
+        document.getElementById('closeEditContactModal').addEventListener('click', () => {
+            document.getElementById('editContactModal').classList.remove('active');
+        });
     }
 
     enterEditMode() {
@@ -3256,28 +3264,19 @@ class ContactInfoModalManager {
 
     // Update contact info values
     async updateContactInfo(displayInfo) {
-        // Add avatar section at the top
-        const contactInfoList = this.modal.querySelector('.contact-info-list');
-        const avatarSection = document.createElement('div');
-        avatarSection.className = 'contact-avatar-section';
+        // Update avatar section
+        const avatarSection = this.modal.querySelector('.contact-avatar-section');
+        const avatarDiv = avatarSection.querySelector('.avatar');
+        const nameDiv = avatarSection.querySelector('.name');
+        const subtitleDiv = avatarSection.querySelector('.subtitle');
         
         // Generate identicon for the contact
         const identicon = await generateIdenticon(displayInfo.address, 96);
         
-        avatarSection.innerHTML = `
-            <div class="avatar">${identicon}</div>
-            <div class="name">${displayInfo.name !== 'Not provided' ? displayInfo.name : displayInfo.username}</div>
-            <div class="subtitle">${displayInfo.address}</div>
-        `;
-
-        // Remove existing avatar section if it exists
-        const existingAvatarSection = contactInfoList.querySelector('.contact-avatar-section');
-        if (existingAvatarSection) {
-            existingAvatarSection.remove();
-        }
-
-        // Add new avatar section at the top
-        contactInfoList.insertBefore(avatarSection, contactInfoList.firstChild);
+        // Update the avatar section
+        avatarDiv.innerHTML = identicon;
+        nameDiv.textContent = displayInfo.name !== 'Not provided' ? displayInfo.name : displayInfo.username;
+        subtitleDiv.textContent = displayInfo.address;
 
         const fields = {
             'Username': 'contactInfoUsername',
@@ -3338,6 +3337,43 @@ class ContactInfoModalManager {
             this.needsContactListUpdate = false;
         }
     }
+}
+
+async function handleEditContactClick() {
+    // Show the edit contact modal
+    document.getElementById('editContactModal').classList.add('active');
+    
+    // Get the current contact info from the contact info modal
+    const currentContactAddress = contactInfoModal.currentContactAddress;
+    if (!currentContactAddress || !myData.contacts[currentContactAddress]) {
+        console.error('No current contact found');
+        return;
+    }
+
+    // Create display info object using the same format as contactInfoModal
+    const displayInfo = createDisplayInfo(myData.contacts[currentContactAddress]);
+    
+    // Get the avatar section elements
+    const avatarSection = document.querySelector('#editContactModal .contact-avatar-section');
+    const avatarDiv = avatarSection.querySelector('.avatar');
+    const nameDiv = avatarSection.querySelector('.name');
+    const subtitleDiv = avatarSection.querySelector('.subtitle');
+    
+    // Generate identicon using the actual contact address
+    const identicon = await generateIdenticon(displayInfo.address, 96);
+    
+    // Update the avatar section
+    avatarDiv.innerHTML = identicon;
+    nameDiv.textContent = displayInfo.name !== 'Not provided' ? displayInfo.name : displayInfo.username;
+    subtitleDiv.textContent = displayInfo.address;
+    
+    // Copy current contact info to edit modal
+    document.getElementById('editContactUsername').textContent = displayInfo.username;
+    document.getElementById('editContactName').textContent = displayInfo.name;
+    document.getElementById('editContactEmail').textContent = displayInfo.email;
+    document.getElementById('editContactPhone').textContent = displayInfo.phone;
+    document.getElementById('editContactLinkedin').textContent = displayInfo.linkedin;
+    document.getElementById('editContactX').textContent = displayInfo.x;
 }
 
 // Create a singleton instance
