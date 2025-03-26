@@ -3074,11 +3074,6 @@ class ContactInfoModalManager {
                 this.exitEditMode(false);
             }
         });
-
-        // Name edit button TODO - for Mar 25 task
-/*         document.getElementById('nameEditButton').addEventListener('click', () => {
-            this.enterEditMode();
-        }); */
     }
 
     enterEditMode() {
