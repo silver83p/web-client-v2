@@ -797,10 +797,6 @@
                 aria-label="More options"
               ></button>
               <div class="dropdown-menu" id="contactInfoMenuDropdown">
-                <button class="dropdown-item" id="editContactButton">
-                  <span class="dropdown-icon edit-icon"></span>
-                  <span class="dropdown-text">Edit</span>
-                </button>
                 <button class="dropdown-item add-friend" id="addFriendButton">
                   <span class="dropdown-icon add-friend-icon"></span>
                   <span class="dropdown-text">Add Friend</span>
@@ -811,6 +807,11 @@
         </div>
         <div class="form-container">
           <div class="contact-info-list">
+            <div class="contact-avatar-section">
+              <div class="avatar"></div>
+              <div class="name"></div>
+              <div class="subtitle"></div>
+            </div>
             <!-- Template for contact info items -->
             <template id="contactInfoItemTemplate">
               <div class="contact-info-item">
@@ -825,7 +826,14 @@
             </div>
             <div class="contact-info-item">
               <div class="contact-info-label">Name</div>
-              <div class="contact-info-value" id="contactInfoName"></div>
+              <div class="contact-info-value-container">
+                <div class="contact-info-value" id="contactInfoName"></div>
+                <button
+                  class="icon-button edit-icon"
+                  id="nameEditButton"
+                  aria-label="Edit name"
+                ></button>
+              </div>
             </div>
             <div class="contact-info-item">
               <div class="contact-info-label">Email</div>
@@ -996,6 +1004,49 @@
           </div>
           <div id="contactSearchResults" class="chat-list">
             <!-- Contact search results will be populated here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Contact Modal -->
+      <div class="modal fixed-header" id="editContactModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeEditContactModal"></button>
+          <div class="modal-title">Edit Contact</div>
+        </div>
+        <div class="form-container">
+          <div class="contact-info-list">
+            <div class="contact-avatar-section">
+              <div class="avatar"></div>
+              <div class="name"></div>
+              <div class="subtitle"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Username</div>
+              <div class="contact-info-value" id="editContactUsername"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Name</div>
+              <div class="contact-info-value-container">
+                <div class="contact-info-value" id="editContactName"></div>
+              </div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Email</div>
+              <div class="contact-info-value" id="editContactEmail"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Phone</div>
+              <div class="contact-info-value" id="editContactPhone"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">LinkedIn</div>
+              <div class="contact-info-value" id="editContactLinkedin"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">X</div>
+              <div class="contact-info-value" id="editContactX"></div>
+            </div>
           </div>
         </div>
       </div>
