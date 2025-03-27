@@ -491,6 +491,80 @@
         </div>
       </div>
 
+      <!-- Contact Info Modal -->
+      <div class="modal fixed-header" id="contactInfoModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeContactInfoModal"></button>
+          <div class="modal-title">Contact Info</div>
+          <!-- Add header actions container -->
+          <div class="header-actions">
+            <button
+              class="icon-button chat-icon"
+              id="contactInfoChatButton"
+              aria-label="Open chat"
+            ></button>
+            <button
+              class="icon-button send-money-icon"
+              id="contactInfoSendButton"
+              aria-label="Send money"
+            ></button>
+            <button
+              class="icon-button add-friend-icon"
+              id="addFriendButton"
+              aria-label="Add friend"
+            ></button>
+          </div>
+        </div>
+        <div class="form-container">
+          <div class="contact-info-list">
+            <div class="contact-avatar-section">
+              <div class="avatar" id="contactInfoAvatar"></div>
+              <div class="name"></div>
+              <div class="subtitle"></div>
+            </div>
+            <!-- Template for contact info items -->
+            <template id="contactInfoItemTemplate">
+              <div class="contact-info-item">
+                <div class="contact-info-label"></div>
+                <div class="contact-info-value"></div>
+              </div>
+            </template>
+            <!-- Contact info fields -->
+            <div class="contact-info-item">
+              <div class="contact-info-label">Username</div>
+              <div class="contact-info-value" id="contactInfoUsername"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Name</div>
+              <div class="contact-info-value-container">
+                <div class="contact-info-value" id="contactInfoName"></div>
+                <button
+                  class="icon-button edit-icon"
+                  id="nameEditButton"
+                  aria-label="Edit name"
+                ></button>
+              </div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Email</div>
+              <div class="contact-info-value" id="contactInfoEmail"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">Phone</div>
+              <div class="contact-info-value" id="contactInfoPhone"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">LinkedIn</div>
+              <div class="contact-info-value" id="contactInfoLinkedin"></div>
+            </div>
+            <div class="contact-info-item">
+              <div class="contact-info-label">X</div>
+              <div class="contact-info-value" id="contactInfoX"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Receive Modal -->
       <div class="modal fixed-header" id="receiveModal">
         <div class="modal-header">
@@ -775,80 +849,6 @@
             </div>
             <button type="submit" class="update-button">Download Data</button>
           </form>
-        </div>
-      </div>
-
-      <!-- Contact Info Modal -->
-      <div class="modal fixed-header" id="contactInfoModal">
-        <div class="modal-header">
-          <button class="back-button" id="closeContactInfoModal"></button>
-          <div class="modal-title">Contact Info</div>
-          <!-- Add header actions container -->
-          <div class="header-actions">
-            <button
-              class="icon-button chat-icon"
-              id="contactInfoChatButton"
-              aria-label="Open chat"
-            ></button>
-            <button
-              class="icon-button send-money-icon"
-              id="contactInfoSendButton"
-              aria-label="Send money"
-            ></button>
-            <button
-              class="icon-button add-friend-icon"
-              id="addFriendButton"
-              aria-label="Add friend"
-            ></button>
-          </div>
-        </div>
-        <div class="form-container">
-          <div class="contact-info-list">
-            <div class="contact-avatar-section">
-              <div class="avatar" id="contactInfoAvatar"></div>
-              <div class="name"></div>
-              <div class="subtitle"></div>
-            </div>
-            <!-- Template for contact info items -->
-            <template id="contactInfoItemTemplate">
-              <div class="contact-info-item">
-                <div class="contact-info-label"></div>
-                <div class="contact-info-value"></div>
-              </div>
-            </template>
-            <!-- Contact info fields -->
-            <div class="contact-info-item">
-              <div class="contact-info-label">Username</div>
-              <div class="contact-info-value" id="contactInfoUsername"></div>
-            </div>
-            <div class="contact-info-item">
-              <div class="contact-info-label">Name</div>
-              <div class="contact-info-value-container">
-                <div class="contact-info-value" id="contactInfoName"></div>
-                <button
-                  class="icon-button edit-icon"
-                  id="nameEditButton"
-                  aria-label="Edit name"
-                ></button>
-              </div>
-            </div>
-            <div class="contact-info-item">
-              <div class="contact-info-label">Email</div>
-              <div class="contact-info-value" id="contactInfoEmail"></div>
-            </div>
-            <div class="contact-info-item">
-              <div class="contact-info-label">Phone</div>
-              <div class="contact-info-value" id="contactInfoPhone"></div>
-            </div>
-            <div class="contact-info-item">
-              <div class="contact-info-label">LinkedIn</div>
-              <div class="contact-info-value" id="contactInfoLinkedin"></div>
-            </div>
-            <div class="contact-info-item">
-              <div class="contact-info-label">X</div>
-              <div class="contact-info-value" id="contactInfoX"></div>
-            </div>
-          </div>
         </div>
       </div>
 
