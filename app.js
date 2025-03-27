@@ -2342,7 +2342,6 @@ async function copyAddress() {
 function openSendModal() {
     const modal = document.getElementById('sendModal');
     modal.classList.add('active');
-
     const usernameInput = document.getElementById('sendToAddress');
     const usernameAvailable = document.getElementById('sendToAddressError');
     const submitButton = document.querySelector('#sendForm button[type="submit"]');
