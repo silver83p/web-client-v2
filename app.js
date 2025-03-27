@@ -833,8 +833,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.getElementById('openLogs').addEventListener('click', () => {
-        // Close the menu modal first
-        document.getElementById('menuModal').classList.remove('active');
         // Then open the logs modal and update view
         document.getElementById('logsModal').classList.add('active');
         //updateLogsView();
@@ -5525,9 +5523,6 @@ function initializeGatewayConfig() {
 
 // Function to open the gateway form
 function openGatewayForm() {
-    // Close menu modal
-    document.getElementById('menuModal').classList.remove('active');
-
     // Initialize gateway configuration if needed
     initializeGatewayConfig();
 
