@@ -936,6 +936,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Add send money button handler
     document.getElementById('contactInfoSendButton').addEventListener('click', () => {
+    const contactUsername = document.getElementById('contactInfoUsername');
+    if (contactUsername) {
+        openSendModal.username = contactUsername.textContent;
+    }
+    
         openSendModal();
     });
 
@@ -2359,20 +2364,13 @@ function openSendModal() {
     console.log("Added click event listener to scan QR button");
  */
 
-    // Check if contactInfoModal is active and pre-populate username if it is
-    const contactInfoModal = document.getElementById('contactInfoModal');
-    if (contactInfoModal && contactInfoModal.classList.contains('active')) {
-        const computedStyle = window.getComputedStyle(document.getElementById('contactInfoModal'));
-        const zIndex = parseInt(computedStyle.zIndex);
-        // Set new modal's z-index one higher
-        modal.style.zIndex = (zIndex + 1).toString();
-
-        const contactUsername = document.getElementById('contactInfoUsername');
-        if (contactUsername) {
-            usernameInput.value = contactUsername.textContent;
-            // Trigger the input event to check availability
+    if (openSendModal.username) {
+        const usernameInput = document.getElementById('sendToAddress');
+        usernameInput.value = openSendModal.username;
+        setTimeout(() => {
             usernameInput.dispatchEvent(new Event('input'));
-        }
+        }, 500);
+        openSendModal.username = null
     }
     
     // Check availability on input changes
@@ -2428,6 +2426,8 @@ function openSendModal() {
     // Update addresses for first asset
     updateSendAddresses();
 }
+
+openSendModal.username = null
 
 // Function to handle QR code scanning Omar
 function openQRScanModal() {
@@ -2829,6 +2829,7 @@ async function closeSendModal() {
     await updateChatList()
     document.getElementById('sendModal').classList.remove('active');
     document.getElementById('sendForm').reset();
+    opensendModal.username = null
 }
 
 function updateSendAddresses() {
