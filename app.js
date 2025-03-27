@@ -934,6 +934,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     nameInput.addEventListener('keydown', handleEditNameKeydown);
     nameActionButton.addEventListener('click', handleEditNameButton);
     
+    // Add send money button handler
+    document.getElementById('contactInfoSendButton').addEventListener('click', () => {
+        openSendModal();
+    });
 
     setupAddToHomeScreen()
 });
@@ -2338,7 +2342,7 @@ async function copyAddress() {
 function openSendModal() {
     const modal = document.getElementById('sendModal');
     modal.classList.add('active');
-    
+
     const usernameInput = document.getElementById('sendToAddress');
     const usernameAvailable = document.getElementById('sendToAddressError');
     const submitButton = document.querySelector('#sendForm button[type="submit"]');
@@ -2356,6 +2360,22 @@ function openSendModal() {
     console.log("Added click event listener to scan QR button");
  */
 
+    // Check if contactInfoModal is active and pre-populate username if it is
+    const contactInfoModal = document.getElementById('contactInfoModal');
+    if (contactInfoModal && contactInfoModal.classList.contains('active')) {
+        const computedStyle = window.getComputedStyle(document.getElementById('contactInfoModal'));
+        const zIndex = parseInt(computedStyle.zIndex);
+        // Set new modal's z-index one higher
+        modal.style.zIndex = (zIndex + 1).toString();
+
+        const contactUsername = document.getElementById('contactInfoUsername');
+        if (contactUsername) {
+            usernameInput.value = contactUsername.textContent;
+            // Trigger the input event to check availability
+            usernameInput.dispatchEvent(new Event('input'));
+        }
+    }
+    
     // Check availability on input changes
     let checkTimeout;
     usernameInput.addEventListener('input', (e) => {
