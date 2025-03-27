@@ -706,14 +706,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (hasAccounts) {
         welcomeButtons.innerHTML = ''; // Clear existing order
         welcomeButtons.appendChild(signInBtn);
-                welcomeButtons.appendChild(createAccountBtn);
-                welcomeButtons.appendChild(importAccountBtn);
+        welcomeButtons.appendChild(createAccountBtn);
+        welcomeButtons.appendChild(importAccountBtn);
         signInBtn.classList.add('primary-button');
         signInBtn.classList.remove('secondary-button');
     } else {
         welcomeButtons.innerHTML = ''; // Clear existing order
         welcomeButtons.appendChild(createAccountBtn);
-                welcomeButtons.appendChild(signInBtn);
         welcomeButtons.appendChild(importAccountBtn);
         createAccountBtn.classList.add('primary-button');
         createAccountBtn.classList.remove('secondary-button');
