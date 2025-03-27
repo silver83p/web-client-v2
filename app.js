@@ -944,6 +944,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         openSendModal();
     });
 
+    document.getElementById('chatSendMoneyButton').addEventListener('click', (event) => {
+        const button = event.currentTarget;
+        openSendModal.username = button.dataset.username;
+        openSendModal();
+    });
+
     setupAddToHomeScreen()
 });
 
@@ -1904,6 +1910,11 @@ function openChatModal(address) {
     const contact = myData.contacts[address]
     // Set user info
     modalTitle.textContent = contact.name || contact.senderInfo?.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`;
+    
+    // Add data attributes to store the username and address
+    const sendMoneyButton = document.getElementById('chatSendMoneyButton');
+    sendMoneyButton.dataset.username = contact.username || address;
+
     generateIdenticon(contact.address, 40).then(identicon => {
         modalAvatar.innerHTML = identicon;
     });
