@@ -961,6 +961,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('scanQRButton').addEventListener('click', openQRScanModal);
     document.getElementById('closeQRScanModal').addEventListener('click', closeQRScanModal);
     
+    // File upload handlers
+    document.getElementById('uploadQRButton').addEventListener('click', () => {
+        document.getElementById('qrFileInput').click();
+    });
+
+    document.getElementById('qrFileInput').addEventListener('change', handleQRFileSelect);
+
     const nameInput = document.getElementById('editContactNameInput');
     const nameActionButton = nameInput.parentElement.querySelector('.field-action-button');
 
@@ -970,11 +977,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Add send money button handler
     document.getElementById('contactInfoSendButton').addEventListener('click', () => {
-    const contactUsername = document.getElementById('contactInfoUsername');
-    if (contactUsername) {
-        openSendModal.username = contactUsername.textContent;
-    }
-    
+        const contactUsername = document.getElementById('contactInfoUsername');
+        if (contactUsername) {
+            openSendModal.username = contactUsername.textContent;
+        }
         openSendModal();
     });
 
@@ -5915,8 +5921,6 @@ function handleGatewayForm(event) {
 async function startCamera() {
     const video = document.getElementById('video');
     const canvasElement = document.getElementById('canvas');
-    const canvas = canvasElement.getContext('2d', { willReadFrequently: true }); // Optimized for frequent getImageData calls
-    const scanHighlight = document.getElementById('scan-highlight');
     try {
         // First check if camera API is supported
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -6089,6 +6093,55 @@ function stopCamera() {
         startCamera.scanning = false;
 //        toggleButton.textContent = 'Start Camera';
 //        statusMessage.textContent = 'Camera stopped.';
+    }
+}
+
+async function handleQRFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        // Create an image object
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+
+        // Wait for image to load
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+        });
+
+        // Create canvas and get context
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+
+        // Set canvas size to match image
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        // Draw image to canvas
+        context.drawImage(img, 0, 0);
+
+        // Get image data for QR processing
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+        // Process image with jsQR
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+        });
+
+        // Clean up
+        URL.revokeObjectURL(img.src);
+
+        // Handle QR code result
+        if (code) {
+            handleSuccessfulScan(code.data);
+        } else {
+            showToast('No QR code found in image', 3000, 'error');
+        }
+    } catch (error) {
+        console.error('Error processing QR code image:', error);
+        showToast('Error processing image', 3000, 'error');
     }
 }
 
