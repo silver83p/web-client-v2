@@ -6137,11 +6137,14 @@ async function handleQRFileSelect(event) {
         if (code) {
             handleSuccessfulScan(code.data);
         } else {
+            console.error('No QR code found in image');
             showToast('No QR code found in image', 3000, 'error');
+            event.target.value = ''; // Reset the file input value
         }
     } catch (error) {
         console.error('Error processing QR code image:', error);
         showToast('Error processing image', 3000, 'error');
+        event.target.value = '';
     }
 }
 
