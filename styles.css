@@ -378,13 +378,15 @@ body {
   padding: 0;
   overflow-y: auto;
   position: relative;
-  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .app-screen.active {
   display: block;
 }
 
+#contactsScreen,
 #chatsScreen {
   padding-bottom: 80px;
 }
@@ -2036,14 +2038,6 @@ mark {
 /* Search bar spacing */
 .form-container .search-bar {
   margin-bottom: 16px;
-}
-
-/* Chat list and search results styling */
-.chat-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  overflow-y: auto; /* Ensure scrolling is enabled */
 }
 
 /* Individual chat/search items */
