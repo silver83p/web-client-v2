@@ -5159,6 +5159,9 @@ function displayContactResults(results, searchText) {
 
         // Add click handler to show contact info
         contactElement.addEventListener("click", () => {
+            // clear search results and input contactSearchResults
+            document.getElementById("contactSearchResults").innerHTML = "";
+            document.getElementById("contactSearch").value = "";
             // Create display info and open contact info modal
             contactInfoModal.open(createDisplayInfo(contact));
             // Close the search modal
