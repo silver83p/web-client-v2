@@ -5004,7 +5004,7 @@ function handleSearchResultClick(result) {
                 messageElement.classList.add('highlighted');
                 setTimeout(() => messageElement.classList.remove('highlighted'), 2000);
             } else {
-                console.error('Message element not found for selector:', messageSelector); // Log if not found
+                console.error('Message element not found for selector:', messageSelector);
                 // Could add a toast notification here
             }
         }, 300);
