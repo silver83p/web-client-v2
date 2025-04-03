@@ -3645,93 +3645,96 @@ handleSignOut.exit = false
 // The user has a chat modal open to a recipient and has typed a message anc clicked the Send button
 // The recipient account already exists in myData.contacts; it was created when the user submitted the New Chat form
 async function handleSendMessage() {
-    const messageInput = document.querySelector('.message-input');
-    messageInput.focus(); // Add focus back to keep keyboard open
-    await updateChatList()  // before sending the message check and show received messages
-    
-    const message = messageInput.value.trim();
-    if (!message) return;
-
-    const modal = document.getElementById('chatModal');
-    const modalTitle = modal.querySelector('.modal-title');
-    const messagesList = modal.querySelector('.messages-list');
-
-    // Get current chat data
-    const chatsData = myData
-/*
-    const currentAddress = Object.values(chatsData.contacts).find(contact =>
-        modalTitle.textContent === (contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`)
-    )?.address;
-*/
-    const currentAddress = appendChatModal.address
-    if (!currentAddress) return;
-
-    // Get sender's keys from wallet
-    const keys = myAccount.keys;
-    if (!keys) {
-        alert('Keys not found for sender address');
-        return;
-    }
-
-///yyy
-    // Get recipient's public key from contacts
-    let recipientPubKey = myData.contacts[currentAddress]?.public;
-    let pqRecPubKey = myData.contacts[currentAddress]?.pqPublic;
-    if (!recipientPubKey || !pqRecPubKey) {
-        const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
-        if (!recipientInfo?.account?.publicKey){
-            console.log(`no public key found for recipient ${currentAddress}`)
-            return
-        }
-        recipientPubKey = recipientInfo.account.publicKey
-        myData.contacts[currentAddress].public = recipientPubKey
-        pqRecPubKey = recipientInfo.account.pqPublicKey
-        myData.contacts[currentAddress].pqPublic = pqRecPubKey
-    }
-
-    // Generate shared secret using ECDH and take first 32 bytes
-    let dhkey = ecSharedKey(keys.secret, recipientPubKey)
-    const { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey)
-    const combined = new Uint8Array(dhkey.length + sharedSecret.length)
-    combined.set(dhkey)
-    combined.set(sharedSecret, dhkey.length)
-    dhkey = blake.blake2b(combined, myHashKey, 32)
-
-    // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
-    // Encrypt message using shared secret
-    const encMessage = encryptChacha(dhkey, message)
-
-    // Create message payload
-    const payload = {
-        message: encMessage,
-        encrypted: true,
-        encryptionMethod: 'xchacha20poly1305',
-        pqEncSharedKey: bin2base64(cipherText),
-        sent_timestamp: Date.now()
-    };
-
-    // Always include username, but only include other info if recipient is a friend
-    const contact = myData.contacts[currentAddress];
-    // Create basic sender info with just username
-    const senderInfo = {
-        username: myAccount.username
-    };
-    
-    // Add additional info only if recipient is a friend
-    if (contact && contact.friend) {
-        // Add more personal details for friends
-        senderInfo.name = myData.account.name;
-        senderInfo.email = myData.account.email;
-        senderInfo.phone = myData.account.phone;
-        senderInfo.linkedin = myData.account.linkedin;
-        senderInfo.x = myData.account.x;
-    }
-    
-    // Always encrypt and send senderInfo (which will contain at least the username)
-    payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
+    const sendButton = document.getElementById('handleSendMessage');
+    sendButton.disabled = true; // Disable the button
 
     try {
-//console.log('payload is', payload)
+        const messageInput = document.querySelector('.message-input');
+        messageInput.focus(); // Add focus back to keep keyboard open
+        await updateChatList()  // before sending the message check and show received messages
+        
+        const message = messageInput.value.trim();
+        if (!message) return;
+
+        const modal = document.getElementById('chatModal');
+        //const modalTitle = modal.querySelector('.modal-title');
+        const messagesList = modal.querySelector('.messages-list');
+
+        // Get current chat data
+        const chatsData = myData
+        /*
+        const currentAddress = Object.values(chatsData.contacts).find(contact =>
+            modalTitle.textContent === (contact.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`)
+        )?.address;
+        */
+        const currentAddress = appendChatModal.address
+        if (!currentAddress) return;
+
+        // Get sender's keys from wallet
+        const keys = myAccount.keys;
+        if (!keys) {
+            alert('Keys not found for sender address');
+            return;
+        }
+
+        ///yyy
+        // Get recipient's public key from contacts
+        let recipientPubKey = myData.contacts[currentAddress]?.public;
+        let pqRecPubKey = myData.contacts[currentAddress]?.pqPublic;
+        if (!recipientPubKey || !pqRecPubKey) {
+            const recipientInfo = await queryNetwork(`/account/${longAddress(currentAddress)}`)
+            if (!recipientInfo?.account?.publicKey){
+                console.log(`no public key found for recipient ${currentAddress}`)
+                return
+            }
+            recipientPubKey = recipientInfo.account.publicKey
+            myData.contacts[currentAddress].public = recipientPubKey
+            pqRecPubKey = recipientInfo.account.pqPublicKey
+            myData.contacts[currentAddress].pqPublic = pqRecPubKey
+        }
+
+        // Generate shared secret using ECDH and take first 32 bytes
+        let dhkey = ecSharedKey(keys.secret, recipientPubKey)
+        const { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey)
+        const combined = new Uint8Array(dhkey.length + sharedSecret.length)
+        combined.set(dhkey)
+        combined.set(sharedSecret, dhkey.length)
+        dhkey = blake.blake2b(combined, myHashKey, 32)
+
+        // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
+        // Encrypt message using shared secret
+        const encMessage = encryptChacha(dhkey, message)
+
+        // Create message payload
+        const payload = {
+            message: encMessage,
+            encrypted: true,
+            encryptionMethod: 'xchacha20poly1305',
+            pqEncSharedKey: bin2base64(cipherText),
+            sent_timestamp: Date.now()
+        };
+
+        // Always include username, but only include other info if recipient is a friend
+        const contact = myData.contacts[currentAddress];
+        // Create basic sender info with just username
+        const senderInfo = {
+            username: myAccount.username
+        };
+        
+        // Add additional info only if recipient is a friend
+        if (contact && contact.friend) {
+            // Add more personal details for friends
+            senderInfo.name = myData.account.name;
+            senderInfo.email = myData.account.email;
+            senderInfo.phone = myData.account.phone;
+            senderInfo.linkedin = myData.account.linkedin;
+            senderInfo.x = myData.account.x;
+        }
+        
+        // Always encrypt and send senderInfo (which will contain at least the username)
+        payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
+
+        //console.log('payload is', payload)
         // Send the message transaction using postChatMessage with default toll of 1
         const response = await postChatMessage(currentAddress, payload, 1, keys);
         
@@ -3741,12 +3744,12 @@ async function handleSendMessage() {
         }
 
         // Not needed since it is created when the New Chat form was submitted
-/*
-        // Create contact if needed
-        if (!chatsData.contacts[currentAddress].messages) {   // TODO check if this is really needed; should be created already
-            createNewContact(currentAddress)
-        }
-*/
+        /*
+                // Create contact if needed
+                if (!chatsData.contacts[currentAddress].messages) {   // TODO check if this is really needed; should be created already
+                    createNewContact(currentAddress)
+                }
+        */
 
         // Create new message
         const newMessage = {
@@ -3783,6 +3786,8 @@ async function handleSendMessage() {
     } catch (error) {
         console.error('Message error:', error);
         alert('Failed to send message. Please try again.');
+    } finally {
+        sendButton.disabled = false; // Re-enable the button
     }
 }
 
