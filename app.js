@@ -966,6 +966,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // File upload handlers
     document.getElementById('uploadQRButton').addEventListener('click', () => {
         document.getElementById('qrFileInput').click();
+        document.getElementById('uploadQRButton').blur();
     });
 
     document.getElementById('qrFileInput').addEventListener('change', handleQRFileSelect);
