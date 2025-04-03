@@ -4992,6 +4992,10 @@ function handleSearchResultClick(result) {
         // Switch to chats view if not already there
         switchView('chats');
         
+        // clear search input and clear results
+        document.getElementById('messageSearch').value = '';
+        document.getElementById('searchResults').innerHTML = '';
+
         // Open the chat with this contact
         openChatModal(result.contactAddress);
         
