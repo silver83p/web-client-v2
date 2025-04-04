@@ -4,14 +4,15 @@ A transparent, end-to-end encrypted web-based messaging application with a decen
 
 ## Overview
 
-Liberdus is a secure texting web application that implements end-to-end encryption to ensure your conversations remain private. Unlike many messaging platforms, Liberdus is fully transparent - users can inspect the actual code running on their device through our About page.
+Liberdus is a secure texting web application that implements end-to-end encryption to ensure your conversations remain private. Unlike many messaging platforms, Liberdus is fully transparent - users can inspect the actual code running on their device through the About page in the app. Also each message is encrypted independently using both classical encryption (ECDH) and post quantum encryption (ML-KEM-1024).
 
 ## Features
 
-- End-to-end encryption for all messages
+- Independent end-to-end double encryption for all messages with both classical and post quantum cryptography
 - Web-based interface accessible from any modern browser
+- No download or installation required
 - No frameworks - pure HTML, JavaScript, and CSS for complete transparency
-- Self-contained application with viewable source code
+- Self-contained application with viewable source code on device
 - Open-source and community-driven development
 
 ## Demo
@@ -33,12 +34,7 @@ Try out the application at [liberdus.com/test](https://liberdus.com/test)
    cd liberdus
    ```
 
-2. Clone the proxy server repository:
-   ```
-   git clone https://github.com/Liberdus/liberdus-proxy
-   ```
-
-3. Start a local HTTP server in the cloned repository folder:
+2. Start a local HTTP server in the cloned repository folder:
    
    Using Python:
    ```
@@ -48,6 +44,11 @@ Try out the application at [liberdus.com/test](https://liberdus.com/test)
    Or using Node.js http-server:
    ```
    npx http-server
+   ```
+
+3. Clone the proxy server repository:
+   ```
+   git clone https://github.com/Liberdus/liberdus-proxy
    ```
 
 4. Run the proxy server:
@@ -81,10 +82,6 @@ We welcome contributions from the community! To contribute:
 
 Security is our top priority. If you discover any security vulnerabilities, please report them responsibly by emailing security@liberdus.com instead of creating a public issue.
 
-## License
-
-[Add your license information here]
-
 ## Contact
 
-[Add contact information or community links here]
+Join our [Discord server](https://discord.gg/2cpJzFnwCR)
