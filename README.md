@@ -4,7 +4,7 @@ A transparent, end-to-end encrypted web-based messaging application with a decen
 
 ## Overview
 
-Liberdus is a secure texting web application that implements end-to-end encryption to ensure your conversations remain private. Unlike many messaging platforms, Liberdus is fully transparent - users can inspect the actual code running on their device through the About page in the app. Also each message is encrypted independently using both classical encryption (ECDH) and post quantum encryption (ML-KEM-1024).
+Liberdus is a secure texting web application that implements end-to-end encryption to ensure your conversations remain private. Unlike many messaging platforms, Liberdus is fully transparent - users can inspect the actual code running on their device through the About page in the app. Also each message is encrypted independently using both classical encryption (ECDH) and post quantum encryption (ML-KEM-1024). Insted of a centralized backend run by a company, Liberdus uses a blockchain operated by a network of decentrazied nodes which anyone can join using a standard computer.
 
 ## Features
 
@@ -13,6 +13,7 @@ Liberdus is a secure texting web application that implements end-to-end encrypti
 - No download or installation required
 - No frameworks - pure HTML, JavaScript, and CSS for complete transparency
 - Self-contained application with viewable source code on device
+- Decentralized backend of community operated nodes
 - Open-source and community-driven development
 
 ## Demo
