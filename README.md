@@ -1,6 +1,6 @@
 # Liberdus Secure Texting
 
-A transparent, end-to-end encrypted web-based messaging application that prioritizes user privacy and security.
+A transparent, end-to-end encrypted web-based messaging application with a decentralized backend that prioritizes user privacy and security.
 
 ## Overview
 
