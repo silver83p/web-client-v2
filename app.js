@@ -727,11 +727,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     await Promise.all(keys.map(key => caches.delete(key)));
                     
                     // Show success message
-                    showToast('Cache cleared successfully. Please refresh the page.');
+                    showToast('Cache cleared successfully. Page will refresh...');
                     
-                    // Optional: Reload the page after a short delay
+                    // Perform a hard refresh after a short delay
                     setTimeout(() => {
-                        window.location.reload();
+                        // Clear browser cache and force reload from server
+                        window.location.href = window.location.href + '?clearCache=' + new Date().getTime();
                     }, 2000);
                 }
             } catch (error) {
@@ -2313,30 +2314,30 @@ function previewQRData(paymentData) {
     
     // Create human-readable preview
     let preview = `<strong>QR Code Data:</strong><br>`;
-    preview += `<span class="preview-label">Username:</span> ${paymentData.username}<br>`;
-    preview += `<span class="preview-label">Asset:</span> ${paymentData.symbol}<br>`;
+    preview += `<span class="preview-label">Username:</span> ${paymentData.u}<br>`;
+    preview += `<span class="preview-label">Asset:</span> ${paymentData.s}<br>`;
     
     if (paymentData.amount) {
         preview += `<span class="preview-label">Amount:</span> ${paymentData.amount} ${paymentData.symbol}<br>`;
     }
     
-    if (paymentData.memo) {
-        preview += `<span class="preview-label">Memo:</span> ${paymentData.memo}<br>`;
+    if (paymentData.m) {
+        preview += `<span class="preview-label">Memo:</span> ${paymentData.m}<br>`;
     }
     
     // Add timestamp in readable format
-    const date = new Date(paymentData.timestamp);
+    const date = new Date(paymentData.t); 
     preview += `<span class="preview-label">Generated:</span> ${date.toLocaleString()}`;
     
     // Create minimized version (single line)
-    let minimizedPreview = `${paymentData.username} • ${paymentData.symbol}`;
-    if (paymentData.amount) {
-        minimizedPreview += ` • ${paymentData.amount} ${paymentData.symbol}`;
+    let minimizedPreview = `${paymentData.u} • ${paymentData.s}`;
+    if (paymentData.a) {
+        minimizedPreview += ` • ${paymentData.a} ${paymentData.s}`;
     }
-    if (paymentData.memo) {
-        const shortMemo = paymentData.memo.length > 20 ? 
-            paymentData.memo.substring(0, 20) + '...' : 
-            paymentData.memo;
+    if (paymentData.m) {
+        const shortMemo = paymentData.m.length > 20 ? 
+            paymentData.m.substring(0, 20) + '...' : 
+            paymentData.m;
         minimizedPreview += ` • Memo: ${shortMemo}`;
     }
     
@@ -2412,22 +2413,22 @@ function createQRPaymentData() {
     
     // Build payment data object
     const paymentData = {
-        username: myAccount.username,
-        timestamp: Date.now(),
-        version: "1.0",
-        assetId: assetId,
-        symbol: symbol
+        u: myAccount.username, // username
+        t: Date.now(), // timestamp
+        v: "1.0", // version
+        i: assetId, // assetId
+        s: symbol // symbol
     };
     
     // Add optional fields if they have values
     const amount = document.getElementById('receiveAmount').value.trim();
     if (amount) {
-        paymentData.amount = amount;
+        paymentData.a = amount;
     }
     
-    const memo = document.getElementById('receiveMemo').value.trim();
+    const memo = document.getElementById('receiveMemo').value.trim(); 
     if (memo) {
-        paymentData.memo = memo;
+        paymentData.m = memo;
     }
     
     return paymentData;
@@ -2466,19 +2467,45 @@ function updateQRCode() {
     } catch (error) {
         console.error("Error in updateQRCode:", error);
         
-        // Fallback to basic address QR code
-        const address = myAccount.keys.address;
-        new QRCode(qrcodeContainer, {
-            text: '0x' + address,
-            width: 200,
-            height: 200
-        });
-        
-        // Show error in preview
-        const previewElement = document.getElementById('qrDataPreview');
-        previewElement.innerHTML = `Error generating QR code: ${error.message}<br>Showing address QR code instead.`;
-        
-        return '0x' + address;
+        qrcodeContainer.innerHTML = ''; // Clear the container before adding fallback QR
+
+        // Fallback to basic username QR code in liberdus:// format
+        try {
+            // Use short key 'u' for username
+            const fallbackData = { u: myAccount.username }; 
+            const fallbackJsonData = JSON.stringify(fallbackData);
+            const fallbackBase64Data = btoa(fallbackJsonData);
+            const fallbackQrText = `liberdus://${fallbackBase64Data}`;
+            
+            new QRCode(qrcodeContainer, {
+                text: fallbackQrText,
+                width: 200,
+                height: 200
+            });
+            console.log("Fallback QR code generated with username URI");
+            console.error("Error generating full QR", error);
+
+            // Show error in preview (pointing to the inner content div)
+            const previewElement = document.getElementById('qrDataPreview');
+            const previewContent = previewElement.querySelector('.preview-content'); 
+            if (previewContent) {
+                previewContent.innerHTML = `<span style="color: red;">Error generating full QR</span><br> Generating QR with only username. <br> Username: ${myAccount.username}`;
+                
+            } else {
+                previewElement.innerHTML = `Error generating full QR. Username: ${myAccount.username}`;
+            }
+            
+            return fallbackQrText; // Return the generated fallback URI
+        } catch (fallbackError) {
+            // If even the fallback fails (e.g., username missing), show a simple error
+            console.error("Error generating fallback QR code:", fallbackError);
+            qrcodeContainer.innerHTML = '<p style="color: red; text-align: center;">Failed to generate QR code.</p>';
+            const previewElement = document.getElementById('qrDataPreview');
+            if (previewElement) {
+                previewElement.innerHTML = '<p style="color: red;">Error generating QR code.</p>';
+            }
+            return null; // Indicate complete failure
+        }
     }
 }
 
@@ -2599,14 +2626,14 @@ function fillPaymentFromQR(data){
     data = data.replace('liberdus://', '')
     const paymentData = JSON.parse(atob(data))
     console.log("Read payment data:", JSON.stringify(paymentData, null, 2));
-    if (paymentData.username){
-        document.getElementById('sendToAddress').value = paymentData.username
+    if (paymentData.u){
+        document.getElementById('sendToAddress').value = paymentData.u
     }
-    if (paymentData.amount){
-        document.getElementById('sendAmount').value = paymentData.amount
+    if (paymentData.a){
+        document.getElementById('sendAmount').value = paymentData.a
     }
-    if (paymentData.memo){
-        document.getElementById('sendMemo').value = paymentData.memo
+    if (paymentData.m){
+        document.getElementById('sendMemo').value = paymentData.m
     }
     // Trigger username validation and amount validation
     document.getElementById('sendToAddress').dispatchEvent(new Event('input'));
@@ -2937,34 +2964,34 @@ function processQRData(qrText) {
             return;
         }
         
-        // Validate required fields
-        if (!qrData.username) {
+        // Validate required fields (using short key)
+        if (!qrData.u) { // Check for 'u' instead of 'username'
             showToast('QR code missing required username', 3000, 'error');
             return;
         }
         
-        // Fill the form fields
-        document.getElementById('sendToAddress').value = qrData.username;
+        // Fill the form fields (using short keys)
+        document.getElementById('sendToAddress').value = qrData.u;
         
-        if (qrData.amount) {
-            document.getElementById('sendAmount').value = qrData.amount;
+        if (qrData.a) {
+            document.getElementById('sendAmount').value = qrData.a;
         }
         
-        if (qrData.memo) {
-            document.getElementById('sendMemo').value = qrData.memo;
+        if (qrData.m) {
+            document.getElementById('sendMemo').value = qrData.m;
         }
         
-        // If asset info provided, select matching asset
-        if (qrData.assetId && qrData.symbol) {
+        // If asset info provided, select matching asset (using short keys)
+        if (qrData.i && qrData.s) { // Check for 'i' and 's'
             const assetSelect = document.getElementById('sendAsset');
             const assetOption = Array.from(assetSelect.options).find((opt) =>
-                opt.text.includes(qrData.symbol)
+                opt.text.includes(qrData.s) // Find based on symbol 's'
             );
             if (assetOption) {
                 assetSelect.value = assetOption.value;
                 console.log(`Selected asset: ${assetOption.text} (value: ${assetOption.value})`);
             } else {
-                console.log(`Asset with symbol ${qrData.symbol} not found in dropdown`);
+                console.log(`Asset with symbol ${qrData.s} not found in dropdown`);
             }
         }
         
