@@ -2974,10 +2974,6 @@ mark {
   transition: background-color 0.2s;
 }
 
-#scanQRButton:hover {
-  background-color: rgba(0, 123, 255, 0.1);
-}
-
 #scanQRButton svg {
   display: block;
 }
@@ -3529,4 +3525,14 @@ small {
 .icon-button.send-money-icon:hover {
   background-color: var(--hover-background);
   opacity: 1;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Explicitly prevent background change on :active for iOS quirks */
+#uploadQRButton:hover,
+#scanQRButton:hover {
+  background-color: transparent !important;
 }

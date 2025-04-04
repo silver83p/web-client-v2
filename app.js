@@ -735,20 +735,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Reorder buttons based on accounts existence
     if (hasAccounts) {
         welcomeButtons.innerHTML = ''; // Clear existing order
+        signInBtn.classList.remove('hidden');
+        createAccountBtn.classList.remove('hidden');
+        importAccountBtn.classList.remove('hidden');
+        clearCacheButton.classList.remove('hidden');
         welcomeButtons.appendChild(signInBtn);
         welcomeButtons.appendChild(createAccountBtn);
         welcomeButtons.appendChild(importAccountBtn);
         signInBtn.classList.add('primary-button');
         signInBtn.classList.remove('secondary-button');
-        // append clear cache button to the welcomeButtons
         welcomeButtons.appendChild(clearCacheButton);
     } else {
         welcomeButtons.innerHTML = ''; // Clear existing order
+        createAccountBtn.classList.remove('hidden');
+        importAccountBtn.classList.remove('hidden');
+        clearCacheButton.classList.remove('hidden');
         welcomeButtons.appendChild(createAccountBtn);
         welcomeButtons.appendChild(importAccountBtn);
         createAccountBtn.classList.add('primary-button');
         createAccountBtn.classList.remove('secondary-button');
-        // append clear cache button to the welcomeButtons
         welcomeButtons.appendChild(clearCacheButton);
     }
 
@@ -966,7 +971,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // File upload handlers
     document.getElementById('uploadQRButton').addEventListener('click', () => {
         document.getElementById('qrFileInput').click();
-        document.getElementById('uploadQRButton').blur();
     });
 
     document.getElementById('qrFileInput').addEventListener('change', handleQRFileSelect);
@@ -2575,8 +2579,9 @@ function fillPaymentFromQR(data){
     if (paymentData.memo){
         document.getElementById('sendMemo').value = paymentData.memo
     }
-    // Trigger username validation
+    // Trigger username validation and amount validation
     document.getElementById('sendToAddress').dispatchEvent(new Event('input'));
+    document.getElementById('sendAmount').dispatchEvent(new Event('input'));
 }
 
 // this was the old scanQRCode function; not needed anymore
@@ -6163,15 +6168,22 @@ async function handleQRFileSelect(event) {
         // Handle QR code result
         if (code) {
             handleSuccessfulScan(code.data);
+            event.target.value = '';
         } else {
             console.error('No QR code found in image');
             showToast('No QR code found in image', 3000, 'error');
             event.target.value = ''; // Reset the file input value
+            document.getElementById('sendForm').reset();
+            document.getElementById('sendToAddressError').textContent = '';
+            document.getElementById('balanceWarning').textContent = '';
         }
     } catch (error) {
         console.error('Error processing QR code image:', error);
         showToast('Error processing image', 3000, 'error');
         event.target.value = '';
+        document.getElementById('sendForm').reset();
+        document.getElementById('sendToAddressError').textContent = '';
+        document.getElementById('balanceWarning').textContent = '';
     }
 }
 
