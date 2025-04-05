@@ -89,6 +89,9 @@ async function forceReload(urls) {
     }
 }
 
+// https://github.com/paulmillr/qr
+//import { encodeQR } from './external/qr.js';
+
 // https://github.com/paulmillr/noble-post-quantum
 // https://github.com/paulmillr/noble-post-quantum/releases
 import { ml_kem1024, randomBytes } from './external/noble-post-quantum.js';
@@ -2414,6 +2417,7 @@ function createQRPaymentData() {
     // Build payment data object
     const paymentData = {
         u: myAccount.username, // username
+        // TODO: remove timestamp and version to save space
         t: Date.now(), // timestamp
         v: "1.0", // version
         i: assetId, // assetId
@@ -2452,14 +2456,20 @@ function updateQRCode() {
         const qrText = `liberdus://${base64Data}`;
         console.log("QR code text length:", qrText.length);
         console.log("QR code text (first 100 chars):", qrText.substring(0, 100) + (qrText.length > 100 ? "..." : ""));
-        
-        // Generate QR code
-        new QRCode(qrcodeContainer, {
-            text: qrText,
-            width: 200,
-            height: 200
-        });
-        
+
+
+        const gifBytes = qr.encodeQR(qrText, 'gif', { scale: 4 });
+        // Convert the raw bytes to a base64 data URL
+        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(gifBytes)));
+        const dataUrl = 'data:image/gif;base64,' + base64;
+        // Create an image element and set its source to the data URL
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.width = 200;
+        img.height = 200;
+        // Add the image to the container
+        qrcodeContainer.appendChild(img);
+
         // Update preview
         previewQRData(paymentData);
         
@@ -2476,12 +2486,20 @@ function updateQRCode() {
             const fallbackJsonData = JSON.stringify(fallbackData);
             const fallbackBase64Data = btoa(fallbackJsonData);
             const fallbackQrText = `liberdus://${fallbackBase64Data}`;
-            
-            new QRCode(qrcodeContainer, {
-                text: fallbackQrText,
-                width: 200,
-                height: 200
-            });
+
+            const gifBytes = qr.encodeQR(fallbackQrText, 'gif', { scale: 4 });
+            // Convert the raw bytes to a base64 data URL
+            const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(gifBytes)));
+            const dataUrl = 'data:image/gif;base64,' + base64;
+            // Create an image element and set its source to the data URL
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.width = 200;
+            img.height = 200;
+            // Add the image to the container
+            qrcodeContainer.appendChild(img);
+
+
             console.log("Fallback QR code generated with username URI");
             console.error("Error generating full QR", error);
 
