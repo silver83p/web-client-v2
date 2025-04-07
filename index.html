@@ -374,12 +374,20 @@
                   style="color: #dc3545; display: none"
                 ></span
               ></label>
-              <input
-                type="text"
-                id="newPrivateKey"
-                class="form-control"
-                placeholder="Optional private key in hex format"
-              />
+              <div style="position: relative">
+                <input
+                  type="password"
+                  id="newPrivateKey"
+                  class="form-control"
+                  placeholder="Optional private key in hex format"
+                />
+                <button
+                  type="button"
+                  id="togglePrivateKeyVisibility"
+                  class="password-toggle-btn"
+                >
+                </button>
+              </div>
               <small>
                 If you want to use an existing private key enter it here.
                 Otherwise you can leave this empty to have a private key
