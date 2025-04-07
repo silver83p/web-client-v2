@@ -94,6 +94,21 @@ export function formatTime(timestamp) {
     }
 }
 
+// Function to detect URLs and convert them to clickable links
+export function linkifyUrls(text) {
+    if (!text) return '';
+    // Regex to find URLs (http, https, www), ensuring capture groups don't break replacement
+    // Match http/https/ftp/file protocols OR www. starting URLs
+    const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])|(\bwww\.[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gi;
+    return text.replace(urlRegex, function(url) {
+        // Prepend http:// if the URL starts with www. and doesn't have a protocol
+        const properUrl = /^www\./i.test(url) ? 'http://' + url : url;
+        // Escape HTML characters in the URL for the text node to prevent XSS if the URL itself contains HTML-like strings
+        const escapedUrl = url.replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
+        return `<a href="${properUrl}" target="_blank" rel="noopener noreferrer">${escapedUrl}</a>`;
+    });
+}
+
 export function ab2base64(buffer) {
     let binary = '';
     const bytes = new Uint8Array(buffer);
