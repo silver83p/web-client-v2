@@ -2478,7 +2478,7 @@ async function copyAddress() {
     }
 }
 
-function openSendModal() {
+async function openSendModal() {
     const modal = document.getElementById('sendModal');
     modal.classList.add('active');
 
@@ -2553,7 +2553,7 @@ function openSendModal() {
         }, 1000);
     });
 
-
+    await updateWalletBalances(); // Refresh wallet balances first
     // Get wallet data
     const wallet = myData.wallet
     // Populate assets dropdown
