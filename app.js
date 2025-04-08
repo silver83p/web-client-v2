@@ -2241,8 +2241,8 @@ function closeReceiveModal() {
     
     // Remove event listeners if they were added
     if (modal.receiveElements && modal.receiveHandlers) {
-        const { assetSelect, amountInput, memoInput } = modal.receiveElements; // Adjusted destructuring
-        const { handleAssetChange, handleAmountInput, handleMemoInput } = modal.receiveHandlers; // Adjusted destructuring
+        const { assetSelect, amountInput, memoInput } = modal.receiveElements;
+        const { handleAssetChange, handleAmountInput, handleMemoInput } = modal.receiveHandlers;
         
         // Remove event listeners
         if (assetSelect) assetSelect.removeEventListener('change', handleAssetChange);
