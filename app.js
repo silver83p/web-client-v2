@@ -124,7 +124,7 @@ import { cbc, xchacha20poly1305 } from './external/noble-ciphers.js';
 import { normalizeUsername, generateIdenticon, formatTime, 
     isValidEthereumAddress, 
     normalizeAddress, longAddress, utf82bin, bin2utf8, hex2big, bigxnum2big,
-    big2str, base642bin, bin2base64, hex2bin, bin2hex,
+    big2str, base642bin, bin2base64, hex2bin, bin2hex, linkifyUrls
 } from './lib.js';
 
 // Import database functions
@@ -2070,7 +2070,7 @@ function openChatModal(address) {
     // Display messages and click-to-copy feature
     messagesList.innerHTML = messages.map((msg, index) => `
         <div class="message ${msg.my ? 'sent' : 'received'}" data-message-id="${index}">
-            <div class="message-content">${msg.message}</div>
+            <div class="message-content">${linkifyUrls(msg.message)}</div>
             <div class="message-time">${formatTime(msg.timestamp)}</div>
         </div>
     `).join('');
@@ -2136,7 +2136,7 @@ function appendChatModal(){
         // Add message to UI
         messagesList.insertAdjacentHTML('beforeend', `
             <div class="message ${m.type}">
-                <div class="message-content" style="white-space: pre-wrap">${m.message}</div>
+                <div class="message-content" style="white-space: pre-wrap">${linkifyUrls(m.message)}</div>
                 <div class="message-time">${formatTime(m.timestamp)}</div>
             </div>
         `);

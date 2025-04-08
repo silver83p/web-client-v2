@@ -1144,15 +1144,25 @@ input[type="file"].form-control::file-selector-button {
 .message.sent {
   align-self: flex-end;
   background-color: var(--primary-color);
-  color: var(--background-color);
-  border-bottom-right-radius: 0.25rem;
+  color: white;
+}
+
+/* Make links white in sent messages for contrast */
+.message.sent a {
+  color: white;
+  text-decoration: underline; /* Add underline for better visibility */
+}
+
+/* Optional: Style links in received messages if needed (default blue might be ok) */
+.message.received a {
+  /* color: darkblue; */ /* Example: Make links darker blue */
+  text-decoration: underline;
 }
 
 .message.sent .message-time {
-  font-size: 0.75rem;
-  opacity: 0.7;
-  margin-top: 0.25rem;
-  text-align: right;
+  color: rgba(255, 255, 255, 0.7);
+  align-self: flex-end;
+  margin-top: 2px;
 }
 
 .message-time {
