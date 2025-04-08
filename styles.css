@@ -1081,7 +1081,13 @@ input[type="file"].form-control::file-selector-button {
   height: 48px;
   min-height: unset;
   line-height: 24px;
-  overflow-y: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+}
+
+.message-input::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for WebKit browsers */
 }
 
 .message-input:focus {
@@ -1569,6 +1575,18 @@ input[type="file"].form-control {
   background-position: right 15px center;
   background-size: 16px;
   padding-right: 45px;
+}
+
+#sendMemo,
+#receiveMemo {
+  overflow-y: auto; /* Allow scrolling when needed */
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar for IE/Edge (older versions) */
+}
+
+#sendMemo::-webkit-scrollbar,
+#receiveMemo::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for WebKit browsers */
 }
 
 #sendModal textarea.form-control {
@@ -3590,4 +3608,23 @@ small {
 /* Style adjustments for focus or hover if desired */
 .password-toggle-btn:hover {
   color: #343a40;
+}
+
+#sendMemo,
+#receiveMemo {
+  overflow-y: auto; /* Allow scrolling when needed */
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar for IE/Edge (older versions) */
+}
+
+#sendMemo::-webkit-scrollbar,
+#receiveMemo::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for WebKit browsers */
+}
+
+.error-message {
+  color: #dc3545;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+  display: none;
 }
