@@ -502,6 +502,7 @@
           <textarea
             class="message-input"
             placeholder="Type a message..."
+            maxlength="2000"
           ></textarea>
           <button class="send-button" id="handleSendMessage">
             <svg viewBox="0 0 24 24">
@@ -765,7 +766,11 @@
             </div>
             <div class="form-group">
               <label for="sendMemo">Memo (Optional)</label>
-              <textarea id="sendMemo" class="form-control"></textarea>
+              <textarea
+                id="sendMemo"
+                class="form-control"
+                maxlength="2000"
+              ></textarea>
             </div>
             <button type="submit" class="update-button">Send</button>
           </form>
