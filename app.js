@@ -405,6 +405,12 @@ function closeCreateAccountModal() {
 }
 
 async function handleCreateAccount(event) {
+    showToast('Creating account...', 3000);
+
+    // disable submit button
+    const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
+    submitButton.disabled = true;
+
     event.preventDefault();
     const username = normalizeUsername(document.getElementById('newUsername').value)
     
@@ -515,6 +521,11 @@ async function handleCreateAccount(event) {
         }
     }
     
+
+    // TODO: check if account has been created successfully
+    // sleep/timeout for 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     // Create new account entry
     myAccount = {
         netid,
@@ -553,6 +564,9 @@ async function handleCreateAccount(event) {
 
     console.log('initializing WebSocket connection in handleCreateAccount');
     initializeWebSocketManager();
+
+    // enable submit button
+    submitButton.disabled = false;
 
     // Close modal and proceed to app
     closeCreateAccountModal();
