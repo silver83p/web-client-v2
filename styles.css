@@ -1081,7 +1081,8 @@ input[type="file"].form-control::file-selector-button {
   height: 48px;
   min-height: unset;
   line-height: 24px;
-  overflow-y: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .message-input:focus {
