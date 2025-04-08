@@ -256,58 +256,6 @@ function openSignInModal() {
     `;
     
     
-    // Enable submit button when an account is selected
-    usernameSelect.addEventListener('change', async () => {
-        const username = usernameSelect.value;
-        const notFoundMessage = document.getElementById('usernameNotFound');
-        const options = usernameSelect.options;
-        if (!username) {
-            submitButton.disabled = true;
-            notFoundMessage.style.display = 'none';
-            return;
-        }
-//        const address = netidAccounts.usernames[username].keys.address;
-        const address = netidAccounts.usernames[username].address;
-        const availability = await checkUsernameAvailability(username, address);
-//console.log('usernames.length', usernames.length);
-//console.log('availability', availability);
-        const removeButton = document.getElementById('removeAccountButton');
-        if (usernames.length === 1 && availability === 'mine') {
-//            myAccount = netidAccounts.usernames[username];
-            myData = parse(localStorage.getItem(`${username}_${netid}`));
-            if (!myData) { console.log('Account data not found'); return }
-            myAccount = myData.account
-            closeSignInModal();
-            document.getElementById('welcomeScreen').style.display = 'none';
-            switchView('chats');
-            return;
-        } else if (availability === 'mine') {
-            submitButton.disabled = false;
-            submitButton.textContent = 'Sign In';
-            submitButton.style.display = 'inline';
-            removeButton.style.display = 'none';
-            notFoundMessage.style.display = 'none';
-        } else if (availability === 'taken') {
-            submitButton.style.display = 'none';
-            removeButton.style.display = 'inline';
-            notFoundMessage.textContent = 'taken';
-            notFoundMessage.style.display = 'inline';
-        } else if (availability === 'available') {
-            submitButton.disabled = false;
-            submitButton.textContent = 'Recreate';
-            submitButton.style.display = 'inline';
-            removeButton.style.display = 'inline';
-            notFoundMessage.textContent = 'not found';
-            notFoundMessage.style.display = 'inline';
-        } else {
-            submitButton.disabled = true;
-            submitButton.textContent = 'Sign In';
-            submitButton.style.display = 'none';
-            removeButton.style.display = 'none';
-            notFoundMessage.textContent = 'network error';
-            notFoundMessage.style.display = 'inline';
-        }
-    });
     // TODO move the removeButton stuff to its own handleRemoveButton function; it does not belong here
     // Add event listener for remove account button
     const removeButton = document.getElementById('removeAccountButton');
@@ -343,6 +291,67 @@ function openSignInModal() {
         usernameSelect.dispatchEvent(new Event('change'));
         return;
     }   
+}
+
+async function handleUsernameOnSignInModal() {
+    console.log('in handleUsernameOnSignInModal')
+    // Get existing accounts
+    const { netid } = network;
+    const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+    const netidAccounts = existingAccounts.netids[netid];
+    const usernames = netidAccounts?.usernames ? Object.keys(netidAccounts.usernames) : [];
+    const usernameSelect = document.getElementById('username');
+    const submitButton = document.querySelector('#signInForm button[type="submit"]');
+    // Enable submit button when an account is selected
+    const username = usernameSelect.value;
+    const notFoundMessage = document.getElementById('usernameNotFound');
+    const options = usernameSelect.options;
+    if (!username) {
+        submitButton.disabled = true;
+        notFoundMessage.style.display = 'none';
+        return;
+    }
+//        const address = netidAccounts.usernames[username].keys.address;
+    const address = netidAccounts.usernames[username].address;
+    const availability = await checkUsernameAvailability(username, address);
+//console.log('usernames.length', usernames.length);
+//console.log('availability', availability);
+    const removeButton = document.getElementById('removeAccountButton');
+    if (usernames.length === 1 && availability === 'mine') {
+//            myAccount = netidAccounts.usernames[username];
+        myData = parse(localStorage.getItem(`${username}_${netid}`));
+        if (!myData) { console.log('Account data not found'); return }
+        myAccount = myData.account
+        closeSignInModal();
+        document.getElementById('welcomeScreen').style.display = 'none';
+        switchView('chats');
+        return;
+    } else if (availability === 'mine') {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Sign In';
+        submitButton.style.display = 'inline';
+        removeButton.style.display = 'none';
+        notFoundMessage.style.display = 'none';
+    } else if (availability === 'taken') {
+        submitButton.style.display = 'none';
+        removeButton.style.display = 'inline';
+        notFoundMessage.textContent = 'taken';
+        notFoundMessage.style.display = 'inline';
+    } else if (availability === 'available') {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Recreate';
+        submitButton.style.display = 'inline';
+        removeButton.style.display = 'inline';
+        notFoundMessage.textContent = 'not found';
+        notFoundMessage.style.display = 'inline';
+    } else {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Sign In';
+        submitButton.style.display = 'none';
+        removeButton.style.display = 'none';
+        notFoundMessage.textContent = 'network error';
+        notFoundMessage.style.display = 'inline';
+    }
 }
 
 function closeSignInModal() {
@@ -1060,6 +1069,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // add listner for username input, debounce
     document.getElementById('chatRecipient').addEventListener('input', debounce(handleUsernameInput, 300));
     
+    // add listener for username select change on sign in modal
+    document.getElementById('username').addEventListener('change', handleUsernameOnSignInModal);
 
     setupAddToHomeScreen()
 });
