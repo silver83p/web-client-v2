@@ -1083,6 +1083,11 @@ input[type="file"].form-control::file-selector-button {
   line-height: 24px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+}
+
+.message-input::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for WebKit browsers */
 }
 
 .message-input:focus {
