@@ -1056,6 +1056,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Toggle the visual state class on the button
         this.classList.toggle('toggled-visible');
     });
+
+    // add listner for username input, debounce
+    document.getElementById('chatRecipient').addEventListener('input', debounce(handleUsernameInput, 300));
     
 
     setupAddToHomeScreen()
@@ -1886,46 +1889,54 @@ function openNewChatModal() {
     const usernameAvailable = document.getElementById('chatRecipientError');
     const submitButton = document.querySelector('#newChatForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
+    submitButton.disabled = true;  
+}
+
+// handler that invokes listener for username input
+function handleUsernameInput(e) {
+    
+    const usernameAvailable = document.getElementById('chatRecipientError');
+    const submitButton = document.querySelector('#newChatForm button[type="submit"]');
+    usernameAvailable.style.display = 'none';
     submitButton.disabled = true;
-// Check availability on input changes
+    // Check availability on input changes
     let checkTimeout;
-    usernameInput.addEventListener('input', (e) => {
-        const username = normalizeUsername(e.target.value);
-        
-        // Clear previous timeout
-        if (checkTimeout) {
-            clearTimeout(checkTimeout);
-        }
-                
-        // Check if username is too short
-        if (username.length < 3) {
-            usernameAvailable.textContent = 'too short';
+
+    const username = normalizeUsername(e.target.value);
+    
+    // Clear previous timeout
+    if (checkTimeout) {
+        clearTimeout(checkTimeout);
+    }
+            
+    // Check if username is too short
+    if (username.length < 3) {
+        usernameAvailable.textContent = 'too short';
+        usernameAvailable.style.color = '#dc3545';
+        usernameAvailable.style.display = 'inline';
+        return;
+    }
+    
+    // Check username availability
+    checkTimeout = setTimeout(async () => {
+        const taken = await checkUsernameAvailability(username, myAccount.keys.address);
+        if (taken == 'taken') {
+            usernameAvailable.textContent = 'found';
+            usernameAvailable.style.color = '#28a745';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = false;
+        } else if ((taken == 'available') || (taken == 'mine')) {
+            usernameAvailable.textContent = 'not found';
             usernameAvailable.style.color = '#dc3545';
             usernameAvailable.style.display = 'inline';
-            return;
+            submitButton.disabled = true;
+        } else {
+            usernameAvailable.textContent = 'network error';
+            usernameAvailable.style.color = '#dc3545';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = true;
         }
-        
-        // Check network availability
-        checkTimeout = setTimeout(async () => {
-            const taken = await checkUsernameAvailability(username, myAccount.keys.address);
-            if (taken == 'taken') {
-                usernameAvailable.textContent = 'found';
-                usernameAvailable.style.color = '#28a745';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = false;
-            } else if ((taken == 'available') || (taken == 'mine')) {
-                usernameAvailable.textContent = 'not found';
-                usernameAvailable.style.color = '#dc3545';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = true;
-            } else {
-                usernameAvailable.textContent = 'network error';
-                usernameAvailable.style.color = '#dc3545';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = true;
-            }
-        }, 1000);
-    });    
+    }, 1000);  
 }
 
 function closeNewChatModal() {
