@@ -1374,7 +1374,7 @@ async function updateChatList(force) {
                         <div class="chat-time">${formatTime(message.timestamp)}  <span class="chat-time-chevron"></span></div>
                     </div>
                     <div class="chat-message">
-                        ${message.message}
+                        ${linkifyUrls(message.message)}
                         ${contact.unread ? `<span class="chat-unread">${contact.unread}</span>` : ''}
                     </div>
                 </div>
@@ -4044,7 +4044,7 @@ async function updateTransactionHistory() {
                 </div>
                 <div class="transaction-time">${formatTime(tx.timestamp)}</div>
             </div>
-            ${tx.memo ? `<div class="transaction-memo">${tx.memo}</div>` : ''}
+            ${tx.memo ? `<div class="transaction-memo">${linkifyUrls(tx.memo)}</div>` : ''}
         </div>
     `).join('');
 }
@@ -5035,6 +5035,7 @@ function displaySearchResults(results) {
         const identicon = await generateIdenticon(result.contactAddress);
         
         // Format message preview with "You:" prefix if it's a sent message
+        // make this textContent?
         const messagePreview = result.my ? `You: ${result.preview}` : result.preview;
         
         resultElement.innerHTML = `
@@ -5047,7 +5048,7 @@ function displaySearchResults(results) {
                     <div class="chat-time">${formatTime(result.timestamp)}</div>
                 </div>
                 <div class="chat-message">
-                    ${messagePreview}
+                    ${linkifyUrls(messagePreview)}
                 </div>
             </div>
         `;
