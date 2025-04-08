@@ -1511,8 +1511,8 @@ input[type="file"].form-control {
 #qrcode img,
 #qrcode canvas {
   display: block;
-  width: 160px;
-  height: 160px;
+  width: 200px;
+  height: 200px;
   max-width: 100%;
 }
 
@@ -2927,6 +2927,31 @@ mark {
   transition: none;
 }
 
+#qrcode {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  background-color: white;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+/* QR Code Scan Button */
+#scanQRButton {
+  background-color: transparent;
+  border: none;
+  color: #007bff;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+#scanQRButton svg {
+  display: block;
+}
+
 /* Adjust media query styles */
 @media (max-width: 400px), (max-height: 700px) {
   #receiveModal .qr-data-preview {
@@ -2953,9 +2978,477 @@ mark {
 
   #receiveModal #qrcode img,
   #receiveModal #qrcode canvas {
-    width: 140px;
-    height: 140px;
+    width: 200px;
+    height: 200px;
   }
+
+  
+}
+/* start of scanner stuff added by DB */
+.qr-data-preview {
+  font-size: 0.875rem;
+  padding: 12px 15px;
+  word-break: break-all;
+  line-height: 1.5;
+  background-color: #f8f9fa;
+  cursor: default;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: 1rem;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+  color: #495057;
+}
+
+.preview-label {
+  font-weight: 600;
+  color: #495057;
+  display: inline-block;
+  min-width: 80px;
+}
+
+.qr-data-preview {
+  font-size: 0.875rem;
+  padding: 15px;
+  word-break: break-all;
+  line-height: 1.5;
+  background-color: #f8f9fa;
+  cursor: default;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  margin-top: 1rem;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  color: #495057;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.qr-data-preview.minimized {
+  height: 60px !important;
+  max-height: 60px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 10px 40px 10px 15px;
+}
+
+.qr-data-preview .preview-content {
+  transition: opacity 0.3s ease;
+}
+
+.qr-data-preview.minimized .preview-content {
+  opacity: 0.8;
+}
+
+.qr-data-toggle {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  background-color: rgba(0, 123, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #007bff;
+  transition: background-color 0.2s;
+}
+
+.qr-data-toggle:hover {
+  background-color: rgba(0, 123, 255, 0.2);
+}
+
+.qr-data-toggle::before {
+  content: "−";
+  font-size: 16px;
+  line-height: 1;
+}
+
+.qr-data-preview.minimized .qr-data-toggle::before {
+  content: "+";
+}
+
+#receiveModal .form-group .form-group {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+#receiveModal textarea.form-control {
+  resize: vertical;
+  min-height: 60px;
+  max-height: 120px;
+}
+
+#receiveModal input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+#receiveModal input[type="number"]::-webkit-outer-spin-button,
+#receiveModal input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#qrOptionsContainer {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
+  border: 1px solid #dee2e6;
+  transition: all 0.3s ease;
+}
+
+#toggleQROptions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  background-color: #f1f3f5;
+  border: 1px solid #dee2e6;
+  color: #495057;
+  font-weight: 500;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+#toggleQROptions:hover {
+  background-color: #e9ecef;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+}
+
+#toggleQROptions.active {
+  background-color: #e7f5ff;
+  border-color: #74c0fc;
+  color: #1971c2;
+}
+
+#toggleQROptionsIcon {
+  transition: transform 0.3s ease;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+#toggleQROptions.active #toggleQROptionsIcon {
+  transform: rotate(180deg);
+}
+
+#qrcode {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  background-color: white;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.qr-data-preview.minimized .preview-content::before {
+  content: attr(data-minimized);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.qr-data-preview.minimized .preview-content br,
+.qr-data-preview.minimized .preview-content span,
+.qr-data-preview.minimized .preview-content strong {
+  display: none;
+}
+
+/* QR Scanner Styles */
+.qr-scanner-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  /* z-index: 1000; */
+  display: flex;
+  flex-direction: column;
+}
+
+#qrVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scanner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.scanner-guide {
+  width: 70%;
+  height: 70%;
+  max-width: 500px;
+  max-height: 500px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.scanner-guide::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8) inset;
+  animation: scan-animation 2s infinite;
+}
+
+@keyframes scan-animation {
+  0% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8) inset;
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.8) inset;
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8) inset;
+  }
+}
+
+.scanner-controls {
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  padding: 0 20px;
+}
+
+.scanner-button {
+  padding: 12px 24px;
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  font-size: 16px;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.scanner-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Ensure the scanner is properly positioned on iOS */
+@supports (-webkit-touch-callout: none) {
+  .qr-scanner-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100vh;
+    /* Fix for iOS 100vh issue */
+    height: -webkit-fill-available;
+  }
+}
+/* end of scanner stuff added by DB */
+
+.modal.fixed-header {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal.fixed-header .form-container {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Remove spinner buttons from number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* For Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* the following qr code scan stuff was added by Omar */
+.scanner-container {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  background-color: #fff;
+  aspect-ratio: 4/3;
+}
+
+#video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.scan-region-highlight {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  border: 2px dashed #3498db;
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
+}
+
+.scan-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  /* z-index: 10; */
+  border: 2px solid #3498db;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.scan-highlight.active {
+  opacity: 1;
+  background-color: rgba(52, 152, 219, 0.3);
+}
+
+#canvas {
+  display: none;
+}
+/* end of additions by Omar */
+
+small {
+  font-size: 0.8rem;
+  color: #6c757d;
+  text-align: left;
+  display: block;
+  padding: 8px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+/* Send Confirmation Modal Styles */
+#sendConfirmationModal .form-container {
+  padding: 16px;
+  width: 100%;
+  max-width: 390px;
+  margin: 0 auto;
+}
+
+#sendConfirmationModal .confirmation-details {
+  margin-bottom: 24px;
+  background-color: rgba(61, 61, 206, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+#sendConfirmationModal .form-group {
+  margin-bottom: 16px;
+}
+
+#sendConfirmationModal .form-group:last-child {
+  margin-bottom: 0;
+}
+
+#sendConfirmationModal label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--secondary-text-color);
+  margin-bottom: 8px;
+  font-weight: var(--font-weight-medium);
+}
+
+#sendConfirmationModal .confirm-value {
+  font-size: var(--font-size-base);
+  color: var(--text-color);
+  padding: 12px 16px;
+  background-color: var(--background-color);
+  border-radius: 8px;
+  word-break: break-all;
+  font-weight: var(--font-weight-medium);
+  border: 1px solid var(--border-color);
+}
+
+#sendConfirmationModal .update-button,
+#sendConfirmationModal .secondary-button {
+  width: calc(100% - 32px);
+  height: 48px;
+  border-radius: 24px;
+  margin: 8px 16px;
+  font-family: var(--font-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  transition: all 0.2s ease;
+}
+
+#sendConfirmationModal .update-button {
+  background-color: var(--primary-color);
+  color: var(--background-color);
+  border: none;
+}
+
+#sendConfirmationModal .update-button:hover {
+  background-color: var(--primary-hover);
+  opacity: 0.9;
+}
+
+#sendConfirmationModal .secondary-button {
+  background-color: var(--danger-color);
+  color: var(--background-color);
+  border: none;
+}
+
+#sendConfirmationModal .secondary-button:hover {
+  background-color: var(--hover-background-dark);
+  opacity: 0.9;
+}
+
+#sendConfirmationModal #confirmAmount {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-color);
+}
+
+#sendConfirmationModal #confirmMemoGroup {
+  opacity: 0.8;
+}
+
+#sendConfirmationModal #confirmMemo {
+  font-style: italic;
+  background-color: rgba(61, 61, 206, 0.04);
 }
 
 .icon-button.edit-icon {

@@ -2367,7 +2367,10 @@ function createQRPaymentData() {
 // Update QR code with current payment data
 function updateQRCode() {
     const qrcodeContainer = document.getElementById('qrcode');
+    const previewElement = document.getElementById('qrDataPreview'); // Get preview element
     qrcodeContainer.innerHTML = '';
+    previewElement.style.display = 'none'; // Hide preview/error area initially
+    previewElement.innerHTML = ''; // Clear any previous error message
     
     try {
         // Get payment data
@@ -2396,8 +2399,6 @@ function updateQRCode() {
         // Add the image to the container
         qrcodeContainer.appendChild(img);
 
-        // Update preview
-        previewQRData(paymentData);
         
         return qrText;
     } catch (error) {
@@ -2429,14 +2430,10 @@ function updateQRCode() {
             console.log("Fallback QR code generated with username URI");
             console.error("Error generating full QR", error);
 
-            // Show error in preview (pointing to the inner content div)
-            const previewElement = document.getElementById('qrDataPreview');
-            const previewContent = previewElement.querySelector('.preview-content'); 
-            if (previewContent) {
-                previewContent.innerHTML = `<span style="color: red;">Error generating full QR</span><br> Generating QR with only username. <br> Username: ${myAccount.username}`;
-                
-            } else {
-                previewElement.innerHTML = `Error generating full QR. Username: ${myAccount.username}`;
+            // Show error directly in the preview element
+            if (previewElement) {
+                previewElement.innerHTML = `<span style="color: red;">Error generating full QR</span><br> Generating QR with only username. <br> Username: ${myAccount.username}`;
+                previewElement.style.display = 'block'; // Make the error visible
             }
             
             return fallbackQrText; // Return the generated fallback URI
@@ -2444,9 +2441,9 @@ function updateQRCode() {
             // If even the fallback fails (e.g., username missing), show a simple error
             console.error("Error generating fallback QR code:", fallbackError);
             qrcodeContainer.innerHTML = '<p style="color: red; text-align: center;">Failed to generate QR code.</p>';
-            const previewElement = document.getElementById('qrDataPreview');
             if (previewElement) {
                 previewElement.innerHTML = '<p style="color: red;">Error generating QR code.</p>';
+                previewElement.style.display = 'block'; // Make the error visible
             }
             return null; // Indicate complete failure
         }
