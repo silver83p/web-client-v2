@@ -1030,6 +1030,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         openSendModal();
     });
 
+    // Add listener for the password visibility toggle
+    const togglePasswordButton = document.getElementById('togglePrivateKeyVisibility');
+    const passwordInput = document.getElementById('newPrivateKey');
+    
+    togglePasswordButton.addEventListener('click', function () {
+        // Toggle the type attribute
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+
+        // Toggle the visual state class on the button
+        this.classList.toggle('toggled-visible');
+    });
+    
+
     setupAddToHomeScreen()
 });
 
