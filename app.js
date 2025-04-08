@@ -2193,11 +2193,6 @@ function openReceiveModal() {
     const amountInput = document.getElementById('receiveAmount');
     const memoInput = document.getElementById('receiveMemo');
     const qrDataPreview = document.getElementById('qrDataPreview');
-    const qrDataToggle = document.getElementById('qrDataToggle');
-    const toggleButton = document.getElementById('toggleQROptions');
-    const optionsContainer = document.getElementById('qrOptionsContainer');
-    const toggleText = document.getElementById('toggleQROptionsText');
-    const toggleIcon = document.getElementById('toggleQROptionsIcon');
     
     // Store these references on the modal element for later cleanup
     modal.receiveElements = {
@@ -2205,11 +2200,6 @@ function openReceiveModal() {
         amountInput,
         memoInput,
         qrDataPreview,
-        qrDataToggle,
-        toggleButton,
-        optionsContainer,
-        toggleText,
-        toggleIcon
     };
     
     // Define event handlers and store references to them
@@ -2217,37 +2207,11 @@ function openReceiveModal() {
     const handleAmountInput = () => updateQRCode();
     const handleMemoInput = () => updateQRCode();
     
-    const handleQRDataToggle = () => {
-        qrDataPreview.classList.toggle('minimized');
-        
-        // Adjust height based on state
-        if (qrDataPreview.classList.contains('minimized')) {
-            qrDataPreview.style.height = '40px';
-        } else {
-            // Set height to auto to fit content
-            qrDataPreview.style.height = 'auto';
-        }
-    };
-    
-    const handleOptionsToggle = () => {
-        if (optionsContainer.style.display === 'none') {
-            optionsContainer.style.display = 'block';
-            toggleButton.classList.add('active');
-            toggleText.textContent = 'Hide Payment Request Options';
-        } else {
-            optionsContainer.style.display = 'none';
-            toggleButton.classList.remove('active');
-            toggleText.textContent = 'Show Payment Request Options';
-        }
-    };
-    
     // Store event handlers on the modal for later removal
     modal.receiveHandlers = {
         handleAssetChange,
         handleAmountInput,
         handleMemoInput,
-        handleQRDataToggle,
-        handleOptionsToggle
     };
     
     // Populate assets dropdown
@@ -2281,20 +2245,6 @@ function openReceiveModal() {
     assetSelect.addEventListener('change', handleAssetChange);
     amountInput.addEventListener('input', handleAmountInput);
     memoInput.addEventListener('input', handleMemoInput);
-    
-    // Reset QR data preview state
-    qrDataPreview.classList.remove('minimized');
-    
-    // Add toggle event listener
-    qrDataToggle.addEventListener('click', handleQRDataToggle);
-    
-    // Reset toggle state
-    toggleButton.classList.remove('active');
-    optionsContainer.style.display = 'none';
-    toggleText.textContent = 'Show Payment Request Options';
-    
-    // Add toggle event listener
-    toggleButton.addEventListener('click', handleOptionsToggle);
 
     // Update addresses for first asset
     updateReceiveAddresses();
@@ -2305,15 +2255,13 @@ function closeReceiveModal() {
     
     // Remove event listeners if they were added
     if (modal.receiveElements && modal.receiveHandlers) {
-        const { assetSelect, amountInput, memoInput, qrDataToggle, toggleButton } = modal.receiveElements;
-        const { handleAssetChange, handleAmountInput, handleMemoInput, handleQRDataToggle, handleOptionsToggle } = modal.receiveHandlers;
+        const { assetSelect, amountInput, memoInput } = modal.receiveElements;
+        const { handleAssetChange, handleAmountInput, handleMemoInput } = modal.receiveHandlers;
         
         // Remove event listeners
         if (assetSelect) assetSelect.removeEventListener('change', handleAssetChange);
         if (amountInput) amountInput.removeEventListener('input', handleAmountInput);
         if (memoInput) memoInput.removeEventListener('input', handleMemoInput);
-        if (qrDataToggle) qrDataToggle.removeEventListener('click', handleQRDataToggle);
-        if (toggleButton) toggleButton.removeEventListener('click', handleOptionsToggle);
         
         // Clean up references
         delete modal.receiveElements;
@@ -2329,23 +2277,6 @@ function previewQRData(paymentData) {
     const previewElement = document.getElementById('qrDataPreview');
     const previewContent = previewElement.querySelector('.preview-content');
     
-    // Create human-readable preview
-    let preview = `<strong>QR Code Data:</strong><br>`;
-    preview += `<span class="preview-label">Username:</span> ${paymentData.u}<br>`;
-    preview += `<span class="preview-label">Asset:</span> ${paymentData.s}<br>`;
-    
-    if (paymentData.amount) {
-        preview += `<span class="preview-label">Amount:</span> ${paymentData.amount} ${paymentData.symbol}<br>`;
-    }
-    
-    if (paymentData.m) {
-        preview += `<span class="preview-label">Memo:</span> ${paymentData.m}<br>`;
-    }
-    
-    // Add timestamp in readable format
-    const date = new Date(paymentData.t); 
-    preview += `<span class="preview-label">Generated:</span> ${date.toLocaleString()}`;
-    
     // Create minimized version (single line)
     let minimizedPreview = `${paymentData.u} • ${paymentData.s}`;
     if (paymentData.a) {
@@ -2358,14 +2289,12 @@ function previewQRData(paymentData) {
         minimizedPreview += ` • Memo: ${shortMemo}`;
     }
     
-    // Set preview text
-    previewContent.innerHTML = preview;
-    previewContent.setAttribute('data-minimized', minimizedPreview);
+    // SET minimizedPreview directly as innerHTML
+    previewContent.innerHTML = minimizedPreview;
     
-    // Ensure the container fits the content when maximized
-    if (!previewElement.classList.contains('minimized')) {
-        previewElement.style.height = 'auto';
-    }
+    // Ensure consistent height and style for the single line preview
+    previewElement.style.height = 'auto'; // Let content determine height initially
+    previewElement.classList.remove('minimized'); // Ensure minimized class is not present
 }
 
 function updateReceiveAddresses() {
@@ -2431,9 +2360,6 @@ function createQRPaymentData() {
     // Build payment data object
     const paymentData = {
         u: myAccount.username, // username
-        // TODO: remove timestamp and version to save space
-        t: Date.now(), // timestamp
-        v: "1.0", // version
         i: assetId, // assetId
         s: symbol // symbol
     };
@@ -2455,7 +2381,10 @@ function createQRPaymentData() {
 // Update QR code with current payment data
 function updateQRCode() {
     const qrcodeContainer = document.getElementById('qrcode');
+    const previewElement = document.getElementById('qrDataPreview'); // Get preview element
     qrcodeContainer.innerHTML = '';
+    previewElement.style.display = 'none'; // Hide preview/error area initially
+    previewElement.innerHTML = ''; // Clear any previous error message
     
     try {
         // Get payment data
@@ -2484,8 +2413,6 @@ function updateQRCode() {
         // Add the image to the container
         qrcodeContainer.appendChild(img);
 
-        // Update preview
-        previewQRData(paymentData);
         
         return qrText;
     } catch (error) {
@@ -2517,14 +2444,10 @@ function updateQRCode() {
             console.log("Fallback QR code generated with username URI");
             console.error("Error generating full QR", error);
 
-            // Show error in preview (pointing to the inner content div)
-            const previewElement = document.getElementById('qrDataPreview');
-            const previewContent = previewElement.querySelector('.preview-content'); 
-            if (previewContent) {
-                previewContent.innerHTML = `<span style="color: red;">Error generating full QR</span><br> Generating QR with only username. <br> Username: ${myAccount.username}`;
-                
-            } else {
-                previewElement.innerHTML = `Error generating full QR. Username: ${myAccount.username}`;
+            // Show error directly in the preview element
+            if (previewElement) {
+                previewElement.innerHTML = `<span style="color: red;">Error generating full QR</span><br> Generating QR with only username. <br> Username: ${myAccount.username}`;
+                previewElement.style.display = 'block'; // Make the error visible
             }
             
             return fallbackQrText; // Return the generated fallback URI
@@ -2532,9 +2455,9 @@ function updateQRCode() {
             // If even the fallback fails (e.g., username missing), show a simple error
             console.error("Error generating fallback QR code:", fallbackError);
             qrcodeContainer.innerHTML = '<p style="color: red; text-align: center;">Failed to generate QR code.</p>';
-            const previewElement = document.getElementById('qrDataPreview');
             if (previewElement) {
                 previewElement.innerHTML = '<p style="color: red;">Error generating QR code.</p>';
+                previewElement.style.display = 'block'; // Make the error visible
             }
             return null; // Indicate complete failure
         }
