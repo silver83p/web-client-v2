@@ -2045,16 +2045,6 @@ async function handleNewChat(event) {
     if (!chatsData.contacts[recipientAddress]) { createNewContact(recipientAddress) }
     chatsData.contacts[recipientAddress].username = username
 
-// TODO - maybe we don't need this; this is just adding a blank entry into the chats table
-    // Add to chats if not already present
-    const existingChat = chatsData.chats.find(chat => chat.address === recipientAddress);
-    if (!existingChat) {
-        chatsData.chats.unshift({
-            address: recipientAddress,
-            timestamp: Date.now(),
-        });
-    }
-
     // Close new chat modal and open chat modal
     closeNewChatModal();
     openChatModal(recipientAddress);
