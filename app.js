@@ -905,6 +905,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeHistoryModal').addEventListener('click', closeHistoryModal);
     document.getElementById('historyAsset').addEventListener('change', updateHistoryAddresses);
     
+    // Receive Modal input listeners
+    document.getElementById('receiveAsset').addEventListener('change', updateQRCode);
+    document.getElementById('receiveAmount').addEventListener('input', debounce(updateQRCode, 300));
+    document.getElementById('receiveMemo').addEventListener('input', debounce(updateQRCode, 300));
+
     document.getElementById('switchToChats').addEventListener('click', () => switchView('chats'));
     document.getElementById('switchToContacts').addEventListener('click', () => switchView('contacts'));
     document.getElementById('switchToWallet').addEventListener('click', () => switchView('wallet'));
@@ -2225,31 +2230,10 @@ function openReceiveModal() {
     // Get wallet data
     const walletData = myData.wallet;
 
-    // Store references to elements that will have event listeners
+    // Get references to elements
     const assetSelect = document.getElementById('receiveAsset');
     const amountInput = document.getElementById('receiveAmount');
     const memoInput = document.getElementById('receiveMemo');
-    const qrDataPreview = document.getElementById('qrDataPreview');
-    
-    // Store these references on the modal element for later cleanup
-    modal.receiveElements = {
-        assetSelect,
-        amountInput,
-        memoInput,
-        qrDataPreview,
-    };
-    
-    // Define event handlers and store references to them
-    const handleAssetChange = () => updateQRCode();
-    const handleAmountInput = () => updateQRCode();
-    const handleMemoInput = () => updateQRCode();
-    
-    // Store event handlers on the modal for later removal
-    modal.receiveHandlers = {
-        handleAssetChange,
-        handleAmountInput,
-        handleMemoInput,
-    };
     
     // Populate assets dropdown
     // Clear existing options
@@ -2278,33 +2262,12 @@ function openReceiveModal() {
     amountInput.value = '';
     memoInput.value = '';
 
-    // Add event listeners for form fields
-    assetSelect.addEventListener('change', handleAssetChange);
-    amountInput.addEventListener('input', handleAmountInput);
-    memoInput.addEventListener('input', handleMemoInput);
-
-    // Update addresses for first asset
+    // Initial update for addresses based on the first asset
     updateReceiveAddresses();
 }
 
 function closeReceiveModal() {
     const modal = document.getElementById('receiveModal');
-    
-    // Remove event listeners if they were added
-    if (modal.receiveElements && modal.receiveHandlers) {
-        const { assetSelect, amountInput, memoInput } = modal.receiveElements;
-        const { handleAssetChange, handleAmountInput, handleMemoInput } = modal.receiveHandlers;
-        
-        // Remove event listeners
-        if (assetSelect) assetSelect.removeEventListener('change', handleAssetChange);
-        if (amountInput) amountInput.removeEventListener('input', handleAmountInput);
-        if (memoInput) memoInput.removeEventListener('input', handleMemoInput);
-        
-        // Clean up references
-        delete modal.receiveElements;
-        delete modal.receiveHandlers;
-    }
-    
     // Hide the modal
     modal.classList.remove('active');
 }
