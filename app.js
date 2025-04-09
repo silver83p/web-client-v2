@@ -989,9 +989,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeChatModal')?.addEventListener('click', () => {
         document.getElementById('chatModal').classList.remove('active');
     });
-    initializeSearch();
-
     
+    // Handle message search input
+    document.getElementById('messageSearch').addEventListener('input', (e) => {
+        handleMessageSearchInput(e);
+    });
+    
+    // Handle search input click
+    document.getElementById('searchInput').addEventListener('click', (e) => {
+        handleSearchInputClick(e);
+    });
 
     // Add contact search functionality
     const contactSearchInput = document.getElementById("contactSearchInput");
@@ -4576,14 +4583,18 @@ function handleSearchResultClick(result) {
     }
 }
 
-// Add the search input handler
-function initializeSearch() {
-    const searchInput = document.getElementById('searchInput');
+function handleSearchInputClick(e) {
     const messageSearch = document.getElementById('messageSearch');
-    const searchResults = document.getElementById('searchResults');
     const searchModal = document.getElementById('searchModal');
     
-    // Debounced search function
+    searchModal.classList.add('active');
+    messageSearch.focus();
+}
+
+function handleMessageSearchInput(e) {
+    const searchResults = document.getElementById('searchResults');
+
+    // debounced search
     const debouncedSearch = debounce((searchText) => {
         const trimmedText = searchText.trim();
         
@@ -4598,28 +4609,11 @@ function initializeSearch() {
         } else {
             displaySearchResults(results);
         }
-    }, (searchText) => searchText.length === 1 ? 600 : 300); // Dynamic wait time
-    
-    // Connect search input to modal input
-    searchInput.addEventListener('click', () => {
-        searchModal.classList.add('active');
-        messageSearch.focus();
-    });
-    
-    // Handle search input
-    messageSearch.addEventListener('input', (e) => {
-        debouncedSearch(e.target.value);
-    });
-}
+    }, (searchText) => searchText.length === 1 ? 600 : 300);
 
-// Add loading state display function
-function displayLoadingState() {
-    const searchResults = document.getElementById('searchResults');
-    searchResults.innerHTML = `
-        <div class="search-loading">
-            Searching messages
-        </div>
-    `;
+    
+        debouncedSearch(e.target.value);
+    
 }
 
 // Contact search functions
