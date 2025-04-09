@@ -369,15 +369,15 @@ function openCreateAccountModal() {
 }
 
 // Check availability on input changes
-let checkTimeout;
+let createAccountCheckTimeout;
 function handleCreateAccountInput(e) {
     const username = e.target.value;
     const usernameAvailable = document.getElementById('newUsernameAvailable');
     const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
     
     // Clear previous timeout
-    if (checkTimeout) {
-        clearTimeout(checkTimeout);
+    if (createAccountCheckTimeout) {
+        clearTimeout(createAccountCheckTimeout);
     }
     
     // Reset display
@@ -393,7 +393,7 @@ function handleCreateAccountInput(e) {
     }
     
     // Check network availability
-    checkTimeout = setTimeout(async () => {
+    createAccountCheckTimeout = setTimeout(async () => {
         const taken = await checkUsernameAvailability(username);
         if (taken == 'taken') {
             usernameAvailable.textContent = 'taken';
