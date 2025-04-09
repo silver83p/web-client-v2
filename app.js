@@ -366,53 +366,52 @@ function closeSignInModal() {
 
 function openCreateAccountModal() {
     document.getElementById('createAccountModal').classList.add('active');
-    const usernameInput = document.getElementById('newUsername');
+}
+
+// Check availability on input changes
+let checkTimeout;
+function handleCreateAccountInput(e) {
+    const username = e.target.value;
+    const usernameAvailable = document.getElementById('newUsernameAvailable');
+    const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
     
-    // Check availability on input changes
-    let checkTimeout;
-    usernameInput.addEventListener('input', (e) => {
-        const username = e.target.value;
-        const usernameAvailable = document.getElementById('newUsernameAvailable');
-        const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
-        
-        // Clear previous timeout
-        if (checkTimeout) {
-            clearTimeout(checkTimeout);
-        }
-        
-        // Reset display
-        usernameAvailable.style.display = 'none';
-        submitButton.disabled = true;
-        
-        // Check if username is too short
-        if (username.length < 3) {
-            usernameAvailable.textContent = 'too short';
+    // Clear previous timeout
+    if (checkTimeout) {
+        clearTimeout(checkTimeout);
+    }
+    
+    // Reset display
+    usernameAvailable.style.display = 'none';
+    submitButton.disabled = true;
+    
+    // Check if username is too short
+    if (username.length < 3) {
+        usernameAvailable.textContent = 'too short';
+        usernameAvailable.style.color = '#dc3545';
+        usernameAvailable.style.display = 'inline';
+        return;
+    }
+    
+    // Check network availability
+    checkTimeout = setTimeout(async () => {
+        const taken = await checkUsernameAvailability(username);
+        if (taken == 'taken') {
+            usernameAvailable.textContent = 'taken';
             usernameAvailable.style.color = '#dc3545';
             usernameAvailable.style.display = 'inline';
-            return;
+            submitButton.disabled = true;
+        } else if (taken == 'available') {
+            usernameAvailable.textContent = 'available';
+            usernameAvailable.style.color = '#28a745';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = false;
+        } else {
+            usernameAvailable.textContent = 'network error';
+            usernameAvailable.style.color = '#dc3545';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = true;
         }
-        
-        // Check network availability
-        checkTimeout = setTimeout(async () => {
-            const taken = await checkUsernameAvailability(username);
-            if (taken == 'taken') {
-                usernameAvailable.textContent = 'taken';
-                usernameAvailable.style.color = '#dc3545';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = true;
-            } else if (taken == 'available') {
-                usernameAvailable.textContent = 'available';
-                usernameAvailable.style.color = '#28a745';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = false;
-            } else {
-                usernameAvailable.textContent = 'network error';
-                usernameAvailable.style.color = '#dc3545';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = true;
-            }
-        }, 1000);
-    });
+    }, 1000);
 }
 
 function closeCreateAccountModal() {
@@ -1080,6 +1079,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add event listener for remove account button
     document.getElementById('removeAccountButton').addEventListener('click', handleRemoveAccountButton);
+
+    // create account button listener to clear message input on create account
+    document.getElementById('newUsername').addEventListener('input', handleCreateAccountInput);
 
     setupAddToHomeScreen()
 });
