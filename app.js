@@ -2198,6 +2198,12 @@ appendChatModal.address = null
 appendChatModal.len = 0
 
 function closeChatModal() {
+
+    const messageInput = document.querySelector('.message-input');
+    if (messageInput) {
+        messageInput.value = '';
+    }
+
     document.getElementById('chatModal').classList.remove('active');
     if (document.getElementById('chatsScreen').classList.contains('active')) {
         updateChatList('force')
