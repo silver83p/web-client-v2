@@ -5042,8 +5042,8 @@ function searchMessages(searchText) {
                     messageId: index,
                     message: message,  // Pass the entire message object
                     timestamp: message.timestamp,
-                    preview: truncateMessage(highlightedText, 100), // Store plain truncated text
-                    my: message.my // Include the my property
+                    preview: truncateMessage(highlightedText, 100),
+                    my: message.my  // Include the my property
                 });
             }
         });
