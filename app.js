@@ -1088,6 +1088,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // create account button listener to clear message input on create account
     document.getElementById('newUsername').addEventListener('input', handleCreateAccountInput);
 
+    // handle openSendModal sendToAddress username input change
+    document.getElementById('sendToAddress').addEventListener('input', (e) => {
+        handleOpenSendModalInput(e);
+    });
+
     setupAddToHomeScreen()
 });
 
@@ -2487,22 +2492,21 @@ async function openSendModal() {
     document.getElementById('sendAmount').value = '';
     document.getElementById('sendMemo').value = '';
 
-    const usernameInput = document.getElementById('sendToAddress');
     const usernameAvailable = document.getElementById('sendToAddressError');
     const submitButton = document.querySelector('#sendForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
     submitButton.disabled = true;
     openQRScanModal.fill = fillPaymentFromQR  // set function to handle filling the payment form from QR data
     
-/* This is now done in the DOMContentLoaded funtion
-    // Add QR code scan button handler
-    const scanButton = document.getElementById('scanQRButton');
-    // Remove any existing event listeners first
-    const newScanButton = scanButton.cloneNode(true);
-    scanButton.parentNode.replaceChild(newScanButton, scanButton);
-    newScanButton.addEventListener('click', scanQRCode);
-    console.log("Added click event listener to scan QR button");
- */
+    /* This is now done in the DOMContentLoaded funtion
+        // Add QR code scan button handler
+        const scanButton = document.getElementById('scanQRButton');
+        // Remove any existing event listeners first
+        const newScanButton = scanButton.cloneNode(true);
+        scanButton.parentNode.replaceChild(newScanButton, scanButton);
+        newScanButton.addEventListener('click', scanQRCode);
+        console.log("Added click event listener to scan QR button");
+    */
 
     if (openSendModal.username) {
         const usernameInput = document.getElementById('sendToAddress');
@@ -2513,45 +2517,6 @@ async function openSendModal() {
         openSendModal.username = null
     }
     
-    // Check availability on input changes
-    let checkTimeout;
-    usernameInput.addEventListener('input', (e) => {
-        const username = normalizeUsername(e.target.value);
-        
-        // Clear previous timeout
-        if (checkTimeout) {
-            clearTimeout(checkTimeout);
-        }
-                
-        // Check if username is too short
-        if (username.length < 3) {
-            usernameAvailable.textContent = 'too short';
-            usernameAvailable.style.color = '#dc3545';
-            usernameAvailable.style.display = 'inline';
-            return;
-        }
-        
-        // Check network availability
-        checkTimeout = setTimeout(async () => {
-            const taken = await checkUsernameAvailability(username, myAccount.keys.address);
-            if (taken == 'taken') {
-                usernameAvailable.textContent = 'found';
-                usernameAvailable.style.color = '#28a745';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = false;
-            } else if ((taken == 'available') || (taken == 'mine')) {
-                usernameAvailable.textContent = 'not found';
-                usernameAvailable.style.color = '#dc3545';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = true;
-            } else {
-                usernameAvailable.textContent = 'network error';
-                usernameAvailable.style.color = '#dc3545';
-                usernameAvailable.style.display = 'inline';
-                submitButton.disabled = true;
-            }
-        }, 1000);
-    });
 
     await updateWalletBalances(); // Refresh wallet balances first
     // Get wallet data
@@ -2568,6 +2533,49 @@ async function openSendModal() {
 }
 
 openSendModal.username = null
+
+let sendModalCheckTimeout;
+function handleOpenSendModalInput(e){
+    // Check availability on input changes
+    const username = normalizeUsername(e.target.value);
+    const usernameAvailable = document.getElementById('sendToAddressError');
+    const submitButton = document.querySelector('#sendForm button[type="submit"]');
+    
+    
+    // Clear previous timeout
+    if (sendModalCheckTimeout) {
+        clearTimeout(sendModalCheckTimeout);
+    }
+            
+    // Check if username is too short
+    if (username.length < 3) {
+        usernameAvailable.textContent = 'too short';
+        usernameAvailable.style.color = '#dc3545';
+        usernameAvailable.style.display = 'inline';
+        return;
+    }
+    
+    // Check network availability
+    sendModalCheckTimeout = setTimeout(async () => {
+        const taken = await checkUsernameAvailability(username, myAccount.keys.address);
+        if (taken == 'taken') {
+            usernameAvailable.textContent = 'found';
+            usernameAvailable.style.color = '#28a745';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = false;
+        } else if ((taken == 'available') || (taken == 'mine')) {
+            usernameAvailable.textContent = 'not found';
+            usernameAvailable.style.color = '#dc3545';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = true;
+        } else {
+            usernameAvailable.textContent = 'network error';
+            usernameAvailable.style.color = '#dc3545';
+            usernameAvailable.style.display = 'inline';
+            submitButton.disabled = true;
+        }
+    }, 1000);
+}
 
 // Function to handle QR code scanning Omar
 function openQRScanModal() {
