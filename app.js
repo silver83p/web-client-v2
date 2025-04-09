@@ -5033,7 +5033,7 @@ function searchMessages(searchText) {
                 const messageText = message.message;
                 const highlightedText = messageText.replace(
                     new RegExp(searchText, 'gi'),
-                    match => `<mark>${match}</mark>`
+                    match => `${match}`
                 );
                 
                 results.push({
@@ -5067,7 +5067,7 @@ function displaySearchResults(results) {
         
         // Format message preview with "You:" prefix if it's a sent message
         // make this textContent?
-        const messagePreview = result.my ? `You: ${result.preview}` : result.preview;
+        const messagePreview = result.my ? `You: <mark>${escapeHtml(result.preview)}</mark>` : `<mark>${escapeHtml(result.preview)}</mark>`;
         
         resultElement.innerHTML = `
             <div class="chat-avatar">
@@ -5079,7 +5079,7 @@ function displaySearchResults(results) {
                     <div class="chat-time">${formatTime(result.timestamp)}</div>
                 </div>
                 <div class="chat-message">
-                    ${linkifyUrls(messagePreview)}
+                    ${messagePreview}
                 </div>
             </div>
         `;
