@@ -4350,21 +4350,14 @@ function requestNotificationPermission() {
         Notification.requestPermission()
             .then(permission => {
                 console.log('Notification permission result:', permission);
-                // Logger.log('Notification permission result:', permission);
-                // Optional: Hide a notification button if granted.
                 if (permission === 'granted') {
-                    const notificationButton = document.getElementById('requestNotificationPermission');
-                    if (notificationButton) {
-                        notificationButton.style.display = 'none';
-                    }
+                    console.log('Notification permission granted');
                 } else {
                     console.log('Notification permission denied');
-                    // Logger.log('Notification permission denied');
                 }
             })
             .catch(error => {
                 console.error('Error during notification permission request:', error);
-                // Logger.error('Error during notification permission request:', error);
             });
     }
 }
