@@ -553,17 +553,17 @@ async function handleCreateAccount(event) {
     myData = newDataRecord(myAccount);
     const res = await postRegisterAlias(username, myAccount.keys);
 
-    // TODO: check if account has been created successfully
-    // sleep/timeout for 3 seconds
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
     if (res && (res.error || !res.result.success)) {
-//console.log('no res', res)
+        //console.log('no res', res)
         if (res?.result?.reason){
             alert(res.result.reason)
         }
         return;
     }
+
+    // TODO: check if account has been created successfully
+    // sleep/timeout for 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Store updated accounts back in localStorage
 //    existingAccounts.netids[netid].usernames[username] = myAccount;
