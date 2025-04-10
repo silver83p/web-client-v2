@@ -609,17 +609,16 @@ async function handleSignIn(event) {
 
     // Check if the button text is 'Recreate'
     if (submitButton.textContent === 'Recreate') {
-        const privateKey = existingAccounts.netids[netid].usernames[username].keys.secret;
+        const myData = parse(localStorage.getItem(`${username}_${netid}`));
+        const privateKey = myData.account.keys.secret;
         const newUsernameInput = document.getElementById('newUsername');
         newUsernameInput.value = username;
-        closeSignInModal();
-        openCreateAccountModal();
-        // Dispatch a change event to trigger the availability check
-        newUsernameInput.dispatchEvent(new Event('input'));
 
         document.getElementById('newPrivateKey').value = privateKey;
         closeSignInModal();
         openCreateAccountModal();
+        // Dispatch a change event to trigger the availability check
+        newUsernameInput.dispatchEvent(new Event('input'));
         return;
     }
 
