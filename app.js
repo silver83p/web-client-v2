@@ -535,11 +535,6 @@ async function handleCreateAccount(event) {
         }
     }
     
-
-    // TODO: check if account has been created successfully
-    // sleep/timeout for 3 seconds
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
     // Create new account entry
     myAccount = {
         netid,
@@ -557,6 +552,10 @@ async function handleCreateAccount(event) {
     // Create new data entry
     myData = newDataRecord(myAccount);
     const res = await postRegisterAlias(username, myAccount.keys);
+
+    // TODO: check if account has been created successfully
+    // sleep/timeout for 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     if (res && (res.error || !res.result.success)) {
 //console.log('no res', res)
