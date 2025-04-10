@@ -6095,9 +6095,8 @@ class WSManager {
             }
             console.log('WebSocket is already connected and subscribed');
             return;
-        } 
+        }
 
-        this.setupEventHandlers();
         try {
             const initInfo = {
                 status: 'starting',
@@ -6118,6 +6117,7 @@ class WSManager {
                 initInfo.status = 'connecting';
             }
             
+            this.setupEventHandlers();
             console.log('WebSocket Manager Status:', JSON.stringify(initInfo, null, 2));
             
         } catch (error) {
