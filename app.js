@@ -3876,13 +3876,12 @@ async function processChats(chats, keys) {
                     // Get name of sender
                     const senderName = contact.name || contact.username || `${from.slice(0,8)}...`
                     
-                    if (added > 0) {
-                        // Add notification indicator to Chats tab if we're not on it
-                        const chatsButton = document.getElementById('switchToChats');
-                        if (!document.getElementById('chatsScreen').classList.contains('active')) {
-                            chatsButton.classList.add('has-notification');
-                        }
+                    // Add notification indicator to Chats tab if we're not on it
+                    const chatsButton = document.getElementById('switchToChats');
+                    if (!document.getElementById('chatsScreen').classList.contains('active')) {
+                        chatsButton.classList.add('has-notification');
                     }
+                    
                 }
             }
             
