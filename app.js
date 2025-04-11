@@ -684,14 +684,6 @@ function newDataRecord(myAccount){
     return myData
 }
 
-// Generate deterministic color from hash
-function getColorFromHash(hash, index) {
-    const hue = parseInt(hash.slice(index * 2, (index * 2) + 2), 16) % 360;
-    const saturation = 60 + (parseInt(hash.slice((index * 2) + 2, (index * 2) + 4), 16) % 20);
-    const lightness = 45 + (parseInt(hash.slice((index * 2) + 4, (index * 2) + 6), 16) % 10);
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-}
-
 // Function to open the About modal
 function openAboutModal() {
     document.getElementById('aboutModal').classList.add('active');
