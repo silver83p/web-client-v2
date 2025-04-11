@@ -1904,6 +1904,7 @@ function openNewChatModal() {
     submitButton.disabled = true;  
 }
 
+let usernameInputCheckTimeout;
 // handler that invokes listener for username input
 function handleUsernameInput(e) {
     
@@ -1911,14 +1912,12 @@ function handleUsernameInput(e) {
     const submitButton = document.querySelector('#newChatForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
     submitButton.disabled = true;
-    // Check availability on input changes
-    let checkTimeout;
 
     const username = normalizeUsername(e.target.value);
     
     // Clear previous timeout
-    if (checkTimeout) {
-        clearTimeout(checkTimeout);
+    if (usernameInputCheckTimeout) {
+        clearTimeout(usernameInputCheckTimeout);
     }
             
     // Check if username is too short
@@ -1930,7 +1929,7 @@ function handleUsernameInput(e) {
     }
     
     // Check username availability
-    checkTimeout = setTimeout(async () => {
+    usernameInputCheckTimeout = setTimeout(async () => {
         const taken = await checkUsernameAvailability(username, myAccount.keys.address);
         if (taken == 'taken') {
             usernameAvailable.textContent = 'found';
