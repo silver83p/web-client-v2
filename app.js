@@ -1832,9 +1832,6 @@ async function handleImportFile(event) {
 async function encryptData(data, password) {
     if (!password) return data;
 
-    // Generate salt
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
-
     // Derive key using 100,000 iterations of blake2b
     let key = utf82bin(password);
     for (let i = 0; i < 100000; i++) {
