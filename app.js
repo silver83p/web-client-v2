@@ -1906,7 +1906,6 @@ function openNewChatModal() {
     document.getElementById('newChatModal').classList.add('active');
     document.getElementById('newChatButton').classList.remove('visible');
 
-    const usernameInput = document.getElementById('chatRecipient');
     const usernameAvailable = document.getElementById('chatRecipientError');
     const submitButton = document.querySelector('#newChatForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
