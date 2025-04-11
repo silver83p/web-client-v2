@@ -1758,7 +1758,6 @@ async function handleImportFile(event) {
             fileContent = await decryptData(fileContent, passwordInput.value.trim());
             if (fileContent == null){ throw "" }
         }
-        const jsonData = parse(fileContent);
 
         // We first parse to jsonData so that if the parse does not work we don't destroy myData
         myData = parse(fileContent)
@@ -1824,9 +1823,6 @@ async function handleImportFile(event) {
 // Encrypt data using ChaCha20-Poly1305
 async function encryptData(data, password) {
     if (!password) return data;
-
-    // Generate salt
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
 
     // Derive key using 100,000 iterations of blake2b
     let key = utf82bin(password);
@@ -1902,7 +1898,6 @@ function openNewChatModal() {
     document.getElementById('newChatModal').classList.add('active');
     document.getElementById('newChatButton').classList.remove('visible');
 
-    const usernameInput = document.getElementById('chatRecipient');
     const usernameAvailable = document.getElementById('chatRecipientError');
     const submitButton = document.querySelector('#newChatForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
