@@ -3894,11 +3894,6 @@ async function processChats(chats, keys) {
                     walletButton.classList.add('has-notification');
                 }
             }
-            
-            if (newTimestamp > 0){
-                // Update the timestamp
-                myAccount.chatTimestamp = newTimestamp
-            }
         }
     }
 }
