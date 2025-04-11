@@ -1766,7 +1766,6 @@ async function handleImportFile(event) {
             fileContent = await decryptData(fileContent, passwordInput.value.trim());
             if (fileContent == null){ throw "" }
         }
-        const jsonData = parse(fileContent);
 
         // We first parse to jsonData so that if the parse does not work we don't destroy myData
         myData = parse(fileContent)
