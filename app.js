@@ -3653,31 +3653,35 @@ async function getChats(keys) {  // needs to return the number of chats that nee
 //console.log('messages', myData.contacts[keys.address].messages)
 //console.log('last messages', myData.contacts[keys.address].messages.at(-1))
 //console.log('timestamp', myData.contacts[keys.address].messages.at(-1).timestamp)
-    const timestamp = myAccount.chatTimestamp || 0
+    const initialTimestamp = myAccount.chatTimestamp || 0
 //    const timestamp = myData.contacts[keys.address]?.messages?.at(-1).timestamp || 0
 
-    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/${timestamp}`) // TODO get this working
+    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/${initialTimestamp}`) // TODO get this working
 //    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/0`) // TODO stop using this
     const chatCount = Object.keys(senders.chats).length
     console.log('getChats senders', 
-        timestamp === undefined ? 'undefined' : JSON.stringify(timestamp),
+        initialTimestamp === undefined ? 'undefined' : JSON.stringify(initialTimestamp),
         chatCount === undefined ? 'undefined' : JSON.stringify(chatCount),
         senders === undefined ? 'undefined' : JSON.stringify(senders))
-    if (senders && senders.chats && chatCount){     // TODO check if above is working
-        await processChats(senders.chats, keys)
-    }
-    if (appendChatModal.address){   // clear the unread count of address for open chat modal
-        myData.contacts[appendChatModal.address].unread = 0 
-    }
-    return chatCount
-}
-getChats.lastCall = 0
 
-// Actually payments also appear in the chats, so we can add these to
-async function processChats(chats, keys) {
+    let totalMessagesProcessed = 0;
+    if (senders && senders.chats && chatCount){     // TODO check if above is working
+        totalMessagesProcessed = await processChats(senders.chats, keys, initialTimestamp);
+    }
+    if (appendChatModal.address && myData.contacts[appendChatModal.address]){   // clear the unread count of address for open chat modal
+        myData.contacts[appendChatModal.address].unread = 0
+    }
+    return totalMessagesProcessed; // Return the total number of messages processed
+}
+
+// Pass initialTimestamp and return total added messages
+async function processChats(chats, keys, initialTimestamp) {
+    let totalAdded = 0;
+    let maxTimestamp = initialTimestamp; // Keep track of the overall latest timestamp
+
     for (let sender in chats) {
-        const timestamp = myAccount.chatTimestamp || 0
-        const res = await queryNetwork(`/messages/${chats[sender]}/${timestamp}`)
+        // Use the initialTimestamp passed from getChats for fetching messages
+        const res = await queryNetwork(`/messages/${chats[sender]}/${initialTimestamp}`);
         console.log("processChats sender", sender)
         if (res && res.messages){  
             const from = normalizeAddress(sender)
@@ -3685,7 +3689,7 @@ async function processChats(chats, keys) {
             const contact = myData.contacts[from]
 //            contact.address = from        // not needed since createNewContact does this
             let added = 0
-            let newTimestamp = 0
+            
             let hasNewTransfer = false;
             
             // This check determines if we're currently chatting with the sender
@@ -3695,9 +3699,11 @@ async function processChats(chats, keys) {
             
             for (let i in res.messages){
                 const tx = res.messages[i] // the messages are actually the whole tx
-//console.log('message tx is')
-//console.log(JSON.stringify(message, null, 4))
-                newTimestamp = tx.timestamp > newTimestamp ? tx.timestamp : newTimestamp
+                //console.log('message tx is')
+                //console.log(JSON.stringify(message, null, 4))
+
+                maxTimestamp = Math.max(maxTimestamp, tx.timestamp); // Update the overall max timestamp
+
                 if (tx.type == 'message'){
                     if (tx.from == longAddress(keys.address)){ continue }  // skip if the message is from us
                     const payload = tx.xmessage  // changed to use .message
@@ -3826,10 +3832,7 @@ async function processChats(chats, keys) {
                     }
                 }
             }
-            if (newTimestamp > 0){
-                // Update the timestamp
-                myAccount.chatTimestamp = newTimestamp
-            }
+            totalAdded += added; // Accumulate total messages added
             // If messages were added to contact.messages, update myData.chats
             if (added > 0) {
                 // Get the most recent message (index 0 because it's sorted descending)
@@ -3885,6 +3888,13 @@ async function processChats(chats, keys) {
             }
         }
     }
+
+    // Update the global timestamp AFTER processing all senders
+    if (maxTimestamp > initialTimestamp) {
+        myAccount.chatTimestamp = maxTimestamp;
+    }
+
+    return totalAdded; // Return the total number of messages added across all senders
 }
 
 // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
