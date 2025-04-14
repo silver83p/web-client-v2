@@ -2191,6 +2191,7 @@ function appendChatModal() {
         console.log('Scrolled chat modal to bottom after full re-render.');
     // }, 0);
 }
+appendChatModal.address = null
 
 function closeChatModal() {
     document.getElementById('chatModal').classList.remove('active');
