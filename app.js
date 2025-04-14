@@ -3837,7 +3837,7 @@ async function processChats(chats, keys) {
                         updateWalletView();
                     } 
                     // update history modal if it's active
-                    if (historyModalActive) { // Use the variable here
+                    if (historyModalActive) {
                         updateTransactionHistory();
                         showToast(`Transfer received: ${contact.username}`, 5000, 'success');
                     }
