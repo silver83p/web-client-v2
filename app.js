@@ -3653,33 +3653,32 @@ async function getChats(keys) {  // needs to return the number of chats that nee
 //console.log('messages', myData.contacts[keys.address].messages)
 //console.log('last messages', myData.contacts[keys.address].messages.at(-1))
 //console.log('timestamp', myData.contacts[keys.address].messages.at(-1).timestamp)
-    const initialTimestamp = myAccount.chatTimestamp || 0
+    const timestamp = myAccount.chatTimestamp || 0
 //    const timestamp = myData.contacts[keys.address]?.messages?.at(-1).timestamp || 0
 
-    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/${initialTimestamp}`) // TODO get this working
+    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/${timestamp}`) // TODO get this working
 //    const senders = await queryNetwork(`/account/${longAddress(keys.address)}/chats/0`) // TODO stop using this
     const chatCount = Object.keys(senders.chats).length
     console.log('getChats senders', 
-        initialTimestamp === undefined ? 'undefined' : JSON.stringify(initialTimestamp),
+        timestamp === undefined ? 'undefined' : JSON.stringify(timestamp),
         chatCount === undefined ? 'undefined' : JSON.stringify(chatCount),
         senders === undefined ? 'undefined' : JSON.stringify(senders))
     if (senders && senders.chats && chatCount){     // TODO check if above is working
-        await processChats(senders.chats, keys, initialTimestamp);
+        await processChats(senders.chats, keys)
     }
-    if (appendChatModal.address && myData.contacts[appendChatModal.address]){   // clear the unread count of address for open chat modal
+    if (appendChatModal.address){   // clear the unread count of address for open chat modal
         myData.contacts[appendChatModal.address].unread = 0 
     }
     return chatCount
 }
 getChats.lastCall = 0
 
-// Pass initialTimestamp and return total added messages
-async function processChats(chats, keys, initialTimestamp) {
-    let maxTimestamp = initialTimestamp; // Keep track of the overall latest timestamp
-
+// Actually payments also appear in the chats, so we can add these to
+async function processChats(chats, keys) {
     for (let sender in chats) {
-        // Use the initialTimestamp passed from getChats for fetching messages
-        const res = await queryNetwork(`/messages/${chats[sender]}/${initialTimestamp}`);
+        const timestamp = myAccount.chatTimestamp || 0
+        const res = await queryNetwork(`/messages/${chats[sender]}/${timestamp}`)
+        let newTimestamp = 0
         console.log("processChats sender", sender)
         if (res && res.messages){  
             const from = normalizeAddress(sender)
@@ -3696,11 +3695,9 @@ async function processChats(chats, keys, initialTimestamp) {
             
             for (let i in res.messages){
                 const tx = res.messages[i] // the messages are actually the whole tx
-                //console.log('message tx is')
-                //console.log(JSON.stringify(message, null, 4))
-
-                maxTimestamp = Math.max(maxTimestamp, tx.timestamp); // Update the overall max timestamp
-
+//console.log('message tx is')
+//console.log(JSON.stringify(message, null, 4))
+                newTimestamp = tx.timestamp > newTimestamp ? tx.timestamp : newTimestamp
                 if (tx.type == 'message'){
                     if (tx.from == longAddress(keys.address)){ continue }  // skip if the message is from us
                     const payload = tx.xmessage  // changed to use .message
