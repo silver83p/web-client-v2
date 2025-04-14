@@ -2182,14 +2182,7 @@ function appendChatModal() {
             </div>
         `);
     }
-
-    // 4. Scroll to bottom
-    // (Consider adding a slight delay if rendering is complex,
-    // although clearing first might make it synchronous enough)
-    // setTimeout(() => {
         messagesList.parentElement.scrollTop = messagesList.parentElement.scrollHeight;
-        console.log('Scrolled chat modal to bottom after full re-render.');
-    // }, 0);
 }
 appendChatModal.address = null
 
