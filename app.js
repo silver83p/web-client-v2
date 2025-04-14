@@ -2190,11 +2190,6 @@ function appendChatModal() {
         messagesList.parentElement.scrollTop = messagesList.parentElement.scrollHeight;
         console.log('Scrolled chat modal to bottom after full re-render.');
     // }, 0);
-
-    // toast if chatModal is active
-    if (document.getElementById('chatModal').classList.contains('active')) {
-        showToast(`Message received: ${contact.username}`, 5000, 'success');
-    }
 }
 
 function closeChatModal() {
