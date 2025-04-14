@@ -2197,7 +2197,6 @@ function closeChatModal() {
         document.getElementById('newChatButton').classList.add('visible');
     }
     appendChatModal.address = null
-    appendChatModal.len = 0
     if (isOnline) {
         if (wsManager && !wsManager.isSubscribed()) {
             pollChatInterval(pollIntervalNormal) // back to polling at slower rate
@@ -3301,17 +3300,8 @@ async function handleSendMessage() {
         if (existingChatIndex !== -1) {
             chatsData.chats.splice(existingChatIndex, 1);
         }
-
-        // Find insertion point to maintain timestamp order (newest first)
-        const insertIndex = chatsData.chats.findIndex(chat => chat.timestamp < chatUpdate.timestamp);
-
-        if (insertIndex === -1) {
-            // If no earlier timestamp found, append to end (should be newest)
-            chatsData.chats.push(chatUpdate);
-        } else {
-            // Insert at correct position to maintain order
-            chatsData.chats.splice(insertIndex, 0, chatUpdate);
-        }
+        
+        insertSorted(chatsData.chats, chatUpdate, 'timestamp');
 
         // Clear input and reset height
         messageInput.value = '';
