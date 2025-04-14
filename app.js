@@ -2827,18 +2827,23 @@ console.log('payload is', payload)
             address: toAddress,
             memo: memo
         };
-        wallet.history.unshift(newPayment);
+        // TODO: (done-remove-during-review) need to keep in mind sent_timestamp instead of just blindly pushing or unshifting
+        // wallet.history.unshift(newPayment);
 
-// Don't try to update the balance here; the tx might not have gone through; let user refresh the balance from the wallet page
-// Maybe we can set a timer to check on the status of the tx using txid and update the balance if the txid was processed
-/*
+        // instead of unshifting, insert the new payment in the correct position
+        insertSorted(wallet.history, newPayment, 'timestamp'); 
+
+        // Don't try to update the balance here; the tx might not have gone through; let user refresh the balance from the wallet page
+        // Maybe we can set a timer to check on the status of the tx using txid and update the balance if the txid was processed
+        /*
         // Update local balance after successful transaction
         fromAddress.balance -= amount;
         walletData.balance = walletData.assets.reduce((total, asset) =>
             total + asset.addresses.reduce((sum, addr) => sum + bigxnum2num(addr.balance, asset.price), 0), 0);
         // Update wallet view and close modal
         updateWalletView();
-*/
+        */
+        
         closeSendModal();
         closeSendConfirmationModal();
         document.getElementById('sendToAddress').value = '';
@@ -3290,6 +3295,7 @@ async function handleSendMessage() {
             sent_timestamp: Date.now(),
             my: true
         };
+        // TODO: will need a function to add newMessage dependent on using sent_timestamp
         chatsData.contacts[currentAddress].messages.push(newMessage);
 
         // Update or add to chats list
@@ -3298,9 +3304,10 @@ async function handleSendMessage() {
             address: currentAddress,
             timestamp: newMessage.timestamp,
         };
-
+        // TODO: need to keep in mind sent_timestamp instead of just blindly unshifting
         // Remove existing chat if present
         if (existingChatIndex !== -1) {
+            // TODO: need to keep in mind sent_timestamp instead of just blindly unshifting
             chatsData.chats.splice(existingChatIndex, 1);
         }
         // Add updated chat to the beginning of the array
@@ -3748,6 +3755,7 @@ async function processChats(chats, keys) {
 //console.log('contact.message', contact.messages)
                     payload.my = false
                     payload.timestamp = Date.now()
+                    // TODO: need to keep in mind sent_timestamp instead of just blindly pushing
                     contact.messages.push(payload)
                     added += 1
                 } else if (tx.type == 'transfer'){
@@ -3809,7 +3817,12 @@ async function processChats(chats, keys) {
                         address: from,
                         memo: payload.message
                     };
-                    history.unshift(newPayment);
+                    // if we receive a payment from outside need to keep in mind sent_timestamp
+                    //history.unshift(newPayment);
+
+                    // instead of unshifting, insert the new payment in the correct position
+                    insertSorted(history, newPayment, 'timestamp');
+                    // TODO: remove this since redundant with insertSorted
                     //  sort history array based on timestamp field in descending order
                     history.sort((a, b) => b.timestamp - a.timestamp);
                     
@@ -3839,6 +3852,7 @@ async function processChats(chats, keys) {
 
                 contact.unread += added;  // setting this will show a unread bubble count
 
+                // This is correct since added is 1 (doubld check this)
                 // Remove existing chat for this contact if it exists
                 const existingChatIndex = myData.chats.findIndex(chat => chat.address === from);
                 if (existingChatIndex !== -1) {
@@ -6189,3 +6203,29 @@ function closeSendConfirmationModal() {
     document.getElementById('sendConfirmationModal').classList.remove('active');
     document.getElementById('sendModal').classList.add('active');
 }
+
+/**
+ * Inserts an item into an array while maintaining descending order based on a timestamp field.
+ * Assumes the array is already sorted in descending order.
+ *
+ * @param {Array<Object>} array - The array to insert into (e.g., myData.chats, contact.messages, myData.wallet.history).
+ * @param {Object} item - The item to insert (e.g., chatUpdate, newMessage, newPayment).
+ * @param {string} [timestampField='timestamp'] - The name of the field containing the timestamp to sort by.
+ */
+function insertSorted(array, item, timestampField = 'timestamp') {
+    // Find the index where the new item should be inserted.
+    // We are looking for the first element with a timestamp LESS THAN the new item's timestamp.
+    // This is because the array is sorted descending (newest first).
+    const index = array.findIndex(
+      (existingItem) => existingItem[timestampField] < item[timestampField]
+    );
+  
+    if (index === -1) {
+      // If no such element is found, the new item is the oldest (or the array is empty),
+      // so add it to the end.
+      array.push(item);
+    } else {
+      // Otherwise, insert the new item at the found index.
+      array.splice(index, 0, item);
+    }
+  }
