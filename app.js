@@ -3807,9 +3807,9 @@ async function processChats(chats, keys) {
                         memo: payload.message
                     };
                     insertSorted(history, newPayment, 'timestamp');
-                    // TODO: redundant but keep for
+                    // TODO: redundant but keep for now
                     //  sort history array based on timestamp field in descending order
-                    history.sort((a, b) => b.timestamp - a.timestamp);
+                    //history.sort((a, b) => b.timestamp - a.timestamp);
                     
                     // Mark that we have a new transfer for toast notification
                     hasNewTransfer = true
