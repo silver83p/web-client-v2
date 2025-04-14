@@ -3673,6 +3673,7 @@ async function getChats(keys) {  // needs to return the number of chats that nee
     }
     return totalMessagesProcessed; // Return the total number of messages processed
 }
+getChats.lastCall = 0
 
 // Pass initialTimestamp and return total added messages
 async function processChats(chats, keys, initialTimestamp) {
