@@ -3823,7 +3823,6 @@ async function processChats(chats, keys) {
                     // update history modal if it's active
                     if (historyModalActive) {
                         updateTransactionHistory();
-                        showToast(`Transfer received: ${contact.username}`, 5000, 'success');
                     }
                 }
             }
