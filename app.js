@@ -3663,15 +3663,13 @@ async function getChats(keys) {  // needs to return the number of chats that nee
         initialTimestamp === undefined ? 'undefined' : JSON.stringify(initialTimestamp),
         chatCount === undefined ? 'undefined' : JSON.stringify(chatCount),
         senders === undefined ? 'undefined' : JSON.stringify(senders))
-
-    let totalMessagesProcessed = 0;
     if (senders && senders.chats && chatCount){     // TODO check if above is working
-        totalMessagesProcessed = await processChats(senders.chats, keys, initialTimestamp);
+        await processChats(senders.chats, keys, initialTimestamp);
     }
     if (appendChatModal.address && myData.contacts[appendChatModal.address]){   // clear the unread count of address for open chat modal
-        myData.contacts[appendChatModal.address].unread = 0
+        myData.contacts[appendChatModal.address].unread = 0 
     }
-    return totalMessagesProcessed; // Return the total number of messages processed
+    return chatCount
 }
 getChats.lastCall = 0
 
@@ -3690,7 +3688,6 @@ async function processChats(chats, keys, initialTimestamp) {
             const contact = myData.contacts[from]
 //            contact.address = from        // not needed since createNewContact does this
             let added = 0
-            
             let hasNewTransfer = false;
             
             // This check determines if we're currently chatting with the sender
@@ -3833,7 +3830,6 @@ async function processChats(chats, keys, initialTimestamp) {
                     }
                 }
             }
-            totalAdded += added; // Accumulate total messages added
             // If messages were added to contact.messages, update myData.chats
             if (added > 0) {
                 // Get the most recent message (index 0 because it's sorted descending)
@@ -3894,8 +3890,6 @@ async function processChats(chats, keys, initialTimestamp) {
     if (maxTimestamp > initialTimestamp) {
         myAccount.chatTimestamp = maxTimestamp;
     }
-
-    return totalAdded; // Return the total number of messages added across all senders
 }
 
 // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
