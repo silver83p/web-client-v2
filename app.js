@@ -3830,14 +3830,14 @@ async function processChats(chats, keys) {
                     // Mark that we have a new transfer for toast notification
                     hasNewTransfer = true
 
-                    const historyModalActive = document.getElementById("historyModal")?.classList.contains("active");
                     const walletScreenActive = document.getElementById("walletScreen")?.classList.contains("active");
+                    const historyModalActive = document.getElementById("historyModal")?.classList.contains("active");
                     // Update wallet view if it's active
                     if (walletScreenActive) {
                         updateWalletView();
                     } 
                     // update history modal if it's active
-                    if (isHistoryModalActive) { // Use the variable here
+                    if (historyModalActive) { // Use the variable here
                         updateTransactionHistory();
                         showToast(`Transfer received: ${contact.username}`, 5000, 'success');
                     }
