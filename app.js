@@ -3675,7 +3675,6 @@ getChats.lastCall = 0
 
 // Pass initialTimestamp and return total added messages
 async function processChats(chats, keys, initialTimestamp) {
-    let totalAdded = 0;
     let maxTimestamp = initialTimestamp; // Keep track of the overall latest timestamp
 
     for (let sender in chats) {
