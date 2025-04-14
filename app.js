@@ -3830,11 +3830,8 @@ async function processChats(chats, keys) {
                     // Mark that we have a new transfer for toast notification
                     hasNewTransfer = true
 
-                    // Add logging to check the state right before the conditional
-                    const historyModalElement = document.getElementById("historyModal");
-                    const isHistoryModalActive = historyModalElement?.classList.contains("active");
+                    const historyModalActive = document.getElementById("historyModal")?.classList.contains("active");
                     const walletScreenActive = document.getElementById("walletScreen")?.classList.contains("active");
-
                     // Update wallet view if it's active
                     if (walletScreenActive) {
                         updateWalletView();
