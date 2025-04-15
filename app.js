@@ -25,7 +25,7 @@ async function checkVersion(){
 console.log(parseInt(myVersion.replace(/\D/g, '')), parseInt(newVersion.replace(/\D/g, '')))
     if (parseInt(myVersion.replace(/\D/g, '')) != parseInt(newVersion.replace(/\D/g, ''))) {
         if (parseInt(myVersion.replace(/\D/g, '')) > 0){
-            alert('Updating to new version: ' + newVersion)
+            alert('Updating to new version: ' + newVersion + ' ' + version)
         }
         localStorage.setItem('version', newVersion); // Save new version
         forceReload(['./', 'index.html','styles.css','app.js','lib.js', 'network.js', 'db.js', 'log-utils.js', 'service-worker.js', 'offline.html'])
