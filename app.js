@@ -3675,8 +3675,9 @@ getChats.lastCall = 0
 
 // Actually payments also appear in the chats, so we can add these to
 async function processChats(chats, keys) {
+    let newTimestamp = 0
+    const timestamp = myAccount.chatTimestamp || 0
     for (let sender in chats) {
-        const timestamp = myAccount.chatTimestamp || 0
         const res = await queryNetwork(`/messages/${chats[sender]}/${timestamp}`)
         console.log("processChats sender", sender)
         if (res && res.messages){  
@@ -3685,7 +3686,6 @@ async function processChats(chats, keys) {
             const contact = myData.contacts[from]
 //            contact.address = from        // not needed since createNewContact does this
             let added = 0
-            let newTimestamp = 0
             let hasNewTransfer = false;
             
             // This check determines if we're currently chatting with the sender
@@ -3826,10 +3826,6 @@ async function processChats(chats, keys) {
                     }
                 }
             }
-            if (newTimestamp > 0){
-                // Update the timestamp
-                myAccount.chatTimestamp = newTimestamp
-            }
             // If messages were added to contact.messages, update myData.chats
             if (added > 0) {
                 // Get the most recent message (index 0 because it's sorted descending)
@@ -3884,6 +3880,12 @@ async function processChats(chats, keys) {
                 }
             }
         }
+    }
+
+    // Update the global timestamp AFTER processing all senders
+    if (newTimestamp > 0){
+        // Update the timestamp
+        myAccount.chatTimestamp = newTimestamp
     }
 }
 
