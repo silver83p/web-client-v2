@@ -1,6 +1,6 @@
 // Check if there is a newer version and load that using a new random url to avoid cache hits
 //   Versions should be YYYY.MM.DD.HH.mm like 2025.01.25.10.05
-const version = 'r'   // Also increment this when you increment version.html
+const version = 'q'   // Also increment this when you increment version.html
 let myVersion = '0'
 async function checkVersion(){
     myVersion = localStorage.getItem('version') || '0';
@@ -25,7 +25,7 @@ async function checkVersion(){
 console.log(parseInt(myVersion.replace(/\D/g, '')), parseInt(newVersion.replace(/\D/g, '')))
     if (parseInt(myVersion.replace(/\D/g, '')) != parseInt(newVersion.replace(/\D/g, ''))) {
         if (parseInt(myVersion.replace(/\D/g, '')) > 0){
-            alert('Updating to new version: ' + newVersion)
+            alert('Updating to new version: ' + newVersion + ' ' + version)
         }
         localStorage.setItem('version', newVersion); // Save new version
         forceReload(['./', 'index.html','styles.css','app.js','lib.js', 'network.js', 'db.js', 'log-utils.js', 'service-worker.js', 'offline.html'])
