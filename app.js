@@ -3419,6 +3419,11 @@ console.log(JSON.stringify(data,null,4))
 }
 
 function openHistoryModal() {
+    // remove notification from wallet-action-button if it is active
+    if (document.getElementById('openHistoryModal').classList.contains('has-notification')) {
+        document.getElementById('openHistoryModal').classList.remove('has-notification');
+    }
+
     const modal = document.getElementById('historyModal');
     modal.classList.add('active');
     
@@ -3878,6 +3883,9 @@ async function processChats(chats, keys) {
                 if (!document.getElementById('walletScreen').classList.contains('active')) {
                     walletButton.classList.add('has-notification');
                 }
+                // Add notification to openHistoryModal wallet-action-button
+                const historyButton = document.getElementById('openHistoryModal');
+                historyButton.classList.add('has-notification');
             }
         }
     }
