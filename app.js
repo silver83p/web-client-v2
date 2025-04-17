@@ -1662,8 +1662,8 @@ async function updateContactsList() {
                         <div class="chat-header">
                             <div class="chat-name">${contact.name || contact.senderInfo?.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
                         </div>
-                        <div class="chat-message">
-                            ${contact.email || contact.x || contact.phone || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}
+                        <div class="contact-list-info">
+                            ${contact.email || contact.x || contact.phone || `${contact.address.slice(0,8)}…${contact.address.slice(-6)}`}
                         </div>
                     </div>
                 </li>
@@ -1684,8 +1684,8 @@ async function updateContactsList() {
                         <div class="chat-header">
                             <div class="chat-name">${contact.name || contact.senderInfo?.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}</div>
                         </div>
-                        <div class="chat-message">
-                            ${contact.email || contact.x || contact.phone || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`}
+                        <div class="contact-list-info">
+                            ${contact.email || contact.x || contact.phone || `${contact.address.slice(0,8)}…${contact.address.slice(-6)}`}
                         </div>
                     </div>
                 </li>
