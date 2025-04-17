@@ -3943,10 +3943,8 @@ async function processChats(chats, keys) {
                     if (historyModalActive) {
                         updateTransactionHistory();
                     }
-                    // if historyModal and walletScreen are not active, play transfer sound
-                    if (!walletScreenActive && !historyModalActive){
-                        playTransferSound(true);
-                    }
+                    // Always play transfer sound for new transfers
+                    playTransferSound(true);
                 }
             }
             // If messages were added to contact.messages, update myData.chats
