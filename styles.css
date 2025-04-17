@@ -321,6 +321,15 @@ body {
   object-fit: contain;
 }
 
+.logo-link {
+  display: block;
+  text-decoration: none;
+}
+
+.logo-link:hover {
+  opacity: 0.8;
+}
+
 .header.active {
   display: flex;
   justify-content: space-between;
