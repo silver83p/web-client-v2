@@ -735,37 +735,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Running in web-only mode, skipping service worker initialization');
     }
 
-    // Add clear cache button handler
-    const clearCacheButton = document.getElementById('clearCacheButton');
-    if (clearCacheButton) {
-        clearCacheButton.addEventListener('click', async () => {
-            try {
-                if ('serviceWorker' in navigator) {
-                    // Unregister all service workers
-                    const registrations = await navigator.serviceWorker.getRegistrations();
-                    for(let registration of registrations) {
-                        await registration.unregister();
-                    }
-                    // Clear all caches
-                    const keys = await caches.keys();
-                    await Promise.all(keys.map(key => caches.delete(key)));
-                    
-                    // Show success message
-                    showToast('Cache cleared successfully. Page will refresh...');
-                    
-                    // Perform a hard refresh after a short delay
-                    setTimeout(() => {
-                        // Clear browser cache and force reload from server
-                        window.location.href = window.location.href + '?clearCache=' + new Date().getTime();
-                    }, 2000);
-                }
-            } catch (error) {
-                console.error('Failed to clear cache:', error);
-                showToast('Failed to clear cache. Please try again.');
-            }
-        });
-    }
-
     document.getElementById('versionDisplay').textContent = myVersion + ' '+version;
     document.getElementById('networkNameDisplay').textContent = network.name;
 
@@ -789,23 +758,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         signInBtn.classList.remove('hidden');
         createAccountBtn.classList.remove('hidden');
         importAccountBtn.classList.remove('hidden');
-        clearCacheButton.classList.remove('hidden');
         welcomeButtons.appendChild(signInBtn);
         welcomeButtons.appendChild(createAccountBtn);
         welcomeButtons.appendChild(importAccountBtn);
         signInBtn.classList.add('primary-button');
         signInBtn.classList.remove('secondary-button');
-        welcomeButtons.appendChild(clearCacheButton);
     } else {
         welcomeButtons.innerHTML = ''; // Clear existing order
         createAccountBtn.classList.remove('hidden');
         importAccountBtn.classList.remove('hidden');
-        clearCacheButton.classList.remove('hidden');
         welcomeButtons.appendChild(createAccountBtn);
         welcomeButtons.appendChild(importAccountBtn);
         createAccountBtn.classList.add('primary-button');
         createAccountBtn.classList.remove('secondary-button');
-        welcomeButtons.appendChild(clearCacheButton);
     }
 
     // Add event listeners
