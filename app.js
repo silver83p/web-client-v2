@@ -262,7 +262,7 @@ function openSignInModal() {
     const usernameSelect = document.getElementById('username');
     // Populate select with usernames
     usernameSelect.innerHTML = `
-        <option value="">Select an account</option>
+        <option value="" disabled selected hidden>Select an account</option>
         ${usernames.map(username => `<option value="${username}">${username}</option>`).join('')}
     `;
 
@@ -279,7 +279,7 @@ function openSignInModal() {
     const removeButton = document.getElementById('removeAccountButton');
     const notFoundMessage = document.getElementById('usernameNotFound');
 
-    submitButton.disabled = false;
+    submitButton.disabled = true;  // Keep button disabled until an account is selected
     submitButton.textContent = 'Sign In';
     submitButton.style.display = 'inline';
     removeButton.style.display = 'none';
