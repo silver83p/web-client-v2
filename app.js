@@ -2784,9 +2784,16 @@ function fillAmount() {
 // The recipient account may not exist in myData.contacts and might have to be created
 async function handleSendAsset(event) {
     event.preventDefault();
-    if (Date.now() - handleSendAsset.timestamp < 2000) {
+    const confirmButton = document.getElementById('confirmSendButton');
+    const cancelButton = document.getElementById('cancelSendButton');
+
+    if (Date.now() - handleSendAsset.timestamp < 2000 || confirmButton.disabled) {
         return;
     }
+
+    confirmButton.disabled = true;
+    cancelButton.disabled = true;
+
     handleSendAsset.timestamp = Date.now()
     const wallet = myData.wallet;
     const assetIndex = document.getElementById('sendAsset').value;  // TODO include the asset id and symbol in the tx
@@ -6386,6 +6393,9 @@ function handleSendFormSubmit(event) {
     const amount = document.getElementById('sendAmount').value;
     const memo = document.getElementById('sendMemo').value;
 
+    const confirmButton = document.getElementById('confirmSendButton');
+    const cancelButton = document.getElementById('cancelSendButton');
+
     // Update confirmation modal with values
     document.getElementById('confirmRecipient').textContent = recipient;
     document.getElementById('confirmAmount').textContent = `${amount}`;
@@ -6402,6 +6412,9 @@ function handleSendFormSubmit(event) {
 
     // Hide send modal and show confirmation modal
     document.getElementById('sendModal').classList.remove('active');
+
+    confirmButton.disabled = false;
+    cancelButton.disabled = false;
     document.getElementById('sendConfirmationModal').classList.add('active');
 }
 
