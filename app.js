@@ -2969,9 +2969,6 @@ console.log('payload is', payload)
 
         closeSendModal();
         closeSendConfirmationModal();
-        confirmButton.disabled = false;
-        cancelButton.disabled = false;
-        
         document.getElementById('sendToAddress').value = '';
         document.getElementById('sendAmount').value = '';
         document.getElementById('sendMemo').value = '';
@@ -2987,9 +2984,6 @@ console.log('payload is', payload)
     } catch (error) {
         console.error('Transaction error:', error);
         alert('Transaction failed. Please try again.');
-
-        confirmButton.disabled = false;
-        cancelButton.disabled = false;
     }
 }
 handleSendAsset.timestamp = Date.now()
@@ -6399,6 +6393,9 @@ function handleSendFormSubmit(event) {
     const amount = document.getElementById('sendAmount').value;
     const memo = document.getElementById('sendMemo').value;
 
+    const confirmButton = document.getElementById('confirmSendButton');
+    const cancelButton = document.getElementById('cancelSendButton');
+
     // Update confirmation modal with values
     document.getElementById('confirmRecipient').textContent = recipient;
     document.getElementById('confirmAmount').textContent = `${amount}`;
@@ -6415,6 +6412,9 @@ function handleSendFormSubmit(event) {
 
     // Hide send modal and show confirmation modal
     document.getElementById('sendModal').classList.remove('active');
+
+    confirmButton.disabled = false;
+    cancelButton.disabled = false;
     document.getElementById('sendConfirmationModal').classList.add('active');
 }
 
