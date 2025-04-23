@@ -1908,13 +1908,24 @@ async function handleRemoveAccount() {
 }
 
 function openNewChatModal() {
-    document.getElementById('newChatModal').classList.add('active');
+    const newChatModal = document.getElementById('newChatModal');
+    newChatModal.classList.add('active');
     document.getElementById('newChatButton').classList.remove('visible');
 
     const usernameAvailable = document.getElementById('chatRecipientError');
+    const recipientInput = document.getElementById('chatRecipient');
     const submitButton = document.querySelector('#newChatForm button[type="submit"]');
     usernameAvailable.style.display = 'none';
     submitButton.disabled = true;  
+
+    // Create the handler function
+    const focusHandler = () => {
+        recipientInput.focus();
+        newChatModal.removeEventListener('transitionend', focusHandler);
+    };
+
+    // Add the event listener
+    newChatModal.addEventListener('transitionend', focusHandler);
 }
 
 let usernameInputCheckTimeout;
