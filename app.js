@@ -3152,6 +3152,8 @@ class ContactInfoModalManager {
 }
 
 async function openEditContactModal() {
+    const editContactModal = document.getElementById('editContactModal');
+    
     // Get the avatar section elements
     const avatarSection = document.querySelector('#editContactModal .contact-avatar-section');
     const avatarDiv = avatarSection.querySelector('.avatar');
@@ -3182,7 +3184,7 @@ async function openEditContactModal() {
     nameInput.parentElement.querySelector('.field-action-button').className = 'field-action-button clear';
 
     // Show the edit contact modal
-    document.getElementById('editContactModal').classList.add('active');
+    editContactModal.classList.add('active');
     
     // Get the current contact info from the contact info modal
     const currentContactAddress = contactInfoModal.currentContactAddress;
@@ -3194,9 +3196,14 @@ async function openEditContactModal() {
     // Create display info object using the same format as contactInfoModal
     const displayInfo = createDisplayInfo(myData.contacts[currentContactAddress]);
 
-    setTimeout(() => {
+    // Create a handler function to focus the input after the modal transition
+    const editContactFocusHandler = () => {
         nameInput.focus();
-    }, 1000);
+        editContactModal.removeEventListener('transitionend', editContactFocusHandler);
+    };
+
+    // Add the event listener
+    editContactModal.addEventListener('transitionend', editContactFocusHandler);
 }
 
 openEditContactModal.originalName = ''
