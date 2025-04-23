@@ -2958,6 +2958,20 @@ console.log('payload is', payload)
         insertSorted(myData.contacts[toAddress].messages, transferMessage, 'timestamp');
         // --------------------------------------------------------------
 
+        // --- Update myData.chats to reflect the new message ---
+        const existingChatIndex = myData.chats.findIndex(chat => chat.address === toAddress);
+        if (existingChatIndex !== -1) {
+            myData.chats.splice(existingChatIndex, 1); // Remove existing entry
+        }
+        // Create the new chat entry
+        const chatUpdate = {
+            address: toAddress,
+            timestamp: currentTime,
+        };
+        // Find insertion point to maintain timestamp order (newest first)
+        insertSorted(myData.chats, chatUpdate, 'timestamp');
+        // --- End Update myData.chats ---
+
         // Update the chat modal to show the newly sent transfer message
         // Check if the chat modal for this recipient is currently active
         const chatModalActive = document.getElementById('chatModal')?.classList.contains('active');
@@ -4088,6 +4102,8 @@ async function processChats(chats, keys) {
                     insertSorted(contact.messages, transferMessage, 'timestamp');
                     // --------------------------------------------------------------
 
+                    added += 1
+
                     const walletScreenActive = document.getElementById("walletScreen")?.classList.contains("active");
                     const historyModalActive = document.getElementById("historyModal")?.classList.contains("active");
                     // Update wallet view if it's active
@@ -4145,8 +4161,8 @@ async function processChats(chats, keys) {
                 }
                 
                 // Show toast notification for new messages
-                // Only suppress notification if we're ACTIVELY viewing this chat
-                if (!inActiveChatWithSender) {
+                // Only suppress notification if we're ACTIVELY viewing this chat and if not a transfer
+                if (!inActiveChatWithSender && !hasNewTransfer) {
                     // Get name of sender
                     const senderName = contact.name || contact.username || `${from.slice(0,8)}...`
                     
