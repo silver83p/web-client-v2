@@ -3869,12 +3869,13 @@ async function getChats(keys, retry = 0) {  // needs to return the number of cha
     if (senders && senders.chats && chatCount){     // TODO check if above is working
         await processChats(senders.chats, keys)
     } else {
-        if(retry > 0){
-            console.log('getChats retry', retry)
-            if (retry < 3) {
-                setTimeout(() => getChats(keys, retry + 1), 1000);
+        if (retry > 0) {
+            const getChatsRetryLimit = 3;
+            if (retry <= getChatsRetryLimit) {
+                console.log('getChats retry', retry, 'of', getChatsRetryLimit)
+                setTimeout(() => getChats(keys, retry + 1), 1000 * retry);
             } else {
-                console.error('Failed to get chats after 3 retries');
+                console.error('Failed to get chats after', getChatsRetryLimit, 'retries');
             }
         }
     }
