@@ -3613,6 +3613,8 @@ function openHistoryModal() {
 
 function closeHistoryModal() {
     document.getElementById('historyModal').classList.remove('active');
+    document.getElementById('openHistoryModal').classList.remove('has-notification');
+    document.getElementById('switchToWallet').classList.remove('has-notification');
 }
 
 function updateHistoryAddresses() {         // TODO get rid of this function after changing all refrences 
