@@ -579,7 +579,7 @@ async function handleCreateAccount(event) {
     // Store the account data in localStorage
     localStorage.setItem(`${username}_${netid}`, stringify(myData));
 
-    requestNotificationPermission();
+    /* requestNotificationPermission(); */
 
     // enable submit button
     submitButton.disabled = false;
@@ -630,7 +630,7 @@ async function handleSignIn(event) {
     if (!myData) { console.log('Account data not found'); return }
     myAccount = myData.account;
 
-    requestNotificationPermission();
+    /* requestNotificationPermission(); */
 
     // Close modal and proceed to app
     closeSignInModal();
@@ -731,11 +731,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         await registerServiceWorker();
         setupServiceWorkerMessaging(); 
         setupAppStateManagement();
-        setupConnectivityDetection();
     } else {
         // Web-only mode
         console.log('Running in web-only mode, skipping service worker initialization');
     }
+
+    setupConnectivityDetection();
 
     document.getElementById('versionDisplay').textContent = myVersion + ' '+version;
     document.getElementById('networkNameDisplay').textContent = network.name;
@@ -1756,7 +1757,7 @@ async function handleImportFile(event) {
         // Store the localStore entry for username_netid
         localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
 
-        requestNotificationPermission();
+        /* requestNotificationPermission(); */
 
 /*
         // Refresh form data and chat list
@@ -4571,7 +4572,7 @@ function pqSharedKey(recipientKey, encKey){  // inputs base64 or binary, outputs
 }
 
 
-function requestNotificationPermission() {
+/* function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission()
             .then(permission => {
@@ -4586,7 +4587,7 @@ function requestNotificationPermission() {
                 console.error('Error during notification permission request:', error);
             });
     }
-}
+} */
 
 // Add these search-related functions
 function searchMessages(searchText) {
@@ -4961,8 +4962,9 @@ async function handleConnectivityChange(event) {
         showToast("You're back online!", 3000, "online");
 
         // Verify username is still valid on the network
-        await verifyUsernameOnReconnect();
-        
+        /* await verifyUsernameOnReconnect(); */
+        // Initialize WebSocket connection regardless of view
+        wsManager.initializeWebSocketManager();
         // Force update data with reconnection handling
         if (myAccount && myAccount.keys) {
             try {
@@ -4990,10 +4992,10 @@ async function handleConnectivityChange(event) {
 // Setup connectivity detection
 function setupConnectivityDetection() {
     // Only setup offline detection if running as installed PWA
-    if (!checkIsInstalledPWA()) {
+    /* if (!checkIsInstalledPWA()) {
         isOnline = true; // Always consider online in web mode
         return;
-    }
+    } */
 
     // Listen for browser online/offline events
     window.addEventListener('online', handleConnectivityChange);
@@ -5017,6 +5019,7 @@ function markConnectivityDependentElements() {
         '#handleSendMessage',
         '.message-input',
         '#newChatButton',
+        '#chatSendMoneyButton',
         
         // Wallet related
         '#openSendModal',
@@ -5032,6 +5035,7 @@ function markConnectivityDependentElements() {
         '#accountForm button[type="submit"]',
         '#createAccountForm button[type="submit"]',
         '#importForm button[type="submit"]',
+        '#contactInfoSendButton',
 
         // menu list buttons
         '.menu-item[id="openAccountForm"]',
@@ -5130,7 +5134,7 @@ async function checkConnectivity() {
 }
 
 // Verify username availability when coming back online
-async function verifyUsernameOnReconnect() {
+/* async function verifyUsernameOnReconnect() {
     // Only proceed if user is logged in
     if (!myAccount || !myAccount.username) {
         console.log('No active account to verify');
@@ -5156,7 +5160,7 @@ async function verifyUsernameOnReconnect() {
     } else {
         console.log('Username verified successfully on reconnect');
     }
-}
+} */
 
 // Gateway Management Functions
 
