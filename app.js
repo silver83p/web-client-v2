@@ -719,6 +719,7 @@ function checkIsInstalledPWA() {
 
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
+    setInterval(updateWebSocketIndicator, 5000);
     await checkVersion()  // version needs to be checked before anything else happens
     await lockToPortrait()
     timeDifference(); // Calculate and log time difference early
@@ -5803,6 +5804,7 @@ class WSManager {
    * Connect to WebSocket server
    */
   connect() {
+    updateWebSocketIndicator();
     // Check if ws is not null and readyState is either CONNECTING or OPEN
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
       console.log('WebSocket connection already established');
@@ -5826,14 +5828,7 @@ class WSManager {
     try {
       console.log('Creating new WebSocket instance');
       this.ws = new WebSocket(network.websocket.url);
-      
-      // Add error event handler before setupEventHandlers
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error occurred:', error);
-        console.log('WebSocket readyState at error:', this.ws ? this.ws.readyState : 'ws is null');
-        this.handleConnectionFailure();
-      };
-      
+      this.setupEventHandlers();
     } catch (error) {
       console.error('WebSocket connection creation error:', error);
       this.handleConnectionFailure();
@@ -5852,6 +5847,7 @@ class WSManager {
     // console.log('Setting up WebSocket event handlers');
 
     this.ws.onopen = () => {
+      updateWebSocketIndicator();
       console.log('WebSocket connection established');
       this.connectionState = 'connected';
       this.reconnectAttempts = 0;
@@ -5866,6 +5862,7 @@ class WSManager {
     };
 
     this.ws.onclose = (event) => {
+      updateWebSocketIndicator();
       console.log('WebSocket connection closed', event.code, event.reason);
       this.connectionState = 'disconnected';
       this.subscribed = false;
@@ -5878,6 +5875,7 @@ class WSManager {
     };
 
     this.ws.onmessage = (event) => {
+      updateWebSocketIndicator();
       try {
         console.log('WebSocket message received:', event.data);
         const data = JSON.parse(event.data);
@@ -5903,12 +5901,20 @@ class WSManager {
       }
     };
 
+    // Add error event handler before setupEventHandlers
+    this.ws.onerror = (error) => {
+        updateWebSocketIndicator();
+        console.error('WebSocket error occurred:', error);
+        console.log('WebSocket readyState at error:', this.ws ? this.ws.readyState : 'ws is null');
+        this.handleConnectionFailure();
+    };
   }
 
   /**
    * Subscribe to chat events for the current account
    */
   subscribe() {
+    updateWebSocketIndicator();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('Cannot subscribe: WebSocket not connected');
       return false;
@@ -5943,6 +5949,7 @@ class WSManager {
    * Unsubscribe from chat events
    */
   unsubscribe() {
+    updateWebSocketIndicator();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('Cannot unsubscribe: WebSocket not connected');
       return;
@@ -5973,6 +5980,7 @@ class WSManager {
    * Disconnect from WebSocket server
    */
   disconnect() {
+    updateWebSocketIndicator();
     console.log('Disconnecting WebSocket');
     if (this.subscribed) {
       this.unsubscribe();
@@ -5996,6 +6004,7 @@ class WSManager {
    * Handle connection failures with exponential backoff retry logic
    */
   handleConnectionFailure() {
+    updateWebSocketIndicator();
     const diagnosticInfo = {
       connectionState: this.connectionState,
       browser: {
@@ -6135,10 +6144,10 @@ class WSManager {
     // Initialize WebSocket manager if not already created
     initializeWebSocketManager() {
 
-        if (wsManager.isConnected()) {
-            if(!wsManager.isSubscribed()) {
+        if (this.isConnected()) {
+            if(!this.isSubscribed()) {
                 console.log('WebSocket is already connected but not subscribed, subscribing');
-                wsManager.subscribe();
+                this.subscribe();
                 return;
             }
             console.log('WebSocket is already connected and subscribed');
@@ -6161,11 +6170,9 @@ class WSManager {
             initInfo.status = 'created';
             
             if (initInfo.account.available) {
-                wsManager.connect();
+                this.connect();
                 initInfo.status = 'connecting';
             }
-
-            this.setupEventHandlers();
             console.log('WebSocket Manager Status:', JSON.stringify(initInfo, null, 2));
             
         } catch (error) {
@@ -6173,7 +6180,6 @@ class WSManager {
                 error: error.message,
                 stack: error.stack
             }, null, 2));
-            wsManager = null;
         }
     }
 }
@@ -6325,4 +6331,19 @@ function getCorrectedTimestamp() {
     const correctedTime = clientNow + timeSkew; 
     
     return correctedTime;
+}
+
+function updateWebSocketIndicator() {
+    const indicator = document.getElementById('wsStatusIndicator');
+    if (!indicator) return;
+    if (!wsManager || !wsManager.isConnected()) {
+        indicator.textContent = 'Not Connected';
+        indicator.className = 'ws-status-indicator ws-red';
+    } else if (wsManager.isConnected() && !wsManager.isSubscribed()) {
+        indicator.textContent = 'Connected (No Sub)';
+        indicator.className = 'ws-status-indicator ws-yellow';
+    } else if (wsManager.isConnected() && wsManager.isSubscribed()) {
+        indicator.textContent = 'Connected';
+        indicator.className = 'ws-status-indicator ws-green';
+    }
 }
