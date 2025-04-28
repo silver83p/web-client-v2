@@ -818,6 +818,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeImportForm').addEventListener('click', closeImportFileModal);
     document.getElementById('importForm').addEventListener('submit', handleImportFile);
     
+    // Validator Modals
+    document.getElementById('openValidator').addEventListener('click', openValidatorModal);
+    document.getElementById('closeValidatorModal').addEventListener('click', closeValidatorModal);
+    document.getElementById('openStakeModal').addEventListener('click', openStakeModal);
+    document.getElementById('openUnstakeModal').addEventListener('click', openUnstakeModal);
+
+    // Stake Modal
+    document.getElementById('closeStakeModal').addEventListener('click', closeStakeModal);
+    document.getElementById('stakeForm').addEventListener('submit', handleStakeSubmit); // Function to be implemented
+
+    // Unstake Modal
+    document.getElementById('closeUnstakeModal').addEventListener('click', closeUnstakeModal);
+    document.getElementById('unstakeForm').addEventListener('submit', handleUnstakeSubmit); // Function to be implemented
+
+    // Export Form Modal
     document.getElementById('openExportForm').addEventListener('click', openExportForm);
     document.getElementById('closeExportForm').addEventListener('click', closeExportForm);
     document.getElementById('exportForm').addEventListener('submit', handleExport);
@@ -4327,6 +4342,7 @@ async function injectTx(tx, keys){
             body: stringify({tx: stringify(tx)})
         }
         const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/inject`, options);
+        console.log("DEBUG: injectTx response", response);
         const data = await response.json();     
         data.txid = txid           
         return data
@@ -4336,6 +4352,12 @@ async function injectTx(tx, keys){
     }
 }
 
+/**
+ * Sign a transaction object and return the transaction ID hash
+ * @param {Object} tx - The transaction object to sign
+ * @param {Object} keys - The keys object containing address and secret
+ * @returns {Promise<string>} The transaction ID hash
+ */
 async function signObj(tx, keys){
     const jstr = stringify(tx)
 //console.log('tx stringify', jstr)
@@ -6354,3 +6376,221 @@ function updateWebSocketIndicator() {
         indicator.className = 'ws-status-indicator ws-green';
     }
 }
+
+// Validator Modals
+function openValidatorModal() {
+    document.getElementById('validatorModal').classList.add('active');
+}
+
+function closeValidatorModal() {
+    document.getElementById('validatorModal').classList.remove('active');
+}
+
+// Stake Modal
+function openStakeModal() {
+    document.getElementById('stakeModal').classList.add('active');
+    // TODO: input validation and focus on node address input
+    // TODO: disable submit button until inputs are valid
+}
+
+function closeStakeModal() {
+    document.getElementById('stakeModal').classList.remove('active');
+    // TODO: clear input fields
+}
+
+// Unstake Modal
+function openUnstakeModal() {
+    document.getElementById('unstakeModal').classList.add('active');
+    // TODO: input validation and focus on node address input
+    // TODO: disable submit button until input is valid
+}
+
+function closeUnstakeModal() {
+    document.getElementById('unstakeModal').classList.remove('active');
+    // TODO: clear input fields
+}
+
+// Stake Form
+async function handleStakeSubmit(event) {
+    event.preventDefault();
+    const stakeButton = document.getElementById('submitStake');
+    stakeButton.disabled = true;
+
+    const nodeAddressInput = document.getElementById('stakeNodeAddress');
+    const amountInput = document.getElementById('stakeAmount');
+
+    const nodeAddress = nodeAddressInput.value.trim();
+    const amountStr = amountInput.value.trim();
+
+    // Basic Validation // TODO: robust validation
+    if (!nodeAddress || !amountStr) {
+        showToast('Please fill in all fields.', 3000, 'error');
+        stakeButton.disabled = false;
+        return;
+    }
+
+    // Validate address format (simple check for now) // TODO: robust validation
+/*     if (!nodeAddress.startsWith('0x') || nodeAddress.length !== 42) {
+        showToast('Invalid validator node address format.', 3000, 'error');
+        stakeButton.disabled = false;
+        return;
+    }
+ */
+    let amount_in_wei;
+    try {
+        amount_in_wei = bigxnum2big(wei, amountStr);
+        if (amount_in_wei <= 0n) {
+            throw new Error('Amount must be positive');
+        }
+        // TODO: Add balance check if necessary
+    } catch (error) {
+        showToast('Invalid amount entered.', 3000, 'error');
+        stakeButton.disabled = false;
+        return;
+    }
+
+    try {
+        showToast('Submitting stake transaction...', 2000, 'loading');
+        const response = await postStake(nodeAddress, amount_in_wei, myAccount.keys);
+        console.log("Stake Response:", response);
+
+        if (response && response.result && response.result.success) {
+            showToast('Stake transaction submitted successfully!', 3000, 'success');
+            nodeAddressInput.value = ''; // Clear form
+            amountInput.value = '';
+            closeStakeModal();
+        } else {
+            const reason = response?.result?.reason || 'Unknown error';
+            showToast(`Stake failed: ${reason}`, 5000, 'error');
+        }
+    } catch (error) {
+        console.error('Stake transaction error:', error);
+        showToast('Stake transaction failed. See console for details.', 5000, 'error');
+    } finally {
+        stakeButton.disabled = false;
+    }
+ }
+ 
+ // Unstake Form
+async function handleUnstakeSubmit(event) {
+    event.preventDefault();
+    const unstakeButton = document.getElementById('submitUnstake');
+    unstakeButton.disabled = true;
+
+    const nodeAddressInput = document.getElementById('unstakeNodeAddress');
+    const nodeAddress = nodeAddressInput.value.trim();
+
+    // Basic Validation // TODO: robust validation
+    if (!nodeAddress) {
+        showToast('Please enter the validator node address.', 3000, 'error');
+        unstakeButton.disabled = false;
+        return;
+    }
+
+    // Validate address format // TODO: robust validation
+/*     if (!nodeAddress.startsWith('0x') || nodeAddress.length !== 42) {
+        showToast('Invalid validator node address format.', 3000, 'error');
+        unstakeButton.disabled = false;
+        return;
+    } */
+
+    try {
+        showToast('Submitting unstake transaction...', 2000, 'loading');
+        const response = await postUnstake(nodeAddress);
+        console.log("Unstake Response:", response);
+
+/*         if (response && response.result && response.result.success) {
+            showToast('Unstake transaction submitted successfully!', 3000, 'success');
+            nodeAddressInput.value = ''; // Clear form
+            closeUnstakeModal();
+        } else {
+            const reason = response?.result?.reason || 'Unknown error';
+            showToast(`Unstake failed: ${reason}`, 5000, 'error');
+        } */
+    } catch (error) {
+        console.error('Unstake transaction error:', error);
+        showToast('Unstake transaction failed. See console for details.', 5000, 'error');
+    } finally {
+        unstakeButton.disabled = false;
+    }
+ }
+
+ async function postStake(nodeAddress, amount, keys) {
+    /* {
+        "isInternalTx": true,
+        "internalTXType": 6,
+        "nominator": "<your_eoa_address>",
+        "timestamp": 1678886400000, // Example timestamp (milliseconds since epoch)
+        "nominee": "<node_public_key>",
+        "stake": "<stake_amount_in_wei>" 
+    } */
+    /* const stakeTx = {
+        isInternalTx: true,
+        internalTXType: 6,
+        nominator: myAccount.address,
+        timestamp: getCorrectedTimestamp(),
+        nominee: nodeAddress,
+        stake: amount
+    }; */
+
+    /* {
+        "type": "stake",
+        "from": "<your_account_address>",
+        "stake": "1000000000000000000", // Stake amount as a string (to represent bigint)
+        "sign": {
+            "owner": "<your_account_address>", // Must match 'from'
+            "sig": "<transaction_signature>"   // Cryptographic signature
+        }
+    } */
+    const stakeTx = {
+        type: "stake",
+        from: longAddress(nodeAddress), // convert to long address currently is 64 characters hex
+        stake: amount,
+    };
+    console.log("Debug: myAccount", myAccount);
+    console.log("Debug: staking with address", nodeAddress, "and amount", amount);
+    console.log("DEBUG: Staking with keys:", keys); 
+
+    // TODO: uncomment when implemented on backend
+    const response = await injectTx(stakeTx, keys);
+    return response;
+ }
+
+ async function postUnstake(nodeAddress) {
+    /* {
+        "isInternalTx": true,
+        "internalTXType": 7,
+        "nominator": "<your_eoa_address>",
+        "timestamp": 1678886400000, // Example timestamp (milliseconds since epoch)
+        "nominee": "<node_public_key>",
+        "force": false 
+    } */
+    /* const unstakeTx = {
+        isInternalTx: true,
+        internalTXType: 7,
+        nominator: myAccount.address,
+        timestamp: getCorrectedTimestamp(),
+        nominee: nodeAddress,
+        force: false
+    }; */
+
+    /* {
+        "type": "stake",
+        "from": "<your_account_address>",
+        "stake": "1000000000000000000", // Stake amount as a string (to represent bigint)
+        "sign": {
+            "owner": "<your_account_address>", // Must match 'from'
+            "sig": "<transaction_signature>"   // Cryptographic signature
+        }
+    } */
+    const unstakeTx = {
+        type: "unstake",
+        from: myAccount?.keys?.address,
+        stake: amount,
+    };
+    
+    // TODO: uncomment when implemented on backend
+    const response = await injectTx(unstakeTx, myAccount.keys);
+    return response;
+ }
+ 
