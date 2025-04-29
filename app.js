@@ -811,9 +811,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('unstakeForm').addEventListener('submit', handleUnstakeSubmit); // Function to be implemented
 
     // Export Form Modal
-    document.getElementById('openExportForm').addEventListener('click', openExportForm);
-    document.getElementById('closeExportForm').addEventListener('click', closeExportForm);
-    document.getElementById('exportForm').addEventListener('submit', handleExport);
+    backupModal.load()
     
     // Remove Account Modal
     removeAccountModal.load()
@@ -1668,14 +1666,6 @@ function closeAccountForm() {
     document.getElementById('accountModal').classList.remove('active');
 }
 
-function openExportForm() {
-    document.getElementById('exportModal').classList.add('active');
-}
-
-function closeExportForm() {
-    document.getElementById('exportModal').classList.remove('active');
-}
-
 // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
 // Decrypt data using ChaCha20-Poly1305
 async function decryptData(encryptedData, password) {
@@ -1795,37 +1785,6 @@ async function encryptData(data, password) {
     // Encrypt the data using ChaCha20-Poly1305
     const encrypted = encryptChacha(key, data);
     return encrypted
-}
-
-async function handleExport(event) {
-    event.preventDefault();
-
-    const password = document.getElementById('exportPassword').value;
-    const jsonData = stringify(myData, null, 2);
-    
-    try {
-        // Encrypt data if password is provided
-        const finalData = password ? 
-            await encryptData(jsonData, password) : 
-            jsonData;
-        
-        // Create and trigger download
-        const blob = new Blob([finalData], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${myAccount.username}-export-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        // Close export modal
-        closeExportForm();
-    } catch (error) {
-        console.error('Encryption failed:', error);
-        alert('Failed to encrypt data. Please try again.');
-    }
 }
 
 function openNewChatModal() {
@@ -6546,3 +6505,56 @@ async function handleUnstakeSubmit(event) {
     }
 }
 const removeAccountModal = new RemoveAccountModal()
+
+class BackupModal {
+    constructor() {
+    }
+
+    load() {  // called when the DOM is loaded; can setup event handlers here
+        this.modal = document.getElementById('exportModal');
+        document.getElementById('openExportForm').addEventListener('click', () => this.open());
+        document.getElementById('closeExportForm').addEventListener('click', () => this.close());
+        document.getElementById('exportForm').addEventListener('submit', (event) => this.handleSubmit(event));
+    }
+
+    open() {  // called when the modal needs to be opened
+        this.modal.classList.add('active');
+    }
+
+    close() {  // called when the modal needs to be closed
+        this.modal.classList.remove('active');
+    }
+
+    async handleSubmit(event) {
+        event.preventDefault();
+
+        const password = document.getElementById('exportPassword').value;
+        const jsonData = stringify(myData, null, 2);
+        
+        try {
+            // Encrypt data if password is provided
+            const finalData = password ? 
+                await encryptData(jsonData, password) : 
+                jsonData;
+            
+            // Create and trigger download
+            const blob = new Blob([finalData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${myAccount.username}-export-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Close export modal
+            this.close();
+        } catch (error) {
+            console.error('Encryption failed:', error);
+            alert('Failed to encrypt data. Please try again.');
+        }
+    }
+}
+const backupModal = new BackupModal()
+
