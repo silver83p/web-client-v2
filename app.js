@@ -777,11 +777,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('closeCreateAccountModal').addEventListener('click', closeCreateAccountModal);
     document.getElementById('createAccountForm').addEventListener('submit', handleCreateAccount);
-    
-    // Import Account now opens Import File Modal
-    importAccountBtn.addEventListener('click', openImportFileModal);
-    
-    
+       
     // Account Form Modal
     document.getElementById('openAccountForm').addEventListener('click', openAccountForm);
     document.getElementById('openExplorer').addEventListener('click', () => {
@@ -792,9 +788,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('closeAccountForm').addEventListener('click', closeAccountForm);
     document.getElementById('accountForm').addEventListener('submit', handleAccountUpdate);
-//            document.getElementById('openImportFormMenu').addEventListener('click', openImportFileModal);
-    document.getElementById('closeImportForm').addEventListener('click', closeImportFileModal);
-    document.getElementById('importForm').addEventListener('submit', handleImportFile);
+    
+    restoreAccountModal.load()
     
     // Validator Modals
     document.getElementById('openValidator').addEventListener('click', openValidatorModal);
@@ -1679,95 +1674,6 @@ async function decryptData(encryptedData, password) {
 
     // Decrypt the data using ChaCha20-Poly1305
     return decryptChacha(key, encryptedData);
-}
-
-function openImportFileModal() {
-    document.getElementById('importModal').classList.add('active');
-}
-
-function closeImportFileModal() {
-    document.getElementById('importModal').classList.remove('active');
-}
-
-async function handleImportFile(event) {
-    event.preventDefault();
-    const fileInput = document.getElementById('importFile');
-    const passwordInput = document.getElementById('importPassword');
-    const messageElement = document.getElementById('importMessage');
-    
-    try {
-        // Read the file
-        const file = fileInput.files[0];
-        let fileContent = await file.text();
-        const isNotEncryptedData = fileContent.match('{')
-
-        // Check if data is encrypted and decrypt if necessary
-        if ( ! isNotEncryptedData) {
-            if (!passwordInput.value.trim()) {
-                alert('Password required for encrypted data');
-                return
-            }
-            fileContent = await decryptData(fileContent, passwordInput.value.trim());
-            if (fileContent == null){ throw "" }
-        }
-
-        // We first parse to jsonData so that if the parse does not work we don't destroy myData
-        myData = parse(fileContent)
-        // also need to set myAccount
-        const acc = myData.account  // this could have other things which are not needed
-        myAccount = {
-            netid: acc.netid,
-            username: acc.username,
-            keys: {
-                address: acc.keys.address,
-                public: acc.keys.public,
-                secret: acc.keys.secret,
-                type: acc.keys.type
-            }
-        }
-        // Get existing accounts or create new structure
-        const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
-        // Ensure netid exists
-        if (!existingAccounts.netids[myAccount.netid]) {
-            existingAccounts.netids[myAccount.netid] = { usernames: {} };
-        }
-        // Store updated accounts back in localStorage
-        existingAccounts.netids[myAccount.netid].usernames[myAccount.username] = {address: myAccount.keys.address};
-        localStorage.setItem('accounts', stringify(existingAccounts));
-
-        // Store the localStore entry for username_netid
-        localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
-
-        /* requestNotificationPermission(); */
-
-/*
-        // Refresh form data and chat list
-//                loadAccountFormData();
-        await updateChatList();
-*/
-
-        // Show success message
-        messageElement.textContent = 'Data imported successfully!';
-        messageElement.classList.add('active');
-        
-        // Reset form and close modal after delay
-        setTimeout(() => {
-            messageElement.classList.remove('active');
-            closeImportFileModal();
-            window.location.reload();  // need to go through Sign In to make sure imported account exists on network
-            fileInput.value = '';
-            passwordInput.value = '';
-        }, 2000);
-        
-    } catch (error) {
-        messageElement.textContent = error.message || 'Import failed. Please check file and password.';
-        messageElement.style.color = '#dc3545';
-        messageElement.classList.add('active');
-        setTimeout(() => {
-            messageElement.classList.remove('active');
-            messageElement.style.color = '#28a745';
-        }, 3000);
-    }
 }
 
 
@@ -6558,3 +6464,96 @@ class BackupAccountModal {
 }
 const backupAccountModal = new BackupAccountModal()
 
+class RestoreAccountModal {
+    constructor() {
+    }
+
+    load() {  // called when the DOM is loaded; can setup event handlers here
+        this.modal = document.getElementById('importModal');
+        document.getElementById('importAccountButton').addEventListener('click', () => this.open());
+        document.getElementById('closeImportForm').addEventListener('click', () => this.close());
+        document.getElementById('importForm').addEventListener('submit', (event) => this.handleSubmit(event));
+    }
+
+    open() {  // called when the modal needs to be opened
+        this.modal.classList.add('active');
+    }
+
+    close() {  // called when the modal needs to be closed
+        this.modal.classList.remove('active');
+    }
+
+    async handleSubmit(event) {
+        event.preventDefault();
+        const fileInput = document.getElementById('importFile');
+        const passwordInput = document.getElementById('importPassword');
+        const messageElement = document.getElementById('importMessage');
+    
+        try {
+            // Read the file
+            const file = fileInput.files[0];
+            let fileContent = await file.text();
+            const isNotEncryptedData = fileContent.match('{')
+    
+            // Check if data is encrypted and decrypt if necessary
+            if (!isNotEncryptedData) {
+                if (!passwordInput.value.trim()) {
+                    alert('Password required for encrypted data');
+                    return
+                }
+                fileContent = await decryptData(fileContent, passwordInput.value.trim());
+                if (fileContent == null){ throw "" }
+            }
+    
+            // We first parse to jsonData so that if the parse does not work we don't destroy myData
+            myData = parse(fileContent)
+            // also need to set myAccount
+            const acc = myData.account  // this could have other things which are not needed
+            myAccount = {
+                netid: acc.netid,
+                username: acc.username,
+                keys: {
+                    address: acc.keys.address,
+                    public: acc.keys.public,
+                    secret: acc.keys.secret,
+                    type: acc.keys.type
+                }
+            }
+            // Get existing accounts or create new structure
+            const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+            // Ensure netid exists
+            if (!existingAccounts.netids[myAccount.netid]) {
+                existingAccounts.netids[myAccount.netid] = { usernames: {} };
+            }
+            // Store updated accounts back in localStorage
+            existingAccounts.netids[myAccount.netid].usernames[myAccount.username] = {address: myAccount.keys.address};
+            localStorage.setItem('accounts', stringify(existingAccounts));
+    
+            // Store the localStore entry for username_netid
+            localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
+    
+            // Show success message
+            messageElement.textContent = 'Data imported successfully!';
+            messageElement.classList.add('active');
+    
+            // Reset form and close modal after delay
+            setTimeout(() => {
+                messageElement.classList.remove('active');
+                this.close();
+                window.location.reload();  // need to go through Sign In to make sure imported account exists on network
+                fileInput.value = '';
+                passwordInput.value = '';
+            }, 2000);
+    
+        } catch (error) {
+            messageElement.textContent = error.message || 'Import failed. Please check file and password.';
+            messageElement.style.color = '#dc3545';
+            messageElement.classList.add('active');
+            setTimeout(() => {
+                messageElement.classList.remove('active');
+                messageElement.style.color = '#28a745';
+            }, 3000);
+        }
+    }
+}
+const restoreAccountModal = new RestoreAccountModal()
