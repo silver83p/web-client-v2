@@ -6327,6 +6327,7 @@ function updateWebSocketIndicator() {
 
 // Validator Modals
 function openValidatorModal() {
+    // TODO: need to query network for the correct nominator address and show results (staked amount, network confit for staking, etc.)
     document.getElementById('validatorModal').classList.add('active');
 }
 
@@ -6464,80 +6465,28 @@ async function handleUnstakeSubmit(event) {
  }
 
  async function postStake(nodeAddress, amount, keys) {
-    /* {
-        "isInternalTx": true,
-        "internalTXType": 6,
-        "nominator": "<your_eoa_address>",
-        "timestamp": 1678886400000, // Example timestamp (milliseconds since epoch)
-        "nominee": "<node_public_key>",
-        "stake": "<stake_amount_in_wei>" 
-    } */
-    /* const stakeTx = {
-        isInternalTx: true,
-        internalTXType: 6,
-        nominator: myAccount.address,
-        timestamp: getCorrectedTimestamp(),
-        nominee: nodeAddress,
-        stake: amount
-    }; */
-
-    /* {
-        "type": "stake",
-        "from": "<your_account_address>",
-        "stake": "1000000000000000000", // Stake amount as a string (to represent bigint)
-        "sign": {
-            "owner": "<your_account_address>", // Must match 'from'
-            "sig": "<transaction_signature>"   // Cryptographic signature
-        }
-    } */
     const stakeTx = {
-        type: "stake",
-        from: longAddress(nodeAddress), // convert to long address currently is 64 characters hex
+        type: "deposit_stake",
+        nominator: longAddress(myAccount.keys.address),
+        nominee: longAddress(nodeAddress),
         stake: amount,
+        timestamp: getCorrectedTimestamp(),
     };
-    console.log("Debug: myAccount", myAccount);
-    console.log("Debug: staking with address", nodeAddress, "and amount", amount);
-    console.log("DEBUG: Staking with keys:", keys); 
 
-    // TODO: uncomment when implemented on backend
     const response = await injectTx(stakeTx, keys);
     return response;
  }
 
  async function postUnstake(nodeAddress) {
-    /* {
-        "isInternalTx": true,
-        "internalTXType": 7,
-        "nominator": "<your_eoa_address>",
-        "timestamp": 1678886400000, // Example timestamp (milliseconds since epoch)
-        "nominee": "<node_public_key>",
-        "force": false 
-    } */
-    /* const unstakeTx = {
-        isInternalTx: true,
-        internalTXType: 7,
-        nominator: myAccount.address,
-        timestamp: getCorrectedTimestamp(),
-        nominee: nodeAddress,
-        force: false
-    }; */
-
-    /* {
-        "type": "stake",
-        "from": "<your_account_address>",
-        "stake": "1000000000000000000", // Stake amount as a string (to represent bigint)
-        "sign": {
-            "owner": "<your_account_address>", // Must match 'from'
-            "sig": "<transaction_signature>"   // Cryptographic signature
-        }
-    } */
+    // TODO: need to query network for the correct nominator address
     const unstakeTx = {
-        type: "unstake",
-        from: myAccount?.keys?.address,
-        stake: amount,
+        type: "withdraw_stake",
+        nominator: longAddress(myAccount?.keys?.address),
+        nominee: longAddress(nodeAddress),
+        force: false,
+        timestamp: getCorrectedTimestamp(),
     };
     
-    // TODO: uncomment when implemented on backend
     const response = await injectTx(unstakeTx, myAccount.keys);
     return response;
  }
