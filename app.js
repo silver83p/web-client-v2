@@ -812,11 +812,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     removeAccountModal.load()
 
     // Gateway Menu
-    document.getElementById('openNetwork').addEventListener('click', openGatewayForm);
-    document.getElementById('closeGatewayForm').addEventListener('click', closeGatewayForm);
-    document.getElementById('gatewayForm').addEventListener('submit', handleGatewayForm);
-    document.getElementById('addGatewayButton').addEventListener('click', openAddGatewayForm);
-    document.getElementById('closeAddEditGatewayForm').addEventListener('click', closeAddEditGatewayForm);
+    gatewayModal.load()
 
     // TODO add comment about which send form this is for chat or assets
     document.getElementById('openSendModal').addEventListener('click', openSendModal);
@@ -5041,269 +5037,6 @@ function initializeGatewayConfig() {
     }
 }
 
-// Function to open the gateway form
-function openGatewayForm() {
-    // Initialize gateway configuration if needed
-    initializeGatewayConfig();
-
-    // Show gateway modal
-    document.getElementById('gatewayModal').classList.add('active');
-
-    // Populate gateway list
-    updateGatewayList();
-}
-
-// Function to close the gateway form
-function closeGatewayForm() {
-    document.getElementById('gatewayModal').classList.remove('active');
-}
-
-// Function to open the add gateway form
-function openAddGatewayForm() {
-    // Hide gateway modal
-    document.getElementById('gatewayModal').classList.remove('active');
-    
-    // Reset form
-    document.getElementById('gatewayForm').reset();
-    document.getElementById('gatewayEditIndex').value = -1;
-    document.getElementById('addEditGatewayTitle').textContent = 'Add Gateway';
-    
-    // Show add/edit gateway modal
-    document.getElementById('addEditGatewayModal').classList.add('active');
-}
-
-// Function to open the edit gateway form
-function openEditGatewayForm(index) {
-    // Hide gateway modal
-    document.getElementById('gatewayModal').classList.remove('active');
-    
-    // Get gateway data
-    const gateway = myData.network.gateways[index];
-    
-    // Populate form
-    document.getElementById('gatewayName').value = gateway.name;
-    document.getElementById('gatewayProtocol').value = gateway.protocol;
-    document.getElementById('gatewayHost').value = gateway.host;
-    document.getElementById('gatewayPort').value = gateway.port;
-    document.getElementById('gatewayEditIndex').value = index;
-    document.getElementById('addEditGatewayTitle').textContent = 'Edit Gateway';
-    
-    // Show add/edit gateway modal
-    document.getElementById('addEditGatewayModal').classList.add('active');
-}
-
-// Function to close the add/edit gateway form
-function closeAddEditGatewayForm() {
-    document.getElementById('addEditGatewayModal').classList.remove('active');
-    document.getElementById('gatewayModal').classList.add('active');
-    updateGatewayList();
-}
-
-// Function to update the gateway list display
-function updateGatewayList() {
-    const gatewayList = document.getElementById('gatewayList');
-
-    // Clear existing list
-    gatewayList.innerHTML = '';
-
-    // If no gateways, show empty state
-    if (myData.network.gateways.length === 0) {
-        gatewayList.innerHTML = `
-            <div class="empty-state">
-                <div style="font-weight: bold; margin-bottom: 0.5rem">No Gateways</div>
-                <div>Add a gateway to get started</div>
-            </div>`;
-        return;
-    }
-
-    // Add "Use Random Selection" option first
-    const randomOption = document.createElement('div');
-    randomOption.className = 'gateway-item random-option';
-    randomOption.innerHTML = `
-        <div class="gateway-info">
-            <div class="gateway-name">Random Selection</div>
-            <div class="gateway-url">Selects random gateway from list</div>
-        </div>
-        <div class="gateway-actions">
-            <label class="default-toggle">
-                <input type="radio" name="defaultGateway" ${myData.network.defaultGatewayIndex === -1 ? 'checked' : ''}>
-                <span>Default</span>
-            </label>
-        </div>
-    `;
-
-    // Add event listener for random selection
-    const randomToggle = randomOption.querySelector('input[type="radio"]');
-    randomToggle.addEventListener('change', () => {
-        if (randomToggle.checked) {
-            setDefaultGateway(-1);
-        }
-    });
-
-    gatewayList.appendChild(randomOption);
-
-    // Add each gateway to the list
-    myData.network.gateways.forEach((gateway, index) => {
-        const isDefault = index === myData.network.defaultGatewayIndex;
-        const canRemove = !gateway.isSystem;
-
-        const gatewayItem = document.createElement('div');
-        gatewayItem.className = 'gateway-item';
-        gatewayItem.innerHTML = `
-            <div class="gateway-info">
-                <div class="gateway-name">${escapeHtml(gateway.name)}</div>
-                <div class="gateway-url">${gateway.protocol}://${escapeHtml(gateway.host)}:${gateway.port}</div>
-                ${gateway.isSystem ? '<span class="system-badge">System</span>' : ''}
-            </div>
-            <div class="gateway-actions">
-                <label class="default-toggle">
-                    <input type="radio" name="defaultGateway" ${isDefault ? 'checked' : ''}>
-                    <span>Default</span>
-                </label>
-                <button class="icon-button edit-button" title="Edit">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                </button>
-                ${canRemove ? `
-                    <button class="icon-button remove-button" title="Remove">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 6h18"></path>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
-                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                    </button>
-                ` : ''}
-            </div>
-        `;
-
-        // Add event listeners
-        const defaultToggle = gatewayItem.querySelector('input[type="radio"]');
-        defaultToggle.addEventListener('change', () => {
-            if (defaultToggle.checked) {
-                setDefaultGateway(index);
-            }
-        });
-
-        const editButton = gatewayItem.querySelector('.edit-button');
-        editButton.addEventListener('click', () => {
-            openEditGatewayForm(index);
-        });
-
-        if (canRemove) {
-            const removeButton = gatewayItem.querySelector('.remove-button');
-            removeButton.addEventListener('click', () => {
-                confirmRemoveGateway(index);
-            });
-        }
-
-        gatewayList.appendChild(gatewayItem);
-    });
-}
-
-// Function to add a new gateway
-function addGateway(protocol, host, port, name) {
-    // Initialize if needed
-    initializeGatewayConfig();
-
-    // Add the new gateway
-    myData.network.gateways.push({
-        protocol,
-        host,
-        port,
-        name,
-        isSystem: false,
-        isDefault: false
-    });
-
-    // Update the UI
-    updateGatewayList();
-
-    // Show success message
-    showToast('Gateway added successfully');
-}
-
-// Function to update an existing gateway
-function updateGateway(index, protocol, host, port, name) {
-    // Check if index is valid
-    if (index >= 0 && index < myData.network.gateways.length) {
-        const gateway = myData.network.gateways[index];
-
-        // Update gateway properties
-        gateway.protocol = protocol;
-        gateway.host = host;
-        gateway.port = port;
-        gateway.name = name;
-
-        // Update the UI
-        updateGatewayList();
-
-        // Show success message
-        showToast('Gateway updated successfully');
-    }
-}
-
-// Function to confirm gateway removal
-function confirmRemoveGateway(index) {
-    if (confirm('Are you sure you want to remove this gateway?')) {
-        removeGateway(index);
-    }
-}
-
-// Function to remove a gateway
-function removeGateway(index) {
-    // Check if index is valid
-    if (index >= 0 && index < myData.network.gateways.length) {
-        const gateway = myData.network.gateways[index];
-
-        // Only allow removing non-system gateways
-        if (!gateway.isSystem) {
-            // If this was the default gateway, reset to random selection
-            if (myData.network.defaultGatewayIndex === index) {
-                myData.network.defaultGatewayIndex = -1;
-            } else if (myData.network.defaultGatewayIndex > index) {
-                // Adjust default gateway index if needed
-                myData.network.defaultGatewayIndex--;
-            }
-
-            // Remove the gateway
-            myData.network.gateways.splice(index, 1);
-
-            // Update the UI
-            updateGatewayList();
-
-            // Show success message
-            showToast('Gateway removed successfully');
-        }
-    }
-}
-
-// Function to set the default gateway
-function setDefaultGateway(index) {
-    // Reset all gateways to non-default
-    myData.network.gateways.forEach(gateway => {
-        gateway.isDefault = false;
-    });
-
-    // Set the new default gateway index
-    myData.network.defaultGatewayIndex = index;
-
-    // If setting a specific gateway as default, mark it
-    if (index >= 0 && index < myData.network.gateways.length) {
-        myData.network.gateways[index].isDefault = true;
-    }
-
-    // Update the UI
-    updateGatewayList();
-
-    // Show success message
-    const message = index === -1 
-        ? 'Using random gateway selection for better reliability' 
-        : 'Default gateway set';
-    showToast(message);
-}
-
 // Function to get the gateway to use for a request
 function getGatewayForRequest() {
     //TODO: ask Omar if we should just let use edit network.js or keep current logic where when we sign in it uses network.js and when signed in we use myData.network.gateways
@@ -5332,39 +5065,6 @@ function getGatewayForRequest() {
     return myData.network.gateways[
         Math.floor(Math.random() * myData.network.gateways.length)
     ];
-}
-
-// Function to handle the gateway form submission
-function handleGatewayForm(event) {
-    event.preventDefault();
-
-    // Get form data
-    const formData = {
-        protocol: document.getElementById('gatewayProtocol').value,
-        host: document.getElementById('gatewayHost').value,
-        port: parseInt(document.getElementById('gatewayPort').value),
-        name: document.getElementById('gatewayName').value
-    };
-
-    // Get the edit index (if editing)
-    const editIndex = parseInt(document.getElementById('gatewayEditIndex').value);
-
-    if (editIndex >= 0) {
-        // Update existing gateway
-        updateGateway(
-            editIndex,
-            formData.protocol,
-            formData.host,
-            formData.port,
-            formData.name
-        );
-    } else {
-        // Add new gateway
-        addGateway(formData.protocol, formData.host, formData.port, formData.name);
-    }
-
-    // Close the form
-    closeAddEditGatewayForm();
 }
 
 async function startCamera() {
@@ -6767,3 +6467,277 @@ class RestoreAccountModal {
     }
 }
 const restoreAccountModal = new RestoreAccountModal()
+
+class GatewayModal {
+    constructor() {
+    }
+
+    load() {
+        this.modal = document.getElementById('gatewayModal');
+        this.addEditModal = document.getElementById('addEditGatewayModal');
+        this.gatewayList = document.getElementById('gatewayList');
+        this.gatewayForm = document.getElementById('gatewayForm');
+
+        // Setup event listeners when DOM is loaded
+        document.getElementById('openNetwork').addEventListener('click', () => this.open());
+        document.getElementById('closeGatewayForm').addEventListener('click', () => this.close());
+        document.getElementById('addGatewayButton').addEventListener('click', () => this.openAddForm());
+        document.getElementById('closeAddEditGatewayForm').addEventListener('click', () => this.closeAddEditForm());
+        this.gatewayForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
+    }
+
+    open() {
+        // Initialize gateway configuration if needed
+        initializeGatewayConfig();
+        this.modal.classList.add('active');
+        this.updateList();
+    }
+
+    close() {
+        this.modal.classList.remove('active');
+    }
+
+    openAddForm() {
+        this.modal.classList.remove('active');
+        this.gatewayForm.reset();
+        document.getElementById('gatewayEditIndex').value = -1;
+        document.getElementById('addEditGatewayTitle').textContent = 'Add Gateway';
+        this.addEditModal.classList.add('active');
+    }
+
+    closeAddEditForm() {
+        this.addEditModal.classList.remove('active');
+        this.modal.classList.add('active');
+        this.updateList();
+    }
+
+    updateList() {
+        // Clear existing list
+        this.gatewayList.innerHTML = '';
+
+        // If no gateways, show empty state
+        if (myData.network.gateways.length === 0) {
+            this.gatewayList.innerHTML = `
+                <div class="empty-state">
+                    <div style="font-weight: bold; margin-bottom: 0.5rem">No Gateways</div>
+                    <div>Add a gateway to get started</div>
+                </div>`;
+            return;
+        }
+
+        // Add "Use Random Selection" option
+        const randomOption = document.createElement('div');
+        randomOption.className = 'gateway-item random-option';
+        randomOption.innerHTML = `
+            <div class="gateway-info">
+                <div class="gateway-name">Random Selection</div>
+                <div class="gateway-url">Selects random gateway from list</div>
+            </div>
+            <div class="gateway-actions">
+                <label class="default-toggle">
+                    <input type="radio" name="defaultGateway" ${myData.network.defaultGatewayIndex === -1 ? 'checked' : ''}>
+                    <span>Default</span>
+                </label>
+            </div>
+        `;
+
+        const randomToggle = randomOption.querySelector('input[type="radio"]');
+        randomToggle.addEventListener('change', () => {
+            if (randomToggle.checked) {
+                this.setDefaultGateway(-1);
+            }
+        });
+
+        this.gatewayList.appendChild(randomOption);
+
+        // Add each gateway to the list
+        myData.network.gateways.forEach((gateway, index) => {
+            const isDefault = index === myData.network.defaultGatewayIndex;
+            const canRemove = !gateway.isSystem;
+
+            const gatewayItem = document.createElement('div');
+            gatewayItem.className = 'gateway-item';
+            gatewayItem.innerHTML = `
+                <div class="gateway-info">
+                    <div class="gateway-name">${escapeHtml(gateway.name)}</div>
+                    <div class="gateway-url">${gateway.protocol}://${escapeHtml(gateway.host)}:${gateway.port}</div>
+                    ${gateway.isSystem ? '<span class="system-badge">System</span>' : ''}
+                </div>
+                <div class="gateway-actions">
+                    <label class="default-toggle">
+                        <input type="radio" name="defaultGateway" ${isDefault ? 'checked' : ''}>
+                        <span>Default</span>
+                    </label>
+                    <button class="icon-button edit-button" title="Edit">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                    ${canRemove ? `
+                        <button class="icon-button remove-button" title="Remove">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 6h18"></path>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+
+            // Add event listeners
+            const defaultToggle = gatewayItem.querySelector('input[type="radio"]');
+            defaultToggle.addEventListener('change', () => {
+                if (defaultToggle.checked) {
+                    this.setDefaultGateway(index);
+                }
+            });
+
+            const editButton = gatewayItem.querySelector('.edit-button');
+            editButton.addEventListener('click', () => {
+                this.openEditForm(index);
+            });
+
+            if (canRemove) {
+                const removeButton = gatewayItem.querySelector('.remove-button');
+                removeButton.addEventListener('click', () => {
+                    this.confirmRemove(index);
+                });
+            }
+
+            this.gatewayList.appendChild(gatewayItem);
+        });
+    }
+
+    openEditForm(index) {
+        this.modal.classList.remove('active');
+        const gateway = myData.network.gateways[index];
+        document.getElementById('gatewayName').value = gateway.name;
+        document.getElementById('gatewayProtocol').value = gateway.protocol;
+        document.getElementById('gatewayHost').value = gateway.host;
+        document.getElementById('gatewayPort').value = gateway.port;
+        document.getElementById('gatewayEditIndex').value = index;
+        document.getElementById('addEditGatewayTitle').textContent = 'Edit Gateway';
+        this.addEditModal.classList.add('active');
+    }
+
+    async handleFormSubmit(event) {
+        event.preventDefault();
+
+        const formData = {
+            protocol: document.getElementById('gatewayProtocol').value,
+            host: document.getElementById('gatewayHost').value,
+            port: parseInt(document.getElementById('gatewayPort').value),
+            name: document.getElementById('gatewayName').value
+        };
+
+        const editIndex = parseInt(document.getElementById('gatewayEditIndex').value);
+
+        if (editIndex >= 0) {
+            this.updateGateway(editIndex, formData.protocol, formData.host, formData.port, formData.name);
+        } else {
+            this.addGateway(formData.protocol, formData.host, formData.port, formData.name);
+        }
+
+        this.closeAddEditForm();
+    }
+
+    confirmRemove(index) {
+        if (confirm('Are you sure you want to remove this gateway?')) {
+            this.removeGateway(index);
+        }
+    }
+
+    addGateway(protocol, host, port, name) {
+        // Initialize if needed
+        initializeGatewayConfig();
+
+        // Add the new gateway
+        myData.network.gateways.push({
+            protocol,
+            host,
+            port,
+            name,
+            isSystem: false,
+            isDefault: false
+        });
+
+        // Update the UI
+        this.updateList();
+
+        // Show success message
+        showToast('Gateway added successfully');
+    }
+
+    updateGateway(index, protocol, host, port, name) {
+        // Check if index is valid
+        if (index >= 0 && index < myData.network.gateways.length) {
+            const gateway = myData.network.gateways[index];
+
+            // Update gateway properties
+            gateway.protocol = protocol;
+            gateway.host = host;
+            gateway.port = port;
+            gateway.name = name;
+
+            // Update the UI
+            this.updateList();
+
+            // Show success message
+            showToast('Gateway updated successfully');
+        }
+    }
+
+    removeGateway(index) {
+        // Check if index is valid
+        if (index >= 0 && index < myData.network.gateways.length) {
+            const gateway = myData.network.gateways[index];
+
+            // Only allow removing non-system gateways
+            if (!gateway.isSystem) {
+                // If this was the default gateway, reset to random selection
+                if (myData.network.defaultGatewayIndex === index) {
+                    myData.network.defaultGatewayIndex = -1;
+                } else if (myData.network.defaultGatewayIndex > index) {
+                    // Adjust default gateway index if needed
+                    myData.network.defaultGatewayIndex--;
+                }
+
+                // Remove the gateway
+                myData.network.gateways.splice(index, 1);
+
+                // Update the UI
+                this.updateList();
+
+                // Show success message
+                showToast('Gateway removed successfully');
+            }
+        }
+    }
+
+    setDefaultGateway(index) {
+        // Reset all gateways to non-default
+        myData.network.gateways.forEach(gateway => {
+            gateway.isDefault = false;
+        });
+
+        // Set the new default gateway index
+        myData.network.defaultGatewayIndex = index;
+
+        // If setting a specific gateway as default, mark it
+        if (index >= 0 && index < myData.network.gateways.length) {
+            myData.network.gateways[index].isDefault = true;
+        }
+
+        // Update the UI
+        this.updateList();
+
+        // Show success message
+        const message = index === -1 
+            ? 'Using random gateway selection for better reliability' 
+            : 'Default gateway set';
+        showToast(message);
+    }
+}
+const gatewayModal = new GatewayModal()
