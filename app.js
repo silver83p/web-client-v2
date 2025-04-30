@@ -1002,6 +1002,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         handleOpenSendModalInput(e);
     });
 
+    const debounceValidateStakeInputs = debounce(validateStakeInputs, 300);
+    // Add input listeners for stake modal validation
+    document.getElementById('stakeNodeAddress').addEventListener('input', debounceValidateStakeInputs);
+    document.getElementById('stakeAmount').addEventListener('input', debounceValidateStakeInputs);
+
     setupAddToHomeScreen()
 });
 
@@ -5998,9 +6003,12 @@ async function openValidatorModal() {
         const marketPriceValue = document.getElementById('validator-market-price');
         const marketStakeUsdValue = document.getElementById('validator-market-stake-usd');
 
+        // set stakeForm dataset.minStake to big2str(stakeAmountLibBaseUnits, 18) for 
+        document.getElementById('stakeForm').dataset.minStake = big2str(stakeAmountLibBaseUnits, 18);
+
         // Format Network Info unconditionally
         const displayNetworkStakeUsd = stakeRequiredUsdBaseUnits ? '$' + big2str(BigInt('0x' + stakeRequiredUsdBaseUnits), 18).slice(0, 6) : 'N/A';
-        const displayNetworkStakeLib = stakeAmountLibBaseUnits ? big2str(stakeAmountLibBaseUnits, 18).slice(0, 6) : 'N/A';
+        const displayNetworkStakeLib = stakeAmountLibBaseUnits ? big2str(stakeAmountLibBaseUnits, 18).slice(0, 7) : 'N/A';
         const displayStabilityFactor = stabilityFactor ? stabilityFactor.toFixed(4) : 'N/A';
         const displayMarketPrice = marketPrice ? '$' + marketPrice.toFixed(4) : 'N/A';
         const displayMarketStakeUsd = marketStakeUsdBaseUnits ? '$' + big2str(marketStakeUsdBaseUnits, 18).slice(0, 6) : 'N/A';
@@ -6106,14 +6114,27 @@ async function getMarketPrice() {
 // Stake Modal
 function openStakeModal() {
     document.getElementById('stakeModal').classList.add('active');
+    
+    // Display Available Balance
+    const balanceDisplay = document.getElementById('stakeAvailableBalanceDisplay');
+    const libAsset = myData.wallet.assets.find(asset => asset.symbol === 'LIB'); // Assuming LIB is index 0 or find by symbol
+    if (balanceDisplay && libAsset) {
+        // Use big2str for formatting, similar to updateBalanceDisplay but simpler for this context
+        const formattedBalance = big2str(BigInt(libAsset.balance), 18).slice(0, -12); // Show 6 decimal places
+        balanceDisplay.textContent = `Available: ${formattedBalance} ${libAsset.symbol}`;
+    } else if (balanceDisplay) {
+        balanceDisplay.textContent = 'Available: 0.000000 LIB'; // Default if no asset found
+    }
+
     // fill amount with with the min stake amount
     const amountInput = document.getElementById('stakeAmount');
-    // get min stake amount from validator-network-stake-lib
-    const validatorModal = document.getElementById('validatorModal');
-    const minStakeAmount = validatorModal ? validatorModal.querySelector('#validator-network-stake-lib').textContent : null;
+    // get min stake amount from document.getElementById('stakeForm').dataset
+    const minStakeAmountValue = document.getElementById('stakeForm').dataset.minStake;
+    const minStakeAmount = minStakeAmountValue ? minStakeAmountValue : '0'; // Default to 0 if not found
     if (amountInput && minStakeAmount) amountInput.value = minStakeAmount;
-    // TODO: input validation and focus on node address input
-    // TODO: disable submit button until inputs are valid
+
+    // Call initial validation
+    validateStakeInputs();
 }
 
 function closeStakeModal() {
@@ -6781,3 +6802,81 @@ class AboutModal {
     }
 }
 const aboutModal = new AboutModal()
+
+function validateStakeInputs() {
+    const nodeAddressInput = document.getElementById('stakeNodeAddress');
+    const amountInput = document.getElementById('stakeAmount');
+    const stakeForm = document.getElementById('stakeForm');
+    const amountWarningElement = document.getElementById('stakeAmountWarning'); // Renamed for clarity
+    const nodeAddressWarningElement = document.getElementById('stakeNodeAddressWarning'); // New warning element
+    const submitButton = document.getElementById('submitStake');
+
+    const nodeAddress = nodeAddressInput.value.trim();
+    const amountStr = amountInput.value.trim();
+    const minStakeAmountStr = stakeForm.dataset.minStake || '0';
+
+    // Default state: button disabled, warnings hidden
+    submitButton.disabled = true;
+    amountWarningElement.style.display = 'none';
+    amountWarningElement.textContent = '';
+    nodeAddressWarningElement.style.display = 'none'; // Hide address warning too
+    nodeAddressWarningElement.textContent = '';
+
+    // Check 1: Empty Fields
+    if ( !amountStr || !nodeAddress) {
+        // Keep button disabled, no specific warning needed for empty fields yet
+        return;
+    }
+
+    // Check 1.5: Node Address Format (64 hex chars)
+    const addressRegex = /^[0-9a-fA-F]{64}$/;
+    if (!addressRegex.test(nodeAddress)) {
+        nodeAddressWarningElement.textContent = 'Invalid node address format (must be 64 hex characters).';
+        nodeAddressWarningElement.style.display = 'block';
+        amountWarningElement.style.display = 'none'; // Hide amount warning if address is bad
+        amountWarningElement.textContent = '';
+        return; // Keep button disabled
+    } else {
+        // Ensure address warning is hidden if format is now valid
+        nodeAddressWarningElement.style.display = 'none';
+        nodeAddressWarningElement.textContent = '';
+    }
+
+    // --- Amount Checks --- 
+    let amountWei;
+    let minStakeWei;
+    try {
+        amountWei = bigxnum2big(wei, amountStr);
+        minStakeWei = bigxnum2big(wei, minStakeAmountStr);
+        if (amountWei <= 0n) {
+             amountWarningElement.textContent = 'Amount must be positive.';
+             amountWarningElement.style.display = 'block';
+             return; // Keep button disabled
+        }
+    } catch (error) {
+        amountWarningElement.textContent = 'Invalid amount format.';
+        amountWarningElement.style.display = 'block';
+        return; // Keep button disabled
+    }
+
+    // Check 2: Minimum Stake Amount
+    if (amountWei < minStakeWei) {
+        const minStakeFormatted = big2str(minStakeWei, 18).slice(0, -16); // Example formatting
+        amountWarningElement.textContent = `Amount must be at least ${minStakeFormatted} LIB.`;
+        amountWarningElement.style.display = 'block';
+        return; // Keep button disabled
+    }
+
+    // Check 3: Sufficient Balance (using existing function)
+    // Assuming LIB is asset index 0 since after creation of wallet, LIB is the first asset
+    const hasInsufficientBalance = validateBalance(amountStr, 0, amountWarningElement);
+    if (hasInsufficientBalance) {
+        // validateBalance already shows the warning in amountWarningElement
+        return; // Keep button disabled
+    }
+
+    // All checks passed: Enable button
+    submitButton.disabled = false;
+    amountWarningElement.style.display = 'none'; // Ensure warning is hidden if balance is sufficient
+    nodeAddressWarningElement.style.display = 'none'; // Ensure address warning is also hidden
+}
