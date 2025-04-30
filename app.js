@@ -675,19 +675,6 @@ function newDataRecord(myAccount){
     return myData
 }
 
-// Function to open the About modal
-function openAboutModal() {
-    document.getElementById('aboutModal').classList.add('active');
-    document.getElementById('versionDisplayAbout').textContent = myVersion + ' '+version;
-    document.getElementById('networkNameAbout').textContent = network.name;
-    document.getElementById('netIdAbout').textContent = network.netid;
-}
-
-// Function to close the About modal
-function closeAboutModal() {
-    document.getElementById('aboutModal').classList.remove('active');
-}
-
 // Check if app is running as installed PWA
 function checkIsInstalledPWA() {
     return window.matchMedia('(display-mode: standalone)').matches || 
@@ -759,8 +746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeMenu').addEventListener('click', toggleMenu);
 
     // About Modal
-    document.getElementById('openAbout').addEventListener('click', openAboutModal);
-    document.getElementById('closeAboutModal').addEventListener('click', closeAboutModal);
+    aboutModal.load()
 
     // Sign In Modal
     signInBtn.addEventListener('click', openSignInModal);
@@ -6768,3 +6754,30 @@ class GatewayModal {
     }
 }
 const gatewayModal = new GatewayModal()
+
+class AboutModal {
+    constructor() {
+        this.modal = document.getElementById('aboutModal');
+    }
+
+    load() {
+        // Set up event listeners
+        document.getElementById('openAbout').addEventListener('click', () => this.open());
+        document.getElementById('closeAboutModal').addEventListener('click', () => this.close());
+        
+        // Set version and network information once during initialization
+        document.getElementById('versionDisplayAbout').textContent = myVersion + ' ' + version;
+        document.getElementById('networkNameAbout').textContent = network.name;
+        document.getElementById('netIdAbout').textContent = network.netid;
+    }
+
+    open() {
+        // Show the modal
+        this.modal.classList.add('active');
+    }
+
+    close() {
+        this.modal.classList.remove('active');
+    }
+}
+const aboutModal = new AboutModal()
