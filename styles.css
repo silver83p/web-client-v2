@@ -1354,6 +1354,15 @@ input[type="file"].form-control::file-selector-button {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpolyline points='12 6 12 12 16 14'%3E%3C/polyline%3E%3C/svg%3E");
 }
 
+/* Profile Sharing Note */
+#accountModal .profile-sharing-note {
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 16px;
+  font-family: var(--font-primary);
+}
+
 .action-label {
   font-weight: 500;
 }
@@ -1769,9 +1778,7 @@ input[type="file"].form-control {
   font-family: var(--font-primary);
   font-size: var(--font-size-base);
   color: var(--text-color);
-}
-
-/* Specific style for search icon to ensure consistent size */
+}/* Specific style for search icon to ensure consistent size */
 #search {
   display: flex;
   align-items: center;
@@ -4005,3 +4012,5 @@ small {
   margin-bottom: 0.5rem;
   text-align: left;
 }
+
+
