@@ -6764,8 +6764,9 @@ class MyProfileModal {
 
     load() {  // called when the DOM is loaded; can setup event handlers here
         this.modal = document.getElementById('accountModal');
+        this.closeButton = document.getElementById('closeAccountForm');
         document.getElementById('openAccountForm').addEventListener('click', () => this.open());
-        document.getElementById('closeAccountForm').addEventListener('click', () => this.close());
+        this.closeButton.addEventListener('click', () => this.close());
         document.getElementById('accountForm').addEventListener('submit', (event) => this.handleSubmit(event));
     }
 
@@ -6799,14 +6800,15 @@ class MyProfileModal {
         // Save to myData.account
         myData.account = { ...myData.account, ...formData };
 
-        // Show success message
-        const successMessage = document.getElementById('successMessage');
-        successMessage.classList.add('active');
-    
+        showToast('Profile updated successfully', 2000, 'success');
+        // disable the close button
+        this.closeButton.disabled = true;
+
         // Hide success message after 2 seconds
         setTimeout(() => {
-            successMessage.classList.remove('active');
             this.close();
+            // enable the close button
+            this.closeButton.disabled = false;
         }, 2000);
     }
 }
