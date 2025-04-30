@@ -765,15 +765,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('createAccountForm').addEventListener('submit', handleCreateAccount);
        
     // Account Form Modal
-    document.getElementById('openAccountForm').addEventListener('click', openAccountForm);
+    myProfileModal.load()
+
     document.getElementById('openExplorer').addEventListener('click', () => {
         window.open(network.explorer.url, '_blank');
     });
     document.getElementById('openMonitor').addEventListener('click', () => {
         window.open(network.monitor.url, '_blank');
     });
-    document.getElementById('closeAccountForm').addEventListener('click', closeAccountForm);
-    document.getElementById('accountForm').addEventListener('submit', handleAccountUpdate);
     
     restoreAccountModal.load()
     
@@ -1627,21 +1626,6 @@ async function updateContactsList() {
 function toggleMenu() {
     document.getElementById('menuModal').classList.toggle('active');
 //    document.getElementById('accountModal').classList.remove('active');
-}
-
-function openAccountForm() {
-    document.getElementById('accountModal').classList.add('active');
-    if (myData && myData.account) {
-        document.getElementById('name').value = myData.account.name || '';
-        document.getElementById('email').value = myData.account.email || '';
-        document.getElementById('phone').value = myData.account.phone || '';
-        document.getElementById('linkedin').value = myData.account.linkedin || '';
-        document.getElementById('x').value = myData.account.x || '';
-    }
-}
-
-function closeAccountForm() {
-    document.getElementById('accountModal').classList.remove('active');
 }
 
 // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
@@ -3506,35 +3490,6 @@ function handleHistoryItemClick(event) {
             openChatModal(address);
         }
     }
-}
-
-// Form to allow user to enter info about themself
-function handleAccountUpdate(event) {
-    event.preventDefault();
-
-    // Get form data
-    const formData = {
-        name: document.getElementById('name').value,
-        email: document.getElementById('email').value,
-        phone: document.getElementById('phone').value,
-        linkedin: document.getElementById('linkedin').value,
-        x: document.getElementById('x').value
-    };
-
-    // TODO massage the inputs and check for correct formats; for now assume it is all good
-
-    // Save to myData.account
-    myData.account = { ...myData.account, ...formData };
-
-    // Show success message
-    const successMessage = document.getElementById('successMessage');
-    successMessage.classList.add('active');
-    
-    // Hide success message after 2 seconds
-    setTimeout(() => {
-        successMessage.classList.remove('active');
-        closeAccountForm();
-    }, 2000);
 }
 
 async function queryNetwork(url) {
@@ -6802,6 +6757,60 @@ class AboutModal {
     }
 }
 const aboutModal = new AboutModal()
+
+class MyProfileModal {
+    constructor() {
+    }
+
+    load() {  // called when the DOM is loaded; can setup event handlers here
+        this.modal = document.getElementById('accountModal');
+        document.getElementById('openAccountForm').addEventListener('click', () => this.open());
+        document.getElementById('closeAccountForm').addEventListener('click', () => this.close());
+        document.getElementById('accountForm').addEventListener('submit', (event) => this.handleSubmit(event));
+    }
+
+    open() {  // called when the modal needs to be opened
+        this.modal.classList.add('active');
+        if (myData && myData.account) {
+            document.getElementById('name').value = myData.account.name || '';
+            document.getElementById('email').value = myData.account.email || '';
+            document.getElementById('phone').value = myData.account.phone || '';
+            document.getElementById('linkedin').value = myData.account.linkedin || '';
+            document.getElementById('x').value = myData.account.x || '';
+        }
+    }
+
+    close() {  // called when the modal needs to be closed
+        this.modal.classList.remove('active');
+    }
+
+    async handleSubmit(event) {
+        event.preventDefault();
+        const formData = {
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value,
+            linkedin: document.getElementById('linkedin').value,
+            x: document.getElementById('x').value
+        };
+
+        // TODO massage the inputs and check for correct formats; for now assume it is all good
+
+        // Save to myData.account
+        myData.account = { ...myData.account, ...formData };
+
+        // Show success message
+        const successMessage = document.getElementById('successMessage');
+        successMessage.classList.add('active');
+    
+        // Hide success message after 2 seconds
+        setTimeout(() => {
+            successMessage.classList.remove('active');
+            this.close();
+        }, 2000);
+    }
+}
+const myProfileModal = new MyProfileModal()
 
 function validateStakeInputs() {
     const nodeAddressInput = document.getElementById('stakeNodeAddress');
