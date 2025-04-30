@@ -6768,6 +6768,7 @@ class MyProfileModal {
         document.getElementById('openAccountForm').addEventListener('click', () => this.open());
         this.closeButton.addEventListener('click', () => this.close());
         document.getElementById('accountForm').addEventListener('submit', (event) => this.handleSubmit(event));
+        this.submitButton = document.querySelector('#accountForm .update-button');
     }
 
     open() {  // called when the modal needs to be opened
@@ -6801,14 +6802,16 @@ class MyProfileModal {
         myData.account = { ...myData.account, ...formData };
 
         showToast('Profile updated successfully', 2000, 'success');
-        // disable the close button
+        // disable the close button and submit button
         this.closeButton.disabled = true;
+        this.submitButton.disabled = true;
 
         // Hide success message after 2 seconds
         setTimeout(() => {
             this.close();
-            // enable the close button
+            // enable the close button and submit button
             this.closeButton.disabled = false;
+            this.submitButton.disabled = false;
         }, 2000);
     }
 }
