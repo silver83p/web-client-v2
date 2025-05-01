@@ -1014,16 +1014,6 @@ input[type="file"].form-control::file-selector-button {
   border-radius: 12px 0 0 12px;
 }
 
-.success-message {
-  color: var(--success-color);
-  margin-top: 1rem;
-  display: none;
-}
-
-.success-message.active {
-  display: block;
-}
-
 /* Floating Button Styles */
 .floating-button {
   position: fixed;

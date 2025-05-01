@@ -6464,7 +6464,6 @@ class RestoreAccountModal {
         event.preventDefault();
         const fileInput = document.getElementById('importFile');
         const passwordInput = document.getElementById('importPassword');
-        const messageElement = document.getElementById('importMessage');
     
         try {
             // Read the file
@@ -6475,7 +6474,7 @@ class RestoreAccountModal {
             // Check if data is encrypted and decrypt if necessary
             if (!isNotEncryptedData) {
                 if (!passwordInput.value.trim()) {
-                    alert('Password required for encrypted data');
+                    showToast('Password required for encrypted data', 3000, 'error');
                     return
                 }
                 fileContent = await decryptData(fileContent, passwordInput.value.trim());
@@ -6509,13 +6508,11 @@ class RestoreAccountModal {
             // Store the localStore entry for username_netid
             localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
     
-            // Show success message
-            messageElement.textContent = 'Data imported successfully!';
-            messageElement.classList.add('active');
+            // Show success message using toast
+            showToast('Account restored successfully!', 2000, 'success');
     
             // Reset form and close modal after delay
             setTimeout(() => {
-                messageElement.classList.remove('active');
                 this.close();
                 window.location.reload();  // need to go through Sign In to make sure imported account exists on network
                 fileInput.value = '';
@@ -6523,13 +6520,7 @@ class RestoreAccountModal {
             }, 2000);
     
         } catch (error) {
-            messageElement.textContent = error.message || 'Import failed. Please check file and password.';
-            messageElement.style.color = '#dc3545';
-            messageElement.classList.add('active');
-            setTimeout(() => {
-                messageElement.classList.remove('active');
-                messageElement.style.color = '#28a745';
-            }, 3000);
+            showToast(error.message || 'Import failed. Please check file and password.', 3000, 'error');
         }
     }
 }
