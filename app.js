@@ -1299,8 +1299,6 @@ async function updateChatList() {
         if (!latestActivity){ return '' }
 
         let previewHTML = ''; // Default
-
-        
         const latestItemTimestamp = latestActivity.timestamp;
 
         // Check if the latest activity is a payment/transfer message
@@ -1930,6 +1928,8 @@ function appendChatModal(highlightNewMessage = false) {
         const timeString = formatTime(item.timestamp);
         // Use a consistent timestamp attribute for potential future use (e.g., message jumping)
         const timestampAttribute = `data-message-timestamp="${item.timestamp}"`;
+        // Add txid attribute if available
+        const txidAttribute = item?.txid ? `data-txid="${item.txid}"` : '';
 
         // Check if it's a payment based on the presence of the amount property (BigInt)
         if (typeof item.amount === 'bigint') {
@@ -1944,11 +1944,12 @@ function appendChatModal(highlightNewMessage = false) {
 
             // Check item.my for sent/received
 
+            //console.log(`debug item: ${JSON.stringify(item, (key, value) => typeof value === 'bigint' ? big2str(value, 18) : value)}`)
             // --- Render Payment Transaction ---
             const directionText = item.my ? '-' : '+';
             const messageClass = item.my ? 'sent' : 'received';
             messageHTML = `
-                <div class="message ${messageClass} payment-info" ${timestampAttribute}> 
+                <div class="message ${messageClass} payment-info" ${timestampAttribute} ${txidAttribute}> 
                     <div class="payment-header">
                         <span class="payment-direction">${directionText}</span>
                         <span class="payment-amount">${amountDisplay}</span>
@@ -1961,7 +1962,7 @@ function appendChatModal(highlightNewMessage = false) {
             // --- Render Chat Message ---
             const messageClass = item.my ? 'sent' : 'received'; // Use item.my directly
             messageHTML = `
-                <div class="message ${messageClass}" ${timestampAttribute}>
+                <div class="message ${messageClass}" ${timestampAttribute} ${txidAttribute}>
                     <div class="message-content" style="white-space: pre-wrap">${linkifyUrls(item.message)}</div>
                     <div class="message-time">${timeString}</div>
                 </div>
@@ -2665,7 +2666,7 @@ async function handleSendAsset(event) {
     };
 
     try {
-console.log('payload is', payload)
+        console.log('payload is', payload)
         // Send the transaction using postAssetTransfer
         const response = await postAssetTransfer(toAddress, amount, payload, keys);
         
@@ -2713,6 +2714,7 @@ console.log('payload is', payload)
             message: memo, // Use the memo as the message content
             amount: amount, // Use the BigInt amount
             symbol: 'LIB', // TODO: Use the asset symbol
+            txid: response.txid
         };
         // Insert the transfer message into the contact's message list, maintaining sort order
         insertSorted(myData.contacts[toAddress].messages, transferMessage, 'timestamp');
@@ -2727,6 +2729,7 @@ console.log('payload is', payload)
         const chatUpdate = {
             address: toAddress,
             timestamp: currentTime,
+            txid: response.txid
         };
         // Find insertion point to maintain timestamp order (newest first)
         insertSorted(myData.chats, chatUpdate, 'timestamp');
@@ -3440,9 +3443,10 @@ async function updateTransactionHistory() {
 
     const asset = walletData.assets[assetIndex];
     const contacts = myData.contacts
+    const txidAttr = tx?.txid ? `data-txid="${tx.txid}"` : '';
 
     transactionList.innerHTML = walletData.history.map(tx => `
-        <div class="transaction-item" data-address="${tx.address}">
+        <div class="transaction-item" data-address="${tx.address}" ${txidAttr}>
             <div class="transaction-info">
                 <div class="transaction-type ${tx.sign === -1 ? 'send' : 'receive'}">
                     ${tx.sign === -1 ? '↑ Sent' : '↓ Received'}
@@ -3993,7 +3997,9 @@ async function postChatMessage(to, payload, toll, keys) {
         network: '0000000000000000000000000000000000000000000000000000000000000000',
         fee: BigInt(parameters.current.transactionFee || 1)           // This is not used by the backend
     }
-    const res = await injectTx(tx, keys)
+    // compute txid
+    const txid = await signObj(tx, keys)
+    const res = await injectTx(tx, txid)
     return res        
 }
 
@@ -4013,7 +4019,9 @@ async function postAssetTransfer(to, amount, memo, keys) {
         network: '0000000000000000000000000000000000000000000000000000000000000000',
         fee: BigInt(parameters.current.transactionFee || 1)           // This is not used by the backend
     }
-    const res = await injectTx(tx, keys)
+
+    const txid = await signObj(tx, keys)
+    const res = await injectTx(tx, txid)
     return res
 }
 
@@ -4032,11 +4040,12 @@ async function postRegisterAlias(alias, keys){
         pqPublicKey: pqPublicKey,
         timestamp: getCorrectedTimestamp()
     }
-    const res = await injectTx(tx, keys)
+    const txid = await signObj(tx, keys)
+    const res = await injectTx(tx, txid)
     return res
 }
 
-async function injectTx(tx, keys){
+async function injectTx(tx, txid){
     if (!isOnline) {
         return null 
     }
@@ -4047,18 +4056,17 @@ async function injectTx(tx, keys){
     }
     
     try {
-        const txid = await signObj(tx, keys)  // add the sign obj to tx
-
-        // Add transaction to pending array if it's a tracked type (transfer or message)
-        if (tx.type === 'transfer' || tx.type === 'message') {
-            const timestamp = getCorrectedTimestamp();
-            myData.pending.push({
-                txid: txid,
-                type: tx.type,
-                submittedts: timestamp,
-                checkedts: null
-            });
+        const timestamp = getCorrectedTimestamp();
+        // initialize pending array if it doesn't exist
+        if (!myData.pending) {
+            myData.pending = [];
         }
+        myData.pending.push({
+            txid: txid,
+            type: tx.type,
+            submittedts: timestamp,
+            checkedts: 0
+        });
 
         const options = {
             method: 'POST',
@@ -6205,7 +6213,8 @@ async function handleStakeSubmit(event) {
         timestamp: getCorrectedTimestamp(),
     };
 
-    const response = await injectTx(stakeTx, keys);
+    const txid = await signObj(stakeTx, keys)
+    const response = await injectTx(stakeTx, txid);
     return response;
  }
 
@@ -6219,7 +6228,8 @@ async function handleStakeSubmit(event) {
         timestamp: getCorrectedTimestamp(),
     };
     
-    const response = await injectTx(unstakeTx, myAccount.keys);
+    const txid = await signObj(unstakeTx, myAccount.keys)
+    const response = await injectTx(unstakeTx, txid);
     return response;
  }
  
