@@ -170,26 +170,8 @@ export function ethHashMessage(message) {
 }
 
 // Base hashing function
-function hashBytes(bytes) {
+export function hashBytes(bytes) {
     return blake.blake2bHex(bytes, myHashKey, 32);
-}
-
-// Hashing functions
-export function hashUsername(usernameBytes) {
-    return hashBytes(usernameBytes);
-}
-
-export function hashChatId(fromAddr, toAddr) {
-    const combined = [fromAddr, toAddr].sort().join``;
-    return hashBytes(utf82bin(combined));
-}
-
-export function hashTransaction(jstrBytes) {
-    return hashBytes(jstrBytes);
-}
-
-export function hashAlias(aliasBytes) {
-    return hashBytes(aliasBytes);
 }
 
 export function deriveDhKey(combined) {

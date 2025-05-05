@@ -112,7 +112,7 @@ import { stringify, parse } from './external/stringify-shardus.js';
 import { 
     encryptChacha, encryptData, decryptData, 
     decryptMessage, ecSharedKey, pqSharedKey, ethHashMessage,
-    hashUsername, hashChatId, hashTransaction, hashAlias, deriveDhKey,
+    hashBytes, deriveDhKey,
     generateRandomPrivateKey, getPublicKey, signMessage, generatePQKeys,
     generateRandomBytes, generateAddress
 } from './crypto.js';
@@ -193,7 +193,7 @@ async function checkUsernameAvailability(username, address) {
     }
     
     const usernameBytes = utf82bin(normalizeUsername(username))
-    const usernameHash = hashUsername(usernameBytes);
+    const usernameHash = hashBytes(usernameBytes);
     try {
         const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`);
         const data = await response.json();
@@ -1791,7 +1791,7 @@ async function handleNewChat(event) {
         username = normalizeUsername(input)
         // Treat as username and lookup address
         const usernameBytes = utf82bin(username);
-        const usernameHash = hashUsername(usernameBytes);
+        const usernameHash = hashBytes(usernameBytes);
         try {
             const data = await queryNetwork(`/address/${usernameHash}`)
             if (!data || !data.address) {
@@ -2591,7 +2591,7 @@ async function handleSendAsset(event) {
     try {
         // Look up username on network
         const usernameBytes = utf82bin(username);
-        const usernameHash = hashUsername(usernameBytes);
+        const usernameHash = hashBytes(usernameBytes);
 /*
         const randomGateway = network.gateways[Math.floor(Math.random() * network.gateways.length)];
         const response = await fetch(`${randomGateway.protocol}://${randomGateway.host}:${randomGateway.port}/address/${usernameHash}`);
@@ -3799,7 +3799,7 @@ async function processChats(chats, keys) {
                     delete tx.sign
                     const jstr = stringify(tx)
                     const jstrBytes = utf82bin(jstr)
-                    const txidHex = hashTransaction(jstrBytes);
+                    const txidHex = hashBytes(jstrBytes);
 
                     // skip if this tx was processed before and is already in the history array;
                     //    txs are the same if the history[x].txid is the same as txidHex
@@ -3986,7 +3986,7 @@ async function postChatMessage(to, payload, toll, keys) {
         from: fromAddr,
         to: toAddr,
         amount: BigInt(toll),       // not sure if this is used by the backend
-        chatId: hashChatId(fromAddr, toAddr),
+        chatId: hashBytes([fromAddr, toAddr].sort().join``),
         message: 'x',
         xmessage: payload,
         timestamp: getCorrectedTimestamp(),
@@ -4005,7 +4005,7 @@ async function postAssetTransfer(to, amount, memo, keys) {
         from: fromAddr,
         to: toAddr,
         amount: BigInt(amount),
-        chatId: hashChatId(fromAddr, toAddr),
+        chatId: hashBytes([fromAddr, toAddr].sort().join``),
 // TODO backend is not allowing memo > 140 characters; by pass using xmemo; we might have to check the total tx size instead
 //        memo: stringify(memo),
         xmemo: memo,
@@ -4020,7 +4020,7 @@ async function postAssetTransfer(to, amount, memo, keys) {
 // TODO - backend - when account is being registered, ensure that loserCase(alias)=alias and hash(alias)==aliasHash 
 async function postRegisterAlias(alias, keys){
     const aliasBytes = utf82bin(alias)
-    const aliasHash = hashAlias(aliasBytes);
+    const aliasHash = hashBytes(aliasBytes);
     const { publicKey, secretKey } = generatePQKeys(keys.pqSeed)
     const pqPublicKey = bin2base64(publicKey)
     const tx = {
@@ -4089,7 +4089,7 @@ async function signObj(tx, keys){
     const jstr = stringify(tx)
 //console.log('tx stringify', jstr)
     const jstrBytes = utf82bin(jstr)
-    const txidHex = hashTransaction(jstrBytes)
+    const txidHex = hashBytes(jstrBytes)
     const txidHashHex = ethHashMessage(txidHex)     // Asked Thant why we are doing this; 
                                                     //  why hash txid with ethHashMessage again before signing
                                                     //  why not just sign the original txid
