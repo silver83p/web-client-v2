@@ -663,6 +663,7 @@ function newDataRecord(myAccount){
             ],
             history: [],
         },
+        pending: [],  // Array to track pending transactions
         state: {
             unread: 0
         },
@@ -4139,6 +4140,18 @@ async function injectTx(tx, keys){
     
     try {
         const txid = await signObj(tx, keys)  // add the sign obj to tx
+
+        // Add transaction to pending array if it's a tracked type (transfer or message)
+        if (tx.type === 'transfer' || tx.type === 'message') {
+            const timestamp = getCorrectedTimestamp();
+            myData.pending.push({
+                txid: txid,
+                type: tx.type,
+                submittedts: timestamp,
+                checkedts: null
+            });
+        }
+
         const options = {
             method: 'POST',
             headers: {
@@ -4152,6 +4165,7 @@ async function injectTx(tx, keys){
         data.txid = txid           
         return data
     } catch (error) {
+        // TODO: handle object added to pending array if error during fetch and handle the optimistically added UI elements depending on tx type and what current UI is being displayed
         console.error('Error injecting transaction:', error);
         return null
     }
