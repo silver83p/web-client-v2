@@ -3114,9 +3114,10 @@ function handleSignOut() {
 }
 handleSignOut.exit = false
 
-// Handle sending a message
-// The user has a chat modal open to a recipient and has typed a message anc clicked the Send button
-// The recipient account already exists in myData.contacts; it was created when the user submitted the New Chat form
+/**
+ * Invoked when the user clicks the Send button in a recipient (appendChatModal.address) chat modal
+ * Recipient account exists in myData.contacts; was created when the user submitted the New Chat form
+ */
 async function handleSendMessage() {
     const sendButton = document.getElementById('handleSendMessage');
     sendButton.disabled = true; // Disable the button
@@ -3217,7 +3218,7 @@ async function handleSendMessage() {
         // if there a hidden txid input, get the value to be used to delete that txid from relevant data stores
         const retryTxId = document.getElementById('retryOfTxId').value;
         if (retryTxId) {
-            removeFailedTx(retryTxId);
+            removeFailedTx(retryTxId, currentAddress);
         }
 
         // --- Optimistic UI Update ---
@@ -3239,7 +3240,7 @@ async function handleSendMessage() {
             txid: txid
         };
 
-        // Remove existing chat for this contact if it exists
+        // Remove existing chat for this contact if it exists. Not handling in removeFailedTx anymore.
         const existingChatIndex = chatsData.chats.findIndex(chat => chat.address === currentAddress);
         if (existingChatIndex !== -1) {
             chatsData.chats.splice(existingChatIndex, 1);
@@ -3264,6 +3265,29 @@ async function handleSendMessage() {
         
         if (!response || !response.result || !response.result.success) {
             console.log('message failed to send', response)
+            let userMessage = 'Message failed to send. Please try again.';
+            const reason = response.result?.reason || '';
+
+            if (reason.includes('does not have sufficient funds')) {
+                userMessage = 'Message failed: Insufficient funds for toll & fees.';
+            } else if (reason) {
+                // Attempt to provide a slightly more specific message if reason is short
+                userMessage = `Message failed: ${reason.substring(0, 100)}${reason.length > 100 ? '...' : ''}`;
+            }
+            showToast(userMessage, 4000, 'error');
+
+            // Update message status to 'failed' in the UI
+            updateTransactionStatus(txid, currentAddress, 'failed', 'message');
+            appendChatModal();
+
+            // Remove from pending transactions as injectTx itself indicated failure
+            if (myData && myData.pending) {
+                myData.pending = myData.pending.filter(pTx => pTx.txid !== txid);
+            }
+        } else {
+            // Message sent successfully (or at least accepted by gateway)
+            // The optimistic UI update for 'sent' status is already handled before injectTx.
+            // No specific action needed here for success as the UI already reflects 'sent'.
         }
     } catch (error) {
         console.error('Message error:', error);
@@ -3348,16 +3372,16 @@ function handleFailedMessageClick(messageEl) {
     const originalTxid = messageEl.dataset.txid;
 
     // Store content and txid in properties of handleSendMessage
-    handleSendMessage.handleFailedMessage = messageContent;
-    handleSendMessage.txid = originalTxid;
+    handleFailedMessageClick.handleFailedMessage = messageContent;
+    handleFailedMessageClick.txid = originalTxid;
 
     // Show the modal
     if (modal) {
         modal.classList.add('active');
     }
 }
-handleSendMessage.handleFailedMessage = '';
-handleSendMessage.txid = '';
+handleFailedMessageClick.handleFailedMessage = '';
+handleFailedMessageClick.txid = '';
 
 /**
  * Invoked when the user clicks the retry button in the failed message modal
@@ -3369,8 +3393,8 @@ function handleFailedMessageRetry() {
     const retryTxIdInput = document.getElementById('retryOfTxId');
 
     // Use the values stored when handleFailedMessage was called
-    const messageToRetry = handleSendMessage.handleFailedMessage;
-    const originalTxid = handleSendMessage.txid;
+    const messageToRetry = handleFailedMessageClick.handleFailedMessage;
+    const originalTxid = handleFailedMessageClick.txid;
 
     if (mainChatInput && retryTxIdInput && typeof messageToRetry === 'string' && typeof originalTxid === 'string') {
         mainChatInput.value = messageToRetry;
@@ -3382,8 +3406,8 @@ function handleFailedMessageRetry() {
         mainChatInput.focus();
         
         // Clear the stored values after use
-        handleSendMessage.handleFailedMessage = '';
-        handleSendMessage.txid = ''; 
+        handleFailedMessageClick.handleFailedMessage = '';
+        handleFailedMessageClick.txid = ''; 
     } else {
         console.error('Error preparing message retry: Necessary elements or data missing.');
         if (failedMessageModal) {
@@ -3394,23 +3418,23 @@ function handleFailedMessageRetry() {
 
 /**
  * Invoked when the user clicks the delete button in the failed message modal
- * It will delete the message from all data stores
+ * It will delete the message from all data stores using removeFailedTx and remove pending tx if exists
  */
 function handleFailedMessageDelete() {
     const failedMessageModal = document.getElementById('failedMessageModal');
-    const originalTxid = handleSendMessage.txid;
+    const originalTxid = handleFailedMessageClick.txid;
 
     if (typeof originalTxid === 'string' && originalTxid) {
-        // Assuming handleDeleteMessage is defined and handles UI update
-        //TODO: invoke removeFailedTx
-        removeFailedTx(originalTxid)
+        const currentAddress = appendChatModal.address
+        removeFailedTx(originalTxid, currentAddress)
+
         if (failedMessageModal) {
             failedMessageModal.classList.remove('active');
         }
         
         // Clear the stored values
-        handleSendMessage.handleFailedMessage = '';
-        handleSendMessage.txid = ''; 
+        handleFailedMessageClick.handleFailedMessage = '';
+        handleFailedMessageClick.txid = ''; 
         // refresh current chatModal
         appendChatModal();
     } else {
@@ -3431,8 +3455,8 @@ function closeFailedMessageModalAndClearState() {
         failedMessageModal.classList.remove('active');
     }
     // Clear the stored values when modal is closed
-    handleSendMessage.handleFailedMessage = '';
-    handleSendMessage.txid = ''; 
+    handleFailedMessageClick.handleFailedMessage = '';
+    handleFailedMessageClick.txid = ''; 
 }
 
 /**
@@ -7023,33 +7047,25 @@ function validateStakeInputs() {
     nodeAddressWarningElement.style.display = 'none'; // Ensure address warning is also hidden
 }
 
-// Standalone function to remove a failed/timed-out transaction from all relevant data stores
-function removeFailedTx(txid) {
+/**
+ * Remove failed transaction from the contacts messages, pending, and wallet history
+ * @param {string} txid - The transaction ID to remove
+ * @param {string} currentAddress - The address of the current contact
+ */
+function removeFailedTx(txid, currentAddress) {
     console.log(`DEBUG: Removing failed/timed-out txid ${txid} from all stores`);
-    
-    const index = myData.pending.findIndex(tx => tx.txid === txid);
-    console.log(`DEBUG: index of txid ${txid} in pending to be used in splice: ${index}`);
 
-    if (index === -1) {
-        console.log(`DEBUG: txid ${txid} not found in pending, skipping removal`);
-        return;
+    // remove pending tx if exists
+    const index = myData.pending.findIndex(tx => tx.txid === txid);
+    if (index > -1) {
+        myData.pending.splice(index, 1);
     }
 
-    const type = myData.pending[index].type;
-    
-
-    // Remove from pending array
-    myData.pending.splice(index, 1);
-    
-    // Remove from contacts messages
-    for (const contact of Object.values(myData.contacts)) {
+    const contact = myData?.contacts?.[currentAddress];
+    if (contact && contact.messages) {
         contact.messages = contact.messages.filter(msg => msg.txid !== txid);
     }
-    
-    // Remove from wallet history
-    if (type === 'transfer') {
-        myData.wallet.history = myData.wallet.history.filter(item => item.txid !== txid);
-    }
+    myData.wallet.history = myData?.wallet?.history?.filter(item => item.txid !== txid);
 }
 
 /**
@@ -7159,7 +7175,7 @@ function refreshCurrentView(txid) { // contactAddress is kept for potential futu
 }
 
 /**
- * Update status of a transaction in all relevant data stores 
+ * Update status of a transaction in wallet if it is a transfer, and always in contacts messages
  * @param {string} txid - The transaction ID to update
  * @param {string} toAddress - The address of the recipient
  * @param {string} status - The new status to set ('sent', 'failed', etc.)
