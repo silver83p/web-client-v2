@@ -1014,16 +1014,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     const failedMessageDeleteButton = failedMessageModal.querySelector('.delete-button');
     const failedMessageHeaderCloseButton = document.getElementById('closeFailedMessageModal');
 
-    if (failedMessageRetryButton) {
-        failedMessageRetryButton.addEventListener('click', handleFailedMessageRetry);
-    }
-    if (failedMessageDeleteButton) {
-        failedMessageDeleteButton.addEventListener('click', handleFailedMessageDelete);
-    }
-    if (failedMessageHeaderCloseButton) {
-        failedMessageHeaderCloseButton.addEventListener('click', closeFailedMessageModalAndClearState);
-    }
+    
+    failedMessageRetryButton.addEventListener('click', handleFailedMessageRetry);
+    failedMessageDeleteButton.addEventListener('click', handleFailedMessageDelete);
+    failedMessageHeaderCloseButton.addEventListener('click', closeFailedMessageModalAndClearState);
     failedMessageModal.addEventListener('click', handleFailedMessageBackdropClick);
+
+
+    // Event Listerns for FailedPaymentModal
+    const failedPaymentModal = document.getElementById('failedPaymentModal');
+    const failedPaymentRetryButton = failedPaymentModal.querySelector('.retry-button');
+    const failedPaymentDeleteButton = failedPaymentModal.querySelector('.delete-button');
+    const failedPaymentHeaderCloseButton = document.getElementById('closeFailedPaymentModal');
+
+    failedPaymentRetryButton.addEventListener('click', handleFailedPaymentRetry);
+    failedPaymentDeleteButton.addEventListener('click', handleFailedPaymentDelete);
+    failedPaymentHeaderCloseButton.addEventListener('click', closeFailedPaymentModalAndClearState);
+    failedPaymentModal.addEventListener('click', handleFailedPaymentBackdropClick);
+    
+    
     
     
 
@@ -1312,14 +1321,20 @@ async function updateChatList() {
 
     console.log('updateChatList chats.length', JSON.stringify(chats.length))
     
-    const chatItems = await Promise.all(chats.map(async chat => {
+    // Clear existing chat items before adding new ones
+    chatList.innerHTML = ''; 
+
+    const chatElements = await Promise.all(chats.map(async chat => {
         const identicon = await generateIdenticon(chat.address);
         const contact = contacts[chat.address];
-        if (!contact) return ''; // Safety check
-
-        // Find the latest message/activity for this contact (which is the first in the messages array)
-        const latestActivity = contact.messages[0]; // Assumes messages array includes transfers and is sorted descending
-        if (!latestActivity){ return '' }
+        
+        // If contact doesn't exist, skip this chat item
+        if (!contact) return null; 
+        
+        const latestActivity = contact.messages && contact.messages.length > 0 ? contact.messages[0] : null;
+        
+        // If there's no latest activity (no messages), skip this chat item
+        if (!latestActivity) return null;
 
         let previewHTML = ''; // Default
         const latestItemTimestamp = latestActivity.timestamp;
@@ -1348,31 +1363,38 @@ async function updateChatList() {
         const timeDisplay = formatTime(latestItemTimestamp);
         const contactName = contact.name || contact.senderInfo?.name || contact.username || `${contact.address.slice(0,8)}...${contact.address.slice(-6)}`;
 
-        return `
-            <li class="chat-item">
-                <div class="chat-avatar">${identicon}</div>
-                <div class="chat-content">
-                    <div class="chat-header">
-                        <div class="chat-name">${contactName}</div>
-                        <div class="chat-time">${timeDisplay} <span class="chat-time-chevron"></span></div>
-                    </div>
-                    <div class="chat-message">
-                        ${previewHTML}
-                        ${contact.unread ? `<span class="chat-unread">${contact.unread}</span>` : ''}
-                    </div>
+        // Create the list item element
+        const li = document.createElement('li');
+        li.classList.add('chat-item');
+        
+        // Set its inner HTML
+        li.innerHTML = `
+            <div class="chat-avatar">${identicon}</div>
+            <div class="chat-content">
+                <div class="chat-header">
+                    <div class="chat-name">${escapeHtml(contactName)}</div>
+                    <div class="chat-time">${timeDisplay} <span class="chat-time-chevron"></span></div>
                 </div>
-            </li>
+                <div class="chat-message">
+                    ${previewHTML}
+                    ${contact.unread ? `<span class="chat-unread">${contact.unread}</span>` : ''}
+                </div>
+            </div>
         `;
+        
+        // Add the onclick handler directly to the element
+        li.onclick = () => openChatModal(chat.address);
+        
+        return li; // Return the created DOM element
     }));
     
-    chatList.innerHTML = chatItems.join('');
-    
-    // Add click handlers to chat items
-    document.querySelectorAll('.chat-item').forEach((item, index) => {
-        item.onclick = () => openChatModal(chats[index].address);
+    // Append the created (and non-null) list item elements to the chatList
+    chatElements.forEach(element => {
+        if (element) { // Only append if the element is not null
+            chatList.appendChild(element);
+        }
     });
 }
-
 // refresh wallet balance
 async function updateWalletBalances() {
     if (!myAccount || !myData || !myData.wallet || !myData.wallet.assets) {
@@ -3310,6 +3332,11 @@ async function handleClickToCopy(e) {
             handleFailedMessageClick(messageEl)
         }
 
+        // If the message is a payment message, show the failed history item modal
+        if (messageEl.classList.contains('payment-info')) {
+            handleFailedPaymentClick(messageEl.dataset.txid, messageEl)
+        }
+
         // TODO: if message is a payment open sendModal and fill with information in the payment message?
 
         return;
@@ -3383,6 +3410,34 @@ function handleFailedMessageClick(messageEl) {
 handleFailedMessageClick.handleFailedMessage = '';
 handleFailedMessageClick.txid = '';
 
+function handleFailedPaymentClick(txid, element) {
+    console.log('handleFailedPaymentClick', txid)
+    const modal = document.getElementById('failedPaymentModal');
+
+    // Get the address and memo from the original failed transfer element
+    const address = element?.dataset?.address || appendChatModal?.address;
+    const memo = element?.querySelector('.transaction-memo')?.textContent || element?.querySelector('.payment-memo')?.textContent;
+    const assetID = element?.dataset?.assetID || ''; // TODO: need to add assetID to `message sent payment-info` class for when we implement retry
+
+    // Store the address and memo in properties of handleFailedPaymentClick
+    handleFailedPaymentClick.address = address;
+    handleFailedPaymentClick.memo = memo;
+    handleFailedPaymentClick.txid = txid;
+    handleFailedPaymentClick.assetID = assetID;
+
+    console.log(`handleFailedPaymentClick.address: ${handleFailedPaymentClick.address}`)
+    console.log(`handleFailedPaymentClick.memo: ${handleFailedPaymentClick.memo}`)
+    console.log(`handleFailedPaymentClick.txid: ${handleFailedPaymentClick.txid}`)
+    console.log(`handleFailedPaymentClick.assetID: ${handleFailedPaymentClick.assetID}`)
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+handleFailedPaymentClick.txid = '';
+handleFailedPaymentClick.address = '';
+handleFailedPaymentClick.memo = '';
+handleFailedPaymentClick.assetID = '';
+
 /**
  * Invoked when the user clicks the retry button in the failed message modal
  * It will fill the chat modal with the message content and txid of the failed message and focus the message input
@@ -3416,6 +3471,10 @@ function handleFailedMessageRetry() {
     }
 }
 
+function handleFailedPaymentRetry() {
+    console.log('handleFailedPaymentRetry')
+}
+
 /**
  * Invoked when the user clicks the delete button in the failed message modal
  * It will delete the message from all data stores using removeFailedTx and remove pending tx if exists
@@ -3445,6 +3504,36 @@ function handleFailedMessageDelete() {
     }
 }
 
+
+
+function handleFailedPaymentDelete() {
+    const failedPaymentModal = document.getElementById('failedPaymentModal');
+    const originalTxid = handleFailedPaymentClick.txid;
+
+    if (typeof originalTxid === 'string' && originalTxid) {
+        const currentAddress = handleFailedPaymentClick.address;
+        removeFailedTx(originalTxid, currentAddress);
+        
+        if (failedPaymentModal) {
+            failedPaymentModal.classList.remove('active');
+        }
+
+        // refresh current view
+        refreshCurrentView(handleFailedPaymentClick.txid);
+        
+        // Clear the stored values
+        handleFailedPaymentClick.txid = '';
+        handleFailedPaymentClick.address = '';
+        handleFailedPaymentClick.memo = '';
+        handleFailedPaymentClick.assetID = '';
+    } else {
+        console.error('Error deleting message: TXID not found.');
+        if (failedPaymentModal) {
+            failedPaymentModal.classList.remove('active');
+        }
+    }
+}
+
 /**
  * Invoked when the user clicks the close button in the failed message modal
  * It will close the modal and clear the stored values
@@ -3459,6 +3548,18 @@ function closeFailedMessageModalAndClearState() {
     handleFailedMessageClick.txid = ''; 
 }
 
+function closeFailedPaymentModalAndClearState() {
+    const failedPaymentModal = document.getElementById('failedPaymentModal');
+    if (failedPaymentModal) {
+        failedPaymentModal.classList.remove('active');
+    }
+    // Clear the stored values when modal is closed
+    handleFailedPaymentClick.txid = '';
+    handleFailedPaymentClick.address = '';
+    handleFailedPaymentClick.memo = '';
+    handleFailedPaymentClick.assetID = '';
+}
+
 /**
  * Invoked when the user clicks the backdrop in the failed message modal
  * It will close the modal and clear the stored values
@@ -3467,6 +3568,13 @@ function handleFailedMessageBackdropClick(event) {
     const failedMessageModal = document.getElementById('failedMessageModal');
     if (event.target === failedMessageModal) {
         closeFailedMessageModalAndClearState();
+    }
+}
+
+function handleFailedPaymentBackdropClick(event) {
+    const failedPaymentModal = document.getElementById('failedPaymentModal');
+    if (event.target === failedPaymentModal) {
+        closeFailedPaymentModalAndClearState();
     }
 }
 
@@ -3647,7 +3755,12 @@ function handleHistoryItemClick(event) {
     const item = event.target.closest('.transaction-item');
 
     if (item.dataset.status === 'failed') {
-        //TODO: open sendModal with the message content and txid of the failed message?
+        console.log(`Not opening chatModal for failed transaction`)
+
+        if (event.target.closest('.transaction-item')){
+            handleFailedPaymentClick(item.dataset.txid, item);
+        }
+        
         return;
     }
 
@@ -7146,19 +7259,13 @@ function refreshCurrentView(txid) { // contactAddress is kept for potential futu
     const historyModal = document.getElementById('historyModal');
     const messagesList = chatModal ? chatModal.querySelector('.messages-list') : null;
 
-    // 1. Refresh Chat List if active
-    // This is checked first as it's a common background view.
-    if (chatsScreen && chatsScreen.classList.contains('active')) {
-        console.log("DEBUG: Refreshing chat list view due to transaction failure.");
-        updateChatList();
-    }
-    // 2. Refresh History Modal if active
-    else if (historyModal && historyModal.classList.contains('active')) {
+    // 1. Refresh History Modal if active
+    if (historyModal && historyModal.classList.contains('active')) {
         console.log("DEBUG: Refreshing transaction history modal due to transaction failure.");
         updateTransactionHistory();
     }
-    // 3. Refresh Chat Modal if active AND the failed txid's message is currently rendered
-    else if (chatModal && chatModal.classList.contains('active') && txid && messagesList) {
+    // 2. Refresh Chat Modal if active AND the failed txid's message is currently rendered
+    if (chatModal && chatModal.classList.contains('active') && txid && messagesList) {
         // Check if an element with the specific data-txid exists within the message list
         const messageElement = messagesList.querySelector(`[data-txid="${txid}"]`);
 
@@ -7170,6 +7277,11 @@ function refreshCurrentView(txid) { // contactAddress is kept for potential futu
             // The failed txid doesn't correspond to a visible message in the *currently open* chat modal. No UI refresh needed for the modal itself.
             console.log(`DEBUG: Skipping chat modal refresh. Failed txid ${txid} not found in the active modal's message list.`);
         }
+    } 
+    // 3. Refresh Chat List if active
+    if (chatsScreen && chatsScreen.classList.contains('active')) {
+        console.log("DEBUG: Refreshing chat list view due to transaction failure.");
+        updateChatList();
     }
     // No other active view to refresh in this context
 }
