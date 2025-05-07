@@ -6467,9 +6467,18 @@ async function submitUnstakeTransaction(nodeAddress) {
         await new Promise(resolve => setTimeout(resolve, 10000));
         // Check the response structure for success indicator.
         if (response && response.result && response.result.success) {
-            // TODO: Update when transaction status check is implemented
+
+            myData.wallet.history.unshift({
+                nominee: nodeAddress,
+                amount: bigxnum2big(wei, '0'),
+                memo: 'unstake',
+                sign: 1,
+                status: 'sent',
+                timestamp: getCorrectedTimestamp(),
+                txid: response.txid
+            });
+
             closeValidatorModal();
-            openValidatorModal();
         } else {
             // Try to get a more specific reason for failure
             const reason = response?.result?.reason || 'Unknown error from API.';
@@ -6541,7 +6550,7 @@ async function handleStakeSubmit(event) {
 
             myData.wallet.history.unshift({
                 nominee: nodeAddress,
-                amount: {dataType: 'bi', value: amount_in_wei},
+                amount: amount_in_wei,
                 memo: 'stake',
                 sign: -1,
                 status: 'sent',
@@ -7280,6 +7289,17 @@ async function checkPendingTransactions() {
         if (tx.submittedts < eightSecondsAgo) {
             console.log(`DEBUG: txid ${txid} is older than 8 seconds, checking receipt`);
             const res = await queryNetwork(`/transaction/${txid}`);
+
+            if (res?.transaction?.type === 'withdraw_stake') {
+                const index = myData.wallet.history.findIndex(tx => tx.txid === txid);
+                if (index !== -1) {
+                    // covert amount to wei
+                    myData.wallet.history[index].amount = parse(stringify(res.transaction.additionalInfo.totalUnstakeAmount));
+                } else {
+                    console.log(`DEBUG: txid ${txid} not found in wallet history`);
+                }
+            }
+
 
             if (res?.transaction?.success === true) {
                 console.log(`DEBUG: txid ${txid} is successful, removing from pending only`);
