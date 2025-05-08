@@ -6158,6 +6158,7 @@ async function openValidatorModal() {
     if (userStakeUsdItem) userStakeUsdItem.style.display = 'flex';
     // Disable unstake button initially while loading/checking
     if (unstakeButton) unstakeButton.disabled = true;
+    if (stakeButton) stakeButton.disabled = false;
 
 
     if (validatorModal) validatorModal.classList.add('active'); // Open modal immediately
@@ -6608,7 +6609,7 @@ async function handleStakeSubmit(event) {
             openValidatorModal();
         } else {
             const reason = response?.result?.reason || 'Unknown error';
-            showToast(`Stake failed: ${reason}`, 5000, 'error');
+            //showToast(`Stake failed: ${reason}`, 5000, 'error');
             // after toast shown, stays in stakeModal
         }
     } catch (error) {
@@ -7367,7 +7368,13 @@ async function checkPendingTransactions() {
                 console.log(`DEBUG: failure reason: ${failureReason}`);
                 
                 // Show toast notification with the failure reason
-                showToast(failureReason, 5000, "error");
+                if (type !== 'deposit_stake' && type !== 'withdraw_stake') {
+                    showToast(failureReason, 5000, "error");
+                } else if (type === 'withdraw_stake') {
+                    showToast(`Unstake failed: ${failureReason}`, 5000, "error");
+                } else if (type === 'deposit_stake') {
+                    showToast(`Stake failed: ${failureReason}`, 5000, "error");
+                }
                 
                 // Remove from pending array
                 myData.pending.splice(i, 1);
@@ -7375,6 +7382,18 @@ async function checkPendingTransactions() {
                 updateTransactionStatus(txid, toAddress, 'failed', type);
                 // Then we'll want to refresh the current view
                 refreshCurrentView(txid);
+                
+                // refresh the validator modal if this is a withdraw_stake/deposit_stake and validator modal is open
+                if (type === 'withdraw_stake' || type === 'deposit_stake') {
+                    // remove from wallet history
+                    myData.wallet.history = myData.wallet.history.filter(tx => tx.txid !== txid);
+
+                    if (document.getElementById('validatorModal').classList.contains('active')) {
+                        // refresh the validator modal
+                        closeValidatorModal();
+                        openValidatorModal();
+                    }
+                }
             }
             else {
                 console.log(`DEBUG: tx ${txid} status unknown, waiting for receipt`);
