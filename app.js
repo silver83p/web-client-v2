@@ -337,7 +337,7 @@ function openCreateAccountModal() {
 // Check availability on input changes
 let createAccountCheckTimeout;
 function handleCreateAccountInput(e) {
-    const username = e.target.value;
+    const username = normalizeUsername(e.target.value);
     const usernameAvailable = document.getElementById('newUsernameAvailable');
     const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
     
