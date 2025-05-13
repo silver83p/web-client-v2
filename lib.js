@@ -260,6 +260,8 @@ export function isValidEthereumAddress(address) {
 export function normalizeAddress(address) {
     // Remove 0x prefix if present
     address = address.replace(/^0x/, '');
+    // Convert to lowercase for consistent comparison
+    address = address.toLowerCase();
     // Remove trailing zeros
     if (address.length == 64) {
         address = address.replace(/0{24}$/, '');
