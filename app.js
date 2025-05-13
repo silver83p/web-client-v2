@@ -348,6 +348,7 @@ function handleCreateAccountInput(e) {
     
     // Reset display
     usernameAvailable.style.display = 'none';
+    // username available test: change to false to test pending register tx
     submitButton.disabled = true;
     
     // Check if username is too short
@@ -365,6 +366,7 @@ function handleCreateAccountInput(e) {
             usernameAvailable.textContent = 'taken';
             usernameAvailable.style.color = '#dc3545';
             usernameAvailable.style.display = 'inline';
+            // username available test: comment out to test pending register tx
             submitButton.disabled = true;
         } else if (taken == 'available') {
             usernameAvailable.textContent = 'available';
@@ -385,8 +387,6 @@ function closeCreateAccountModal() {
 }
 
 async function handleCreateAccount(event) {
-    showToast('Creating account...', 3000);
-
     // disable submit button
     const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
     submitButton.disabled = true;
@@ -517,38 +517,47 @@ async function handleCreateAccount(event) {
 
     // Create new data entry
     myData = newDataRecord(myAccount);
+    let waitingToastId = showToast('Creating account...', 0, 'loading');
     const res = await postRegisterAlias(username, myAccount.keys);
+    
+    if (res && res.result && res.result.success && res.txid) {
+        const txid = res.txid;
 
-    if (res && (res.error || !res.result.success)) {
-        //console.log('no res', res)
-        if (res?.result?.reason){
-            alert(res.result.reason)
+        try {
+            // Wait for the transaction confirmation
+            const confirmationDetails = await pendingPromiseService.register(txid);
+            if (confirmationDetails.username !== username || confirmationDetails.address !== longAddress(myAccount.keys.address)) {
+                throw new Error("Confirmation details mismatch.");
+            }
+
+            if (waitingToastId) hideToast(waitingToastId);
+            showToast('Account created successfully!', 3000, 'success');
+            submitButton.disabled = false;
+            closeCreateAccountModal();
+            document.getElementById('welcomeScreen').style.display = 'none';
+            getChats.lastCall = getCorrectedTimestamp();
+
+            // Store the account data in localStorage
+            existingAccounts.netids[netid].usernames[username] = {address: myAccount.keys.address};
+            localStorage.setItem('accounts', stringify(existingAccounts));
+            saveState();
+
+            await switchView('chats');
+        } catch (error) {
+            if (waitingToastId) hideToast(waitingToastId);
+            console.log(`DEBUG: handleCreateAccount error`, JSON.stringify(error, null, 2));
+            showToast(`account creation failed: ${error}`, 0, 'error');
+            submitButton.disabled = false;
+            // Note: `checkPendingTransactions` will also remove the item from `myData.pending` if it's rejected by the service.
+            return;
         }
+    } else {
+        if (waitingToastId) hideToast(waitingToastId);
+        console.error(`DEBUG: handleCreateAccount error in else`, JSON.stringify(res, null, 2));
+        // no toast here since injectTx will show it
+        submitButton.disabled = false;
         return;
     }
-
-    // TODO: check if account has been created successfully
-    // sleep/timeout for 3 seconds
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Store updated accounts back in localStorage
-//    existingAccounts.netids[netid].usernames[username] = myAccount;
-    existingAccounts.netids[netid].usernames[username] = {address: myAccount.keys.address};
-    localStorage.setItem('accounts', stringify(existingAccounts));
-    
-    // Store the account data in localStorage
-    localStorage.setItem(`${username}_${netid}`, stringify(myData));
-
-    /* requestNotificationPermission(); */
-
-    // enable submit button
-    submitButton.disabled = false;
-
-    // Close modal and proceed to app
-    closeCreateAccountModal();
-    document.getElementById('welcomeScreen').style.display = 'none';
-    getChats.lastCall = getCorrectedTimestamp() // since we just created the account don't check for chat messages
-    switchView('chats'); // Default view
 }
 
 // This is for the sign in button after selecting an account
@@ -3807,12 +3816,25 @@ function handleHistoryItemClick(event) {
     if (item.dataset.status === 'failed') {
         console.log(`Not opening chatModal for failed transaction`)
 
+        // if not data-address then we can assume it's a stake or unstake transaction so when clicking on it it should lead to the validator modal
+        // TODO: remove this maybe since it should be removed from history receipt when we know it has failed when checking receipt right?
+        /* if (!item.dataset.address) {
+            openValidatorModal();
+            return;
+        } */
+
         if (event.target.closest('.transaction-item')){
             handleFailedPaymentClick(item.dataset.txid, item);
         }
         
         return;
     }
+
+    // if not data-address then we can assume it's a stake or unstake transaction so when clicking on it it should lead to the validator modal
+    /* if (!item.dataset.address) {
+        openValidatorModal();
+        return;
+    } */
 
     if (item) {
         // Get the address from the data-address attribute
@@ -3832,9 +3854,9 @@ function handleHistoryItemClick(event) {
 }
 
 async function queryNetwork(url) {
-//console.log('query', url)
+    //console.log('queryNetwork', url)
     if (!await checkOnlineStatus()) {
-//TODO show user we are not online
+        //TODO show user we are not online
         console.warn("not online")
         //alert('not online')
         return null 
@@ -4420,21 +4442,27 @@ async function injectTx(tx, txid){
         data.txid = txid
         
         if (data?.result?.success) {
-            myData.pending.push({
+            const pendingTxData = {
                 txid: txid,
                 type: tx.type,
                 submittedts: timestamp,
                 checkedts: 0,
-                to: tx.to
-            });
+            };
+            if (tx.type === 'register') {
+                pendingTxData.username = tx.alias; 
+                pendingTxData.address = tx.from; // User's address (longAddress form)
+            } else if (tx.type === 'message' || tx.type === 'transfer' || tx.type === 'deposit_stake' || tx.type === 'withdraw_stake') {
+                pendingTxData.to = tx.to; 
+            }
+            myData.pending.push(pendingTxData);
         } else {
+            showToast('Error injecting transaction: ' + data?.result?.reason, 0, 'error');
             console.error('Error injecting transaction:', data?.result?.reason);
-            showToast('Error injecting transaction: ' + data?.result?.reason, 5000, 'error');
         }
 
         return data
     } catch (error) {
-        // TODO: handle object added to pending array if error during fetch and handle the optimistically added UI elements depending on tx type and what current UI is being displayed
+        showToast('Error injecting transaction: ' + error, 0, 'error');
         console.error('Error injecting transaction:', error);
         return null
     }
@@ -7215,7 +7243,7 @@ class MyProfileModal {
 }
 const myProfileModal = new MyProfileModal()
 
-function validateStakeInputs() {
+/* async  */function validateStakeInputs() {
     const nodeAddressInput = document.getElementById('stakeNodeAddress');
     const amountInput = document.getElementById('stakeAmount');
     const stakeForm = document.getElementById('stakeForm');
@@ -7259,7 +7287,28 @@ function validateStakeInputs() {
     let minStakeWei;
     try {
         amountWei = bigxnum2big(wei, amountStr);
+
+        // if the user has already staked there is no need to check the min stake amount so we can make this faster by returning early and enabling the button
+        // check if staked by querying the network using user's account address or we can check the validator modal but this can't be done if opened from validator modal
+        // we may need to use the res.account.operatorAccountInfo.stake.value to check how much the user has staked though and use that to calculate the min stake amount so the user doesn't need to calculate how much they need to stake to have the node running. If they have staked enough we can just return early and enable the button and let the user stake more if they want to.
+
+        // check if the user has staked. If they have, we can return early and enable the stake button to allow them to stake more
+        // without having to check the min stake amount
+        // TODO: even if staked though might still need to check the min stake amount since the user might have been penalized and need to stake some more to meet the network stake minimum
+
+        // actually if user is staked we need to get the amount they have staked and use that to calculate the min stake amount so the user doesn't need to calculate how much they need to stake to have the node running. If they have staked enough we can just return early and enable the button and let the user stake more if they want to.
+        /* const res = await queryNetwork(`/account/${myData.account.address}`);
+        const staked = res?.account?.operatorAccountInfo?.nominee;
+        
         minStakeWei = bigxnum2big(wei, minStakeAmountStr);
+
+        if (staked) {
+            // get the amount they have staked
+            const stakedAmount = res?.account?.operatorAccountInfo?.stake?.value;
+            // subtract the staked amount from the min stake amount and this will be the new min stake amount
+            minStakeWei = minStakeWei - stakedAmount;
+        } */
+
         /* if (amountWei <= 0n) {
              amountWarningElement.textContent = 'Amount must be positive.';
              amountWarningElement.style.display = 'block';
@@ -7337,30 +7386,42 @@ async function checkPendingTransactions() {
     
     // Process each transaction in reverse to safely remove items
     for (let i = myData.pending.length - 1; i >= 0; i--) {
-        const tx = myData.pending[i];
-        const type = tx.type;
-        const txid = tx.txid;
-        const toAddress = tx.to;
-        
-        if (tx.submittedts < eightSecondsAgo) {
+        const pendingTxInfo = myData.pending[i];
+        const { txid, type, submittedts } = pendingTxInfo;
+
+        if (submittedts < eightSecondsAgo) {
             console.log(`DEBUG: txid ${txid} is older than 8 seconds, checking receipt`);
-            const res = await queryNetwork(`/transaction/${txid}`);
 
-            if (res?.transaction?.type === 'withdraw_stake') {
-                const index = myData.wallet.history.findIndex(tx => tx.txid === txid);
-                if (index !== -1) {
-                    // covert amount to wei
-                    myData.wallet.history[index].amount = parse(stringify(res.transaction.additionalInfo.totalUnstakeAmount));
-                } else {
-                    console.log(`DEBUG: txid ${txid} not found in wallet history`);
-                }
-            }
-
+            // is submittedts> 15000 use new endpoint (/old_receipt/<tx_hash_without_0x_prefix>) to check for older receipts since other endpoint may not contain the receipt anymore
+            // if (now - submittedts > 15000) {
+            //     const res = await queryNetwork(`/old_receipt/${txid}`);
+            // } else {
+                const res = await queryNetwork(`/transaction/${txid}`);
+            // }
 
             if (res?.transaction?.success === true) {
-                console.log(`DEBUG: txid ${txid} is successful, removing from pending only`);
                 // comment out to test the pending txs removal logic
                 myData.pending.splice(i, 1);
+
+                if (type === 'register') {
+                    pendingPromiseService.resolve(txid, { 
+                        username: pendingTxInfo.username, 
+                        address: pendingTxInfo.address 
+                    });
+
+                    // update wallet balances
+                    await updateWalletBalances();
+                }
+
+                if (res?.transaction?.type === 'withdraw_stake') {
+                    const index = myData.wallet.history.findIndex(tx => tx.txid === txid);
+                    if (index !== -1) {
+                        // covert amount to wei
+                        myData.wallet.history[index].amount = parse(stringify(res.transaction.additionalInfo.totalUnstakeAmount));
+                    } else {
+                        console.log(`DEBUG: txid ${txid} not found in wallet history`);
+                    }
+                }
 
                 if (type === 'deposit_stake' || type === 'withdraw_stake') {
                     // show toast notification with the success message
@@ -7371,28 +7432,35 @@ async function checkPendingTransactions() {
                         openValidatorModal();
                     }
                 }
+
+                // remove the pending tx from the pending array
+                myData.pending.splice(i, 1);
             } 
             else if (res?.transaction?.success === false) {
                 console.log(`DEBUG: txid ${txid} failed, removing completely`);
                 // Check for failure reason in the transaction receipt
                 const failureReason = res?.transaction?.reason || 'Transaction failed';
                 console.log(`DEBUG: failure reason: ${failureReason}`);
-                
-                // Show toast notification with the failure reason
-                if (type !== 'deposit_stake' && type !== 'withdraw_stake') {
-                    showToast(failureReason, 5000, "error");
-                } else if (type === 'withdraw_stake') {
-                    showToast(`Unstake failed: ${failureReason}`, 5000, "error");
-                } else if (type === 'deposit_stake') {
-                    showToast(`Stake failed: ${failureReason}`, 5000, "error");
+
+                if (type === 'register') {
+                    pendingPromiseService.reject(txid, new Error(failureReason));
+                } else {
+                    // Show toast notification with the failure reason
+                    if (type === 'withdraw_stake') {
+                        showToast(`Unstake failed: ${failureReason}`, 0, "error");
+                    } else if (type === 'deposit_stake') {
+                        showToast(`Stake failed: ${failureReason}`, 0, "error");
+                    } else { // for messages, transfer etc.
+                        showToast(failureReason, 0, "error");
+                    }
+
+                    const toAddress = pendingTxInfo.to;
+                    updateTransactionStatus(txid, toAddress, 'failed', type);
+                    refreshCurrentView(txid);
                 }
                 
                 // Remove from pending array
                 myData.pending.splice(i, 1);
-                // Update the status of the transaction to 'failed'
-                updateTransactionStatus(txid, toAddress, 'failed', type);
-                // Then we'll want to refresh the current view
-                refreshCurrentView(txid);
                 
                 // refresh the validator modal if this is a withdraw_stake/deposit_stake and validator modal is open
                 if (type === 'withdraw_stake' || type === 'deposit_stake') {
@@ -7405,9 +7473,9 @@ async function checkPendingTransactions() {
                         openValidatorModal();
                     }
                 }
-            }
-            else {
+            } else {
                 console.log(`DEBUG: tx ${txid} status unknown, waiting for receipt`);
+                // TODO: implement timeout logic here if needed or in another else if for when queryNetwork returns null so we need to use the old_receipt endpoint
                 // Optional: Implement timeout logic here if needed
                 /* if (now - tx.submittedts > 15000) { // Example: 15 second timeout
                     console.log(`DEBUG: txid ${txid} timed out, removing completely`);
@@ -7486,3 +7554,32 @@ function updateTransactionStatus(txid, toAddress, status, type) {
     }
 }
 
+const pendingPromiseService = (() => {
+    const pendingPromises = new Map(); // txid -> { resolve, reject }
+  
+    function register(txid) {
+        return new Promise((resolve, reject) => {
+            pendingPromises.set(txid, { resolve, reject });
+        });
+    }
+  
+    function resolve(txid, data) {
+        if (pendingPromises.has(txid)) {
+            console.log(`DEBUG: resolving txid ${txid} with data ${data}`);
+            const promiseControls = pendingPromises.get(txid);
+            promiseControls.resolve(data);
+            pendingPromises.delete(txid);
+        }
+    }
+  
+    function reject(txid, error) {
+        if (pendingPromises.has(txid)) {
+            console.log(`DEBUG: rejecting txid ${txid} with error ${error}`);
+            const promiseControls = pendingPromises.get(txid);
+            promiseControls.reject(error);
+            pendingPromises.delete(txid);
+        }
+    }
+  
+    return { register, resolve, reject };
+  })();
