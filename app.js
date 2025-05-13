@@ -7242,7 +7242,7 @@ class MyProfileModal {
 }
 const myProfileModal = new MyProfileModal()
 
-function validateStakeInputs() {
+async function validateStakeInputs() {
     const nodeAddressInput = document.getElementById('stakeNodeAddress');
     const amountInput = document.getElementById('stakeAmount');
     const stakeForm = document.getElementById('stakeForm');
@@ -7287,35 +7287,44 @@ function validateStakeInputs() {
     try {
         amountWei = bigxnum2big(wei, amountStr);
 
-        // if the user has already staked there is no need to check the min stake amount so we can make this faster by returning early and enabling the button
-        // check if staked by querying the network using user's account address or we can check the validator modal but this can't be done if opened from validator modal
-        // we may need to use the res.account.operatorAccountInfo.stake.value to check how much the user has staked though and use that to calculate the min stake amount so the user doesn't need to calculate how much they need to stake to have the node running. If they have staked enough we can just return early and enable the button and let the user stake more if they want to.
+        // if amount is 0 or less, than return
+        if(amountWei <= 0n) {
+            return;
+        }
 
-        // check if the user has staked. If they have, we can return early and enable the stake button to allow them to stake more
-        // without having to check the min stake amount
-        // TODO: even if staked though might still need to check the min stake amount since the user might have been penalized and need to stake some more to meet the network stake minimum
+        // get the account info for the address
+        const address = longAddress(myData?.account?.keys?.address);
 
-        // actually if user is staked we need to get the amount they have staked and use that to calculate the min stake amount so the user doesn't need to calculate how much they need to stake to have the node running. If they have staked enough we can just return early and enable the button and let the user stake more if they want to.
-        /* const res = await queryNetwork(`/account/${myData.account.address}`);
-        const staked = res?.account?.operatorAccountInfo?.nominee;
+        // if the time stamps are more than 30 seconds ago, reset the staked amount and time stamps
+        if(getCorrectedTimestamp() - validateStakeInputs.timeStamps > 30000) {
+            const res = await queryNetwork(`/account/${address}`);
+            validateStakeInputs.stakedAmount = hex2big(res?.account?.operatorAccountInfo?.stake?.value);
+            validateStakeInputs.timeStamps = getCorrectedTimestamp();
+            validateStakeInputs.nominee = res?.account?.operatorAccountInfo?.nominee;
+        }
+
+
+        const staked = validateStakeInputs.nominee;
 
         minStakeWei = bigxnum2big(wei, minStakeAmountStr);
 
         if (staked) {
-            // get the amount they have staked
-            const stakedAmount = res?.account?.operatorAccountInfo?.stake?.value;
+            // get the amount they have staked from the account info
+            const stakedAmount = validateStakeInputs.stakedAmount;
+
             // subtract the staked amount from the min stake amount and this will be the new min stake amount
             minStakeWei = minStakeWei - stakedAmount;
-        } */
+            // if minStake is less than 0, then set the min stake to 0
+            if(minStakeWei < 0n) {
+                minStakeWei = 0n;
+            }
 
-        /* if (amountWei <= 0n) {
-             amountWarningElement.textContent = 'Amount must be positive.';
-             amountWarningElement.style.display = 'block';
-             return; // Keep button disabled
-        } */
+        }
     } catch (error) {
-        amountWarningElement.textContent = 'Invalid amount format.';
-        amountWarningElement.style.display = 'block';
+        showToast(`Error validating stake inputs: ${error}`, 0, "error");
+        console.error(`error validating stake inputs: ${error}`);
+        //amountWarningElement.textContent = 'Invalid amount format.';
+        //amountWarningElement.style.display = 'block';
         return; // Keep button disabled
     }
 
@@ -7340,7 +7349,9 @@ function validateStakeInputs() {
     amountWarningElement.style.display = 'none'; // Ensure warning is hidden if balance is sufficient
     nodeAddressWarningElement.style.display = 'none'; // Ensure address warning is also hidden
 }
-
+validateStakeInputs.stakedAmount = 0n
+validateStakeInputs.timeStamps = 0
+validateStakeInputs.nominee = false
 /**
  * Remove failed transaction from the contacts messages, pending, and wallet history
  * @param {string} txid - The transaction ID to remove
