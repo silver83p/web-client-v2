@@ -5824,15 +5824,15 @@ class WSManager {
         const data = JSON.parse(event.data);
 
         // Check if this is a subscription response
-        if (data.result !== undefined) {
-            if (data.result === true) {
+        if (data.id !== null && data.result !== undefined) {
+            if (data.result.subscription_status === true) {
               console.log('Server confirmed subscription successful');
               this.subscribed = true;
             } else if (data.error) {
               console.error('Server rejected subscription:', data.error);
               this.subscribed = false;
             }
-          } else if (data.account_id && data.timestamp) {
+          } else if (!data.id  && data.result.account_id && data.result.timestamp) {
             console.log('Received new chat notification in ws');
             const gotChats = await updateChatData();
             console.log('gotChats inside of ws.onmessage', gotChats);
@@ -5879,6 +5879,8 @@ class WSManager {
 
       // Create subscription message directly with the required format
       const subscribeMessage = {
+        jsonrpc: "2.0",
+        id: 1,
         method: "ChatEvent",
         params: ["subscribe", longAddress(myAccount.keys.address)]
       };
@@ -5913,6 +5915,8 @@ class WSManager {
       console.log('Unsubscribing from chat events');
 
       const unsubscribeMessage = {
+        jsonrpc: "2.0",
+        id: 1,    
         method: "ChatEvent",
         params: ["unsubscribe", longAddress(myAccount.keys.address)]
       };
