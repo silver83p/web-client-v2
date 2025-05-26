@@ -786,8 +786,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('toggleMenu').addEventListener('click', toggleMenu);
     document.getElementById('closeMenu').addEventListener('click', toggleMenu);
 
-    // About Modal
+    // About and Contact Modals
     aboutModal.load()
+    contactModal.load()
 
     // Sign In Modal
     signInBtn.addEventListener('click', openSignInModal);
@@ -7500,6 +7501,29 @@ class AboutModal {
     }
 }
 const aboutModal = new AboutModal()
+
+class ContactModal {
+    constructor() {
+        this.modal = document.getElementById('contactModal');
+    }
+
+    load() {
+        document.getElementById('openContact').addEventListener('click', () => this.open());
+        document.getElementById('closeContactModal').addEventListener('click', () => this.close());
+        document.getElementById('submitFeedback').addEventListener('click', () => {
+            window.open('https://github.com/liberdus/web-client-v2/issues', '_blank');
+        });
+    }
+
+    open() {
+        this.modal.classList.add('active');
+    }
+
+    close() {
+        this.modal.classList.remove('active');
+    }
+}
+const contactModal = new ContactModal()
 
 class MyProfileModal {
     constructor() {
