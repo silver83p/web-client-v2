@@ -844,6 +844,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Gateway Menu
     gatewayModal.load()
 
+    // Invite Modal
+    inviteModal.load()
+
     // TODO add comment about which send form this is for chat or assets
     document.getElementById('openSendModal').addEventListener('click', openSendModal);
     document.getElementById('closeSendModal').addEventListener('click', closeSendModal);
@@ -7562,6 +7565,90 @@ class TollModal {
 }
 
 const tollModal = new TollModal()
+
+// Invite Modal
+class InviteModal {
+    constructor() {
+        this.modal = document.getElementById('inviteModal');
+        this.inviteEmailInput = document.getElementById('inviteEmail');
+        this.invitePhoneInput = document.getElementById('invitePhone');
+        this.submitButton = document.querySelector('#inviteForm button[type="submit"]');
+    }
+
+    load() {
+        // Set up event listeners
+        document.getElementById('openInvite').addEventListener('click', () => this.open());
+        document.getElementById('closeInviteModal').addEventListener('click', () => this.close());
+        document.getElementById('inviteForm').addEventListener('submit', (event) => this.handleSubmit(event));
+
+        // Add input event listeners for email and phone fields
+        this.inviteEmailInput.addEventListener('input', () => this.validateInputs());
+        this.invitePhoneInput.addEventListener('input', () => this.validateInputs());
+    }
+
+    validateInputs() {
+        const email = this.inviteEmailInput.value.trim();
+        const phone = this.invitePhoneInput.value.trim();
+        if (email || phone) {
+            this.submitButton.disabled = false;
+        } else {
+            this.submitButton.disabled = true;
+        }
+    }
+
+    open() {
+        // Clear any previous values
+        this.inviteEmailInput.value = '';
+        this.invitePhoneInput.value = '';
+        this.validateInputs(); // Set initial button state
+        this.modal.classList.add('active');
+    }
+
+    close() {
+        this.modal.classList.remove('active');
+    }
+
+    async handleSubmit(event) {
+        event.preventDefault();
+
+        const email = this.inviteEmailInput.value.trim();
+        const phone = this.invitePhoneInput.value.trim();
+
+        if (!email && !phone) {
+            showToast('Please enter either an email or phone number', 3000, 'error');
+            // Ensure button is disabled again if somehow submitted while empty
+            this.submitButton.disabled = true;
+            return;
+        }
+
+        try {
+            const response = await fetch('http://arimaa.com:5050/api/invite', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user: myAccount.username,
+                    email: email || undefined,
+                    phone: phone || undefined
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('Invitation sent successfully!', 3000, 'success');
+                this.close();
+            } else {
+                showToast(data.error || 'Failed to send invitation', 3000, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to send invitation. Please try again.', 3000, 'error');
+        }
+    }
+}
+const inviteModal = new InviteModal()
+
 
 class AboutModal {
     constructor() {

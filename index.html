@@ -276,6 +276,7 @@
           <li class="menu-item" id="openExportForm">Backup</li>
           <li class="menu-item" id="openNetwork">Gateway</li>
           <li class="menu-item" id="openValidator">Validator</li>
+          <li class="menu-item" id="openInvite">Invite</li>
           <!--                <li class="menu-item" id="openSettings">Settings</li> -->
           <li class="menu-item" id="openExplorer">Explorer</li>
           <li class="menu-item" id="openMonitor">Network</li>
@@ -667,7 +668,7 @@
             ></textarea>
             <div class="toll-container">
               <span class="toll-label">Toll:</span>
-              <span class="toll-value" id="tollValue"></span> 
+              <span class="toll-value" id="tollValue"></span>
             </div>
           </div>
           <input type="hidden" id="retryOfTxId" />
@@ -1794,6 +1795,33 @@
           </div>
         </div>
       </div>
+
+      <!-- Invite Modal -->
+      <div class="modal" id="inviteModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeInviteModal"></button>
+          <div class="modal-title">Invite Friends</div>
+        </div>
+        <div class="form-container">
+          <p class="modal-summary">
+            Enter an email, phone number, or both. If both are provided, an
+            invitation will be sent to each.
+          </p>
+          <form id="inviteForm">
+            <div class="form-group">
+              <label for="inviteEmail">Email</label>
+              <input type="email" id="inviteEmail" class="form-control" placeholder="Enter email address" />
+            </div>
+            <div class="form-group">
+              <label for="invitePhone">Phone Number</label>
+              <input type="tel" id="invitePhone" class="form-control" placeholder="Enter phone number" />
+            </div>
+            <button type="submit" class="update-button">Send Invitation</button>
+          </form>
+          <a class="last-item" href="#" style="display: block; width: 0; height: 0; border: none; background: none;"></a>
+        </div>
+      </div>
+
       <a
         class="last-item"
         href="#"
