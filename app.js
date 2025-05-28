@@ -7570,6 +7570,9 @@ const tollModal = new TollModal()
 class InviteModal {
     constructor() {
         this.modal = document.getElementById('inviteModal');
+        this.inviteEmailInput = document.getElementById('inviteEmail');
+        this.invitePhoneInput = document.getElementById('invitePhone');
+        this.submitButton = document.querySelector('#inviteForm button[type="submit"]');
     }
 
     load() {
@@ -7577,12 +7580,27 @@ class InviteModal {
         document.getElementById('openInvite').addEventListener('click', () => this.open());
         document.getElementById('closeInviteModal').addEventListener('click', () => this.close());
         document.getElementById('inviteForm').addEventListener('submit', (event) => this.handleSubmit(event));
+
+        // Add input event listeners for email and phone fields
+        this.inviteEmailInput.addEventListener('input', () => this.validateInputs());
+        this.invitePhoneInput.addEventListener('input', () => this.validateInputs());
+    }
+
+    validateInputs() {
+        const email = this.inviteEmailInput.value.trim();
+        const phone = this.invitePhoneInput.value.trim();
+        if (email || phone) {
+            this.submitButton.disabled = false;
+        } else {
+            this.submitButton.disabled = true;
+        }
     }
 
     open() {
         // Clear any previous values
-        document.getElementById('inviteEmail').value = '';
-        document.getElementById('invitePhone').value = '';
+        this.inviteEmailInput.value = '';
+        this.invitePhoneInput.value = '';
+        this.validateInputs(); // Set initial button state
         this.modal.classList.add('active');
     }
 
@@ -7593,11 +7611,13 @@ class InviteModal {
     async handleSubmit(event) {
         event.preventDefault();
 
-        const email = document.getElementById('inviteEmail').value.trim();
-        const phone = document.getElementById('invitePhone').value.trim();
+        const email = this.inviteEmailInput.value.trim();
+        const phone = this.invitePhoneInput.value.trim();
 
         if (!email && !phone) {
             showToast('Please enter either an email or phone number', 3000, 'error');
+            // Ensure button is disabled again if somehow submitted while empty
+            this.submitButton.disabled = true;
             return;
         }
 
