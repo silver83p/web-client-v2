@@ -7487,9 +7487,11 @@ class TollModal {
     open() {
         this.modal.classList.add('active');
         // set currentTollValue to the toll value in wei
-        const toll = big2str(myData.settings.toll, 18)
-        const tollValue = toll == 0 ? '0' : toll
-        document.getElementById('currentTollValue').textContent = tollValue + ' LIB'
+        const toll = myData.settings.toll || 0n
+        const tollUnit = myData.settings.tollUnit || 'LIB'
+
+        this.updateTollDisplay(toll, tollUnit);
+
         this.currentCurrency = 'LIB'; // Reset currency state
         document.getElementById('tollCurrencySymbol').textContent = this.currentCurrency;
         document.getElementById('newTollAmountInput').value = ''; // Clear input field
@@ -7499,6 +7501,11 @@ class TollModal {
         this.modal.classList.remove('active');
     }    
 
+    /**
+     * Handle the toggle of the toll currency
+     * @param {Event} event - The event object
+     * @returns {void}
+     */
     async handleToggleTollCurrency(event) {
         event.preventDefault();
         const newTollAmountInput = document.getElementById('newTollAmountInput');
@@ -7507,19 +7514,24 @@ class TollModal {
         this.currentCurrency = this.currentCurrency === 'LIB' ? 'USD' : 'LIB';
         tollCurrencySymbol.textContent = this.currentCurrency;
 
-        const marketPrice = await getMarketPrice();
+        const scalabilityFactor = parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
         if (newTollAmountInput.value !== '') {
             const currentValue = parseFloat(newTollAmountInput.value);
-            const convertedValue = this.currentCurrency === 'USD' ? currentValue * marketPrice : currentValue / marketPrice;
-            newTollAmountInput.value = convertedValue.toFixed(6);
+            const convertedValue = this.currentCurrency === 'USD' ? currentValue * scalabilityFactor : currentValue / scalabilityFactor;
+            newTollAmountInput.value = convertedValue.toString();
         }
 
         // convert `currentTollValue`
-        const currentTollValue = big2str(myData.settings.toll, 18);
-        const convertedValue = this.currentCurrency === 'USD' ? currentTollValue * marketPrice : currentTollValue;
-        document.getElementById('currentTollValue').textContent = this.currentCurrency === 'USD' ? `$${convertedValue}` : `${convertedValue} LIB`;
+        //const currentTollValue = big2str(myData.settings.toll, 18);
+        //const convertedValue = this.currentCurrency === 'USD' ? currentTollValue * marketPrice : currentTollValue;
+        //document.getElementById('currentTollValue').textContent = this.currentCurrency === 'USD' ? `$${convertedValue}` : `${convertedValue} LIB`;
     }
 
+    /**
+     * Save and post the new toll to the network
+     * @param {Event} event - The event object
+     * @returns {Promise<void>}
+     */
     async saveAndPostNewToll(event) {
         event.preventDefault();
         const newTollAmountInput = document.getElementById('newTollAmountInput');
@@ -7530,42 +7542,67 @@ class TollModal {
             showToast('Invalid toll amount entered.', 'error');
             return;
         }
-
-        if (this.currentCurrency === 'USD') {
-            const marketPrice = await getMarketPrice();
-            if (marketPrice && marketPrice > 0) {
-                newTollValue = newTollValue / marketPrice;
-            }
-            else {
-                // console.error("Could not fetch market price to save toll in LIB.");
-                showToast('Error fetching market price. Cannot save toll.', 'error');
-                return;
-            }
-        }
-
-        // Assuming newTollValue is now in LIB, convert to wei (smallest unit, 10^18)
-        const newBigIntInWei = bigxnum2big(wei, newTollValue.toString());
+        const newToll = bigxnum2big(wei, newTollAmountInput.value);
 
         // Post the new toll to the network
-        const response = await this.postToll(newBigIntInWei, this.currentCurrency);
+        const response = await this.postToll(newToll, this.currentCurrency);
 
         if (response && response.result && response.result.success) {
-            this.editMyDataToll(newBigIntInWei);
+            this.editMyDataToll(newToll, this.currentCurrency);
         }
         else {
             console.error(`Toll submission failed for txid: ${response.txid}`);
             return;
         }
         
-        // Update the display for currentTollValue
-        document.getElementById('currentTollValue').textContent = newTollValue == 0 ? '0' : newTollValue.toFixed(6) // Display with 6 decimals for consistency
+        // Update the display for tollAmountLIB and tollAmountUSD
+        this.updateTollDisplay(newToll, this.currentCurrency);
     }
 
-    editMyDataToll(toll) {
+    /**
+     * Update the toll display in the UI
+     * @param {BigInt} toll - The toll value in wei
+     * @param {string} tollUnit - The unit of the toll
+     * @returns {void}
+     */
+    updateTollDisplay(toll, tollUnit) {
+        const scalabilityFactor = parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
+        let tollValueLib = ''
+        let tollValueUSD = ''
+
+        if (tollUnit == 'LIB') {
+            tollValueLib = big2str(toll, 18)
+            tollValueUSD = (parseFloat(big2str(toll, 18)) * scalabilityFactor).toString()
+        } else {
+            tollValueUSD = big2str(toll, 18)
+            tollValueLib = (parseFloat(big2str(toll, 18)) / scalabilityFactor).toString()
+        }
+
+        tollValueLib = parseFloat(tollValueLib).toString()
+        tollValueUSD = parseFloat(tollValueUSD).toString()
+
+        document.getElementById('tollAmountLIB').textContent = tollValueLib + ' LIB'
+        document.getElementById('tollAmountUSD').textContent = tollValueUSD + ' USD'
+    }
+
+    /**
+     * Edit the toll in myData.settings
+     * @param {BigInt} toll - The toll value in wei
+     * @param {string} tollUnit - The unit of the toll
+     * @returns {void}
+     */
+    editMyDataToll(toll, tollUnit) {
         this.oldToll = myData.settings.toll;
         myData.settings.toll = toll;
+        myData.settings.tollUnit = tollUnit;
     }
 
+    /**
+     * Post the toll to the network
+     * @param {BigInt} toll - The toll value in wei
+     * @param {string} tollUnit - The unit of the toll
+     * @returns {Promise<Object>} - The response from the network
+     */
     async postToll(toll, tollUnit) {
         const tollTx = {
             from: longAddress(myAccount.keys.address),
