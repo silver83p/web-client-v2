@@ -923,6 +923,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 
+    // Add focus event listener for message input to handle scrolling
+    document.querySelector('.message-input')?.addEventListener('focus', function() {
+        const messagesContainer = document.querySelector('.messages-container');
+        if (messagesContainer) {
+            // Check if we're already at the bottom (within 50px threshold)
+            const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= 50;
+            if (isAtBottom) {
+                // Wait for keyboard to appear and viewport to adjust
+                setTimeout(() => {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }, 300); // Increased delay to ensure keyboard is fully shown
+            }
+        }
+    });
+
     // Add new search functionality
     const searchInput = document.getElementById('searchInput');
     const messageSearch = document.getElementById('messageSearch');
