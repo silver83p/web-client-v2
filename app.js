@@ -7622,13 +7622,13 @@ class InviteModal {
         }
 
         try {
-            const response = await fetch('/invite', {
+            const response = await fetch('http://arimaa.com:5050/api/invite', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    username: myAccount.username,
+                    user: myAccount.username,
                     email: email || undefined,
                     phone: phone || undefined
                 })
