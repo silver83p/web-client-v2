@@ -844,6 +844,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Gateway Menu
     gatewayModal.load()
 
+    // Invite Modal
+    inviteModal.load()
+
     // TODO add comment about which send form this is for chat or assets
     document.getElementById('openSendModal').addEventListener('click', openSendModal);
     document.getElementById('closeSendModal').addEventListener('click', closeSendModal);
@@ -7562,6 +7565,70 @@ class TollModal {
 }
 
 const tollModal = new TollModal()
+
+// Invite Modal
+class InviteModal {
+    constructor() {
+        this.modal = document.getElementById('inviteModal');
+    }
+
+    load() {
+        // Set up event listeners
+        document.getElementById('openInvite').addEventListener('click', () => this.open());
+        document.getElementById('closeInviteModal').addEventListener('click', () => this.close());
+        document.getElementById('inviteForm').addEventListener('submit', (event) => this.handleSubmit(event));
+    }
+
+    open() {
+        // Clear any previous values
+        document.getElementById('inviteEmail').value = '';
+        document.getElementById('invitePhone').value = '';
+        this.modal.classList.add('active');
+    }
+
+    close() {
+        this.modal.classList.remove('active');
+    }
+
+    async handleSubmit(event) {
+        event.preventDefault();
+
+        const email = document.getElementById('inviteEmail').value.trim();
+        const phone = document.getElementById('invitePhone').value.trim();
+
+        if (!email && !phone) {
+            showToast('Please enter either an email or phone number', 3000, 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/invite', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: myAccount.username,
+                    email: email || undefined,
+                    phone: phone || undefined
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('Invitation sent successfully!', 3000, 'success');
+                this.close();
+            } else {
+                showToast(data.error || 'Failed to send invitation', 3000, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to send invitation. Please try again.', 3000, 'error');
+        }
+    }
+}
+const inviteModal = new InviteModal()
+
 
 class AboutModal {
     constructor() {
