@@ -778,6 +778,50 @@
         </a>
       </div>
 
+      <!-- Friend Modal -->
+      <div class="modal" id="friendModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeFriendModal"></button>
+          <div class="modal-title">Friend Status</div>
+        </div>
+        <div class="modal-content">
+          <form id="friendForm">
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="friendStatus" value="friend" checked>
+                <div class="radio-content">
+                  <span class="radio-label">Friend</span>
+                  <span class="radio-description">Share my profile info and no toll required</span>
+                </div>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="friendStatus" value="acquaintance">
+                <div class="radio-content">
+                  <span class="radio-label">Acquaintance</span>
+                  <span class="radio-description">No toll required</span>
+                </div>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="friendStatus" value="unknown">
+                <div class="radio-content">
+                  <span class="radio-label">Unknown</span>
+                  <span class="radio-description">Toll required</span>
+                </div>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="friendStatus" value="blocked">
+                <div class="radio-content">
+                  <span class="radio-label">Blocked</span>
+                  <span class="radio-description">Cannot send me messages</span>
+                </div>
+              </label>
+            </div>
+            <button type="submit" class="update-button">Update</button>
+          </form>
+          <a class="last-item" href="#" style="display: block; width: 0; height: 0; border: none; background: none;"></a>
+        </div>
+      </div>
+
       <!-- Receive Modal -->
       <div class="modal fixed-header" id="receiveModal">
         <div class="modal-header">
