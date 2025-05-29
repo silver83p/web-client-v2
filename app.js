@@ -3308,7 +3308,8 @@ class FriendModal {
             chatId: chatId_,
             required: requiredNum,
             type: 'update_chat_toll',
-            timestamp: getCorrectedTimestamp()
+            timestamp: getCorrectedTimestamp(),
+            friend: friend
         }
         const txid = await signObj(tx, myAccount.keys)
         const res = await injectTx(tx, txid)
@@ -3332,6 +3333,13 @@ class FriendModal {
         const selectedStatus = this.friendForm.querySelector('input[name="friendStatus"]:checked')?.value;
         if (!selectedStatus) return;
 
+        // send transaction to update chat toll
+        const res = await this.postUpdateTollRequired(this.currentContactAddress, contact.friend)
+        if (res?.transaction?.success === false) {
+            console.log(`[handleFriendSubmit] update_chat_toll transaction failed: ${res?.transaction?.reason}. Did not update contact status.`);
+            return;
+        }
+
         // Update friend status based on selected value
         contact.friend = Number(selectedStatus);
 
@@ -3343,13 +3351,6 @@ class FriendModal {
             contact.friend === 3 ? 'Added as Friend' :
             'Error updating friend status'
         );
-         
-        // send transaction to update chat toll
-        const res = await this.postUpdateTollRequired(this.currentContactAddress, contact.friend)
-        if (res?.transaction?.success === false) {
-            console.log(`[handleFriendSubmit] update_chat_toll transaction failed: ${res?.transaction?.reason}`);
-            return;
-        }
 
         // Update button appearance
         //this.updateFriendButton(contact.friend);
@@ -4857,6 +4858,13 @@ async function injectTx(tx, txid){
             myData.pending = [];
         }
 
+        let friend = null;
+        if (tx.type === 'update_chat_toll') {
+            // remove and store friend value from tx
+            friend = tx.friend;
+            delete tx.friend;
+        }
+
         const options = {
             method: 'POST',
             headers: {
@@ -4879,6 +4887,8 @@ async function injectTx(tx, txid){
             if (tx.type === 'register') {
                 pendingTxData.username = tx.alias;
                 pendingTxData.address = tx.from; // User's address (longAddress form)
+            } else if (tx.type === 'update_chat_toll') {
+                pendingTxData.friend = friend;
             } else if (tx.type === 'message' || tx.type === 'transfer' || tx.type === 'deposit_stake' || tx.type === 'withdraw_stake') {
                 pendingTxData.to = tx.to;
             }
@@ -8178,7 +8188,9 @@ async function checkPendingTransactions() {
                         tollModal.editMyDataToll(tollModal.oldToll);
                     } 
                     else if (type === 'update_chat_toll') {
-                        showToast(`Update chat toll failed: ${failureReason}`, 0, "error");
+                        showToast(`Update contact status failed: ${failureReason}. Reverting contact to old status.`, 0, "error");
+                        // revert the local myData.contacts[toAddress].friend to the old value
+                        myData.contacts[pendingTxInfo.to].friend = pendingTxInfo.friend;
                     }
                     else { // for messages, transfer etc.
                         showToast(failureReason, 0, "error");
