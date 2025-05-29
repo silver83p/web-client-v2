@@ -3136,6 +3136,8 @@ handleSendAsset.timestamp = getCorrectedTimestamp()
 class ContactInfoModalManager {
     constructor() {
         this.modal = document.getElementById('contactInfoModal');
+        this.friendModal = document.getElementById('friendModal');
+        this.friendForm = document.getElementById('friendForm');
         this.currentContactAddress = null;
         this.needsContactListUpdate = false;  // track if we need to update the contact list
         this.setupEventListeners();
@@ -3151,25 +3153,14 @@ class ContactInfoModalManager {
         // Add friend button
         document.getElementById('addFriendButton').addEventListener('click', () => {
             if (!this.currentContactAddress) return;
-
-            const contact = myData.contacts[this.currentContactAddress];
-            if (!contact) return;
-
-            // Toggle friend status
-            contact.friend = !contact.friend;
-
-            // Show appropriate toast message
-            showToast(contact.friend ? 'Added to friends' : 'Removed from friends');
-
-            // Update button appearance
-            this.updateFriendButton(contact.friend);
-
-            // Mark that we need to update the contact list
-            this.needsContactListUpdate = true;
-
-            // Save state
-            saveState();
+            this.openFriendModal();
         });
+
+        // Friend modal form submission
+        this.friendForm.addEventListener('submit', (event) => this.handleFriendSubmit(event));
+        
+        // Friend modal close button
+        this.friendModal.querySelector('.back-button').addEventListener('click', () => this.closeFriendModal());
 
         document.getElementById('nameEditButton').addEventListener('click', openEditContactModal);
 
@@ -3196,6 +3187,55 @@ class ContactInfoModalManager {
         } else {
             button.classList.remove('removing');
         }
+    }
+
+    // Open the friend modal
+    openFriendModal() {
+        const contact = myData.contacts[this.currentContactAddress];
+        if (!contact) return;
+        
+        // Set the current friend status
+        const status = contact?.friend ? 'friend' : 'unknown';
+        const radio = this.friendForm.querySelector(`input[value="${status}"]`);
+        if (radio) radio.checked = true;
+        
+        this.friendModal.classList.add('active');
+    }
+
+    // Close the friend modal
+    closeFriendModal() {
+        this.friendModal.classList.remove('active');
+    }
+
+    // Handle friend form submission
+    async handleFriendSubmit(event) {
+        event.preventDefault();
+        
+        if (!this.currentContactAddress) return;
+        
+        const contact = myData.contacts[this.currentContactAddress];
+        if (!contact) return;
+
+        const selectedStatus = this.friendForm.querySelector('input[name="friendStatus"]:checked')?.value;
+        if (!selectedStatus) return;
+
+        // Update friend status based on selected value
+        contact.friend = selectedStatus === 'friend' || selectedStatus === 'acquaintance';
+
+        // Show appropriate toast message
+        showToast(contact.friend ? 'Added to friends' : 'Removed from friends');
+
+        // Update button appearance
+        this.updateFriendButton(contact.friend);
+
+        // Mark that we need to update the contact list
+        this.needsContactListUpdate = true;
+
+        // Save state
+        saveState();
+
+        // Close the friend modal
+        this.closeFriendModal();
     }
 
     // Update contact info values
