@@ -6990,20 +6990,6 @@ async function submitUnstakeTransaction(nodeAddress) {
     }
 }
 
- async function postStake(nodeAddress, amount, keys) {
-    const stakeTx = {
-        type: "deposit_stake",
-        nominator: longAddress(myAccount.keys.address),
-        nominee: nodeAddress,
-        stake: amount,
-        timestamp: getCorrectedTimestamp(),
-    };
-
-    const txid = await signObj(stakeTx, keys)
-    const response = await injectTx(stakeTx, txid);
-    return response;
- }
-
  async function postUnstake(nodeAddress) {
     // TODO: need to query network for the correct nominator address
     const unstakeTx = {
@@ -7841,6 +7827,10 @@ class ValidatorStakingModal {
         this.balanceDisplay = document.getElementById('stakeAvailableBalanceDisplay');
         this.amountWarning = document.getElementById('stakeAmountWarning');
         this.nodeAddressWarning = document.getElementById('stakeNodeAddressWarning');
+
+        this.stakedAmount = 0n;
+        this.lastValidationTimestamp = 0;
+        this.hasNominee = false;
     }
 
     load() {
@@ -7848,7 +7838,8 @@ class ValidatorStakingModal {
         this.form.addEventListener('submit', (event) => this.handleSubmit(event));
         this.backButton.addEventListener('click', () => this.close());
 
-        this.debouncedValidateStakeInputs = debounce(validateStakeInputs, 300);
+        this.debouncedValidateStakeInputs = debounce(() => this.validateStakeInputs(), 300);
+
         this.nodeAddressInput.addEventListener('input', this.debouncedValidateStakeInputs);
         this.amountInput.addEventListener('input', this.debouncedValidateStakeInputs);
 
@@ -7887,7 +7878,7 @@ class ValidatorStakingModal {
         }
 
         // Call initial validation
-        validateStakeInputs();
+        this.validateStakeInputs();
     }
 
     close() {
@@ -7921,7 +7912,7 @@ class ValidatorStakingModal {
         try {
             this.backButton.disabled = true;
 
-            const response = await postStake(nodeAddress, amount_in_wei, myAccount.keys);
+            const response = await this.postStake(nodeAddress, amount_in_wei, myAccount.keys);
             console.log("Stake Response:", response);
 
             if (response && response.result && response.result.success) {
@@ -7951,119 +7942,114 @@ class ValidatorStakingModal {
             this.backButton.disabled = false;
         }
     }
-}
-const validatorStakingModal = new ValidatorStakingModal()
 
-async function validateStakeInputs() {
-    const nodeAddressInput = document.getElementById('stakeNodeAddress');
-    const amountInput = document.getElementById('stakeAmount');
-    const stakeForm = document.getElementById('stakeForm');
-    const amountWarningElement = document.getElementById('stakeAmountWarning'); // Renamed for clarity
-    const nodeAddressWarningElement = document.getElementById('stakeNodeAddressWarning'); // New warning element
-    const submitButton = document.getElementById('submitStake');
-
-    const nodeAddress = nodeAddressInput.value.trim();
-    const amountStr = amountInput.value.trim();
-    const minStakeAmountStr = stakeForm.dataset.minStake || '0';
-
-    // Default state: button disabled, warnings hidden
-    submitButton.disabled = true;
-    amountWarningElement.style.display = 'none';
-    amountWarningElement.textContent = '';
-    nodeAddressWarningElement.style.display = 'none'; // Hide address warning too
-    nodeAddressWarningElement.textContent = '';
-
-    // Check 1: Empty Fields
-    if ( !amountStr || !nodeAddress) {
-        // Keep button disabled, no specific warning needed for empty fields yet
-        return;
+    async postStake(nodeAddress, amount, keys) {
+        const stakeTx = {
+            type: "deposit_stake",
+            nominator: longAddress(myAccount.keys.address),
+            nominee: nodeAddress,
+            stake: amount,
+            timestamp: getCorrectedTimestamp()
+        };
+    
+        const txid = await signObj(stakeTx, keys);
+        const response = await injectTx(stakeTx, txid);
+        return response;
     }
 
-    // Check 1.5: Node Address Format (64 hex chars)
-    const addressRegex = /^[0-9a-fA-F]{64}$/;
-    if (!addressRegex.test(nodeAddress)) {
-        nodeAddressWarningElement.textContent = 'Invalid node address format (must be 64 hex characters).';
-        nodeAddressWarningElement.style.display = 'block';
-        amountWarningElement.style.display = 'none'; // Hide amount warning if address is bad
-        amountWarningElement.textContent = '';
-        return; // Keep button disabled
-    } else {
-        // Ensure address warning is hidden if format is now valid
-        nodeAddressWarningElement.style.display = 'none';
-        nodeAddressWarningElement.textContent = '';
-    }
+    async validateStakeInputs() {
+        const nodeAddress = this.nodeAddressInput.value.trim();
+        const amountStr = this.amountInput.value.trim();
+        const minStakeAmountStr = this.form.dataset.minStake || '0';
 
-    // --- Amount Checks ---
-    let amountWei;
-    let minStakeWei;
-    try {
-        amountWei = bigxnum2big(wei, amountStr);
-
-        // if amount is 0 or less, than return
-        if(amountWei <= 0n) {
+        // Default state: button disabled, warnings hidden
+        this.submitButton.disabled = true;
+        this.amountWarning.style.display = 'none';
+        this.amountWarning.textContent = '';
+        this.nodeAddressWarning.style.display = 'none';
+        this.nodeAddressWarning.textContent = '';
+    
+        // Check 1: Empty Fields
+        if (!amountStr || !nodeAddress) {
             return;
         }
-
-        // get the account info for the address
-        const address = longAddress(myData?.account?.keys?.address);
-
-        // if the time stamps are more than 30 seconds ago, reset the staked amount and time stamps
-        if(getCorrectedTimestamp() - validateStakeInputs.timeStamps > 30000) {
-            const res = await queryNetwork(`/account/${address}`);
-            validateStakeInputs.stakedAmount = res?.account?.operatorAccountInfo?.stake || 0n;
-            validateStakeInputs.timeStamps = getCorrectedTimestamp();
-            validateStakeInputs.nominee = res?.account?.operatorAccountInfo?.nominee;
+    
+        // Check 1.5: Node Address Format (64 hex chars)
+        const addressRegex = /^[0-9a-fA-F]{64}$/;
+        if (!addressRegex.test(nodeAddress)) {
+            this.nodeAddressWarning.textContent = 'Invalid node address format (must be 64 hex characters).';
+            this.nodeAddressWarning.style.display = 'block';
+            this.amountWarning.style.display = 'none';
+            this.amountWarning.textContent = '';
+            return;
+        } else {
+            this.nodeAddressWarning.style.display = 'none';
+            this.nodeAddressWarning.textContent = '';
         }
-
-
-        const staked = validateStakeInputs.nominee;
-
-        minStakeWei = bigxnum2big(wei, minStakeAmountStr);
-
-        if (staked) {
-            // get the amount they have staked from the account info
-            const stakedAmount = validateStakeInputs.stakedAmount;
-
-            // subtract the staked amount from the min stake amount and this will be the new min stake amount
-            minStakeWei = minStakeWei - stakedAmount;
-            // if minStake is less than 0, then set the min stake to 0
-            if(minStakeWei < 0n) {
-                minStakeWei = 0n;
+    
+        // --- Amount Checks ---
+        let amountWei;
+        let minStakeWei;
+        try {
+            amountWei = bigxnum2big(wei, amountStr);
+    
+            // if amount is 0 or less, than return
+            if(amountWei <= 0n) {
+                return;
             }
-
+    
+            // get the account info for the address
+            const address = longAddress(myData?.account?.keys?.address);
+    
+            // if the time stamps are more than 30 seconds ago, reset the staked amount and time stamps
+            if(getCorrectedTimestamp() - this.lastValidationTimestamp > 30000) {
+                const res = await queryNetwork(`/account/${address}`);
+                this.stakedAmount = res?.account?.operatorAccountInfo?.stake || 0n;
+                this.lastValidationTimestamp = getCorrectedTimestamp();
+                this.hasNominee = res?.account?.operatorAccountInfo?.nominee;
+            }
+    
+            const staked = this.hasNominee;
+            minStakeWei = bigxnum2big(wei, minStakeAmountStr);
+    
+            if (staked) {
+                // get the amount they have staked from the account info
+                const stakedAmount = this.stakedAmount;
+    
+                // subtract the staked amount from the min stake amount and this will be the new min stake amount
+                minStakeWei = minStakeWei - stakedAmount;
+                // if minStake is less than 0, then set the min stake to 0
+                if(minStakeWei < 0n) {
+                    minStakeWei = 0n;
+                }
+            }
+        } catch (error) {
+            showToast(`Error validating stake inputs: ${error}`, 0, "error");
+            console.error(`error validating stake inputs: ${error}`);
+            return;
         }
-    } catch (error) {
-        showToast(`Error validating stake inputs: ${error}`, 0, "error");
-        console.error(`error validating stake inputs: ${error}`);
-        //amountWarningElement.textContent = 'Invalid amount format.';
-        //amountWarningElement.style.display = 'block';
-        return; // Keep button disabled
+    
+        // Check 2: Minimum Stake Amount
+        if (amountWei < minStakeWei) {
+            const minStakeFormatted = big2str(minStakeWei, 18).slice(0, -16);
+            this.amountWarning.textContent = `Amount must be at least ${minStakeFormatted} LIB.`;
+            this.amountWarning.style.display = 'block';
+            return;
+        }
+    
+        // Check 3: Sufficient Balance
+        const hasSufficientBalance = await validateBalance(amountWei, 0, this.amountWarning);
+        if (!hasSufficientBalance) {
+            return;
+        }
+    
+        // All checks passed: Enable button
+        this.submitButton.disabled = false;
+        this.amountWarning.style.display = 'none';
+        this.nodeAddressWarning.style.display = 'none';
     }
-
-    // Check 2: Minimum Stake Amount
-    if (amountWei < minStakeWei) {
-        const minStakeFormatted = big2str(minStakeWei, 18).slice(0, -16); // Example formatting
-        amountWarningElement.textContent = `Amount must be at least ${minStakeFormatted} LIB.`;
-        amountWarningElement.style.display = 'block';
-        return; // Keep button disabled
-    }
-
-    // Check 3: Sufficient Balance (using existing function)
-    // Assuming LIB is asset index 0 since after creation of wallet, LIB is the first asset
-    const hasSufficientBalance = await validateBalance(amountWei, 0, amountWarningElement);
-    if (!hasSufficientBalance) {
-        // validateBalance already shows the warning in amountWarningElement
-        return; // Keep button disabled
-    }
-
-    // All checks passed: Enable button
-    submitButton.disabled = false;
-    amountWarningElement.style.display = 'none'; // Ensure warning is hidden if balance is sufficient
-    nodeAddressWarningElement.style.display = 'none'; // Ensure address warning is also hidden
 }
-validateStakeInputs.stakedAmount = 0n
-validateStakeInputs.timeStamps = 0
-validateStakeInputs.nominee = false
+const validatorStakingModal = new ValidatorStakingModal()
 
 /**
  * Remove failed transaction from the contacts messages, pending, and wallet history
