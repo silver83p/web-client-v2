@@ -831,7 +831,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     tollModal.load()
 
     // Stake Modal
-    validatorStakingModal.load()
+    stakeValidatorModal.load()
 
     // Export Form Modal
     backupAccountModal.load()
@@ -7815,7 +7815,7 @@ class MyProfileModal {
 }
 const myProfileModal = new MyProfileModal()
 
-class ValidatorStakingModal {
+class StakeValidatorModal {
     constructor() {
         this.modal = document.getElementById('stakeModal');
         this.form = document.getElementById('stakeForm');
@@ -8049,7 +8049,7 @@ class ValidatorStakingModal {
         this.nodeAddressWarning.style.display = 'none';
     }
 }
-const validatorStakingModal = new ValidatorStakingModal()
+const stakeValidatorModal = new StakeValidatorModal()
 
 /**
  * Remove failed transaction from the contacts messages, pending, and wallet history
