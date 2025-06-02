@@ -8242,9 +8242,6 @@ async function checkPendingTransactions() {
                         username: pendingTxInfo.username,
                         address: pendingTxInfo.address
                     });
-
-                    // update wallet balances
-                    await updateWalletBalances();
                 }
 
                 if (res?.transaction?.type === 'withdraw_stake') {
@@ -8327,6 +8324,8 @@ async function checkPendingTransactions() {
             }
         }
     }
+    // update wallet balances
+    updateWalletBalances();
 }
 
 /**
