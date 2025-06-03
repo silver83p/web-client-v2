@@ -3101,11 +3101,6 @@ async function updateAssetPricesIfNeeded() {
 }
 
 function openHistoryModal() {
-    // remove notification from wallet-action-button if it is active
-    if (document.getElementById('openHistoryModal').classList.contains('has-notification')) {
-        document.getElementById('openHistoryModal').classList.remove('has-notification');
-    }
-
     const modal = document.getElementById('historyModal');
     modal.classList.add('active');
 
