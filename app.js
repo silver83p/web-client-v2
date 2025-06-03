@@ -864,9 +864,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     restoreAccountModal.load()
 
     // Validator Modals
-    document.getElementById('openValidator').addEventListener('click', openValidatorModal);
-    document.getElementById('closeValidatorModal').addEventListener('click', closeValidatorModal);
-    document.getElementById('submitUnstake').addEventListener('click', confirmAndUnstakeCurrentUserNominee);
+    validatorStakingModal.load()
 
     // Toll Modal
     tollModal.load()
@@ -3222,7 +3220,7 @@ function handleHistoryItemClick(event) {
         // Check if this is a stake/unstake transaction by looking at the memo
         const memo = item.querySelector('.transaction-memo')?.textContent;
         if (memo === 'stake' || memo === 'unstake') {
-            openValidatorModal();
+            validatorStakingModal.open();
             return;
         }
 
@@ -5730,10 +5728,6 @@ async function openValidatorModal() {
     }
 }
 
-function closeValidatorModal() {
-    document.getElementById('validatorModal').classList.remove('active');
-}
-
 // fetching market price by invoking `updateAssetPricesIfNeeded` and extracting from myData.assetPrices
 async function getMarketPrice() {
 
@@ -5853,8 +5847,8 @@ async function submitUnstakeTransaction(nodeAddress) {
                 txid: response.txid
             });
 
-            closeValidatorModal();
-            openValidatorModal();
+            validatorStakingModal.close();
+            validatorStakingModal.open();
         } else {
             // Try to get a more specific reason for failure
             const reason = response?.result?.reason || 'Unknown error from API.';
@@ -6697,6 +6691,38 @@ class MyProfileModal {
 }
 const myProfileModal = new MyProfileModal()
 
+class ValidatorStakingModal {
+    constructor() {
+        this.modal = document.getElementById('validatorModal');
+        this.stakeButton = document.getElementById('openStakeModal');
+        this.unstakeButton = document.getElementById('submitUnstake');
+    }
+
+    load() {
+        // Setup event listeners when DOM is loaded
+        // stakeButton handling is in the StakeValidatorModal
+        this.unstakeButton.addEventListener('click', () => this.handleUnstake());
+
+        // Add listeners for opening and closing the modal
+        document.getElementById('openValidator').addEventListener('click', () => this.open());
+        document.getElementById('closeValidatorModal').addEventListener('click', () => this.close());
+    }
+
+    open() {
+        // Call the existing openValidatorModal function
+        openValidatorModal();
+    }
+
+    close() {
+        this.modal.classList.remove('active');
+    }
+
+    handleUnstake() {
+        confirmAndUnstakeCurrentUserNominee();
+    }
+}
+const validatorStakingModal = new ValidatorStakingModal()
+
 class StakeValidatorModal {
     constructor() {
         this.modal = document.getElementById('stakeModal');
@@ -6810,11 +6836,11 @@ class StakeValidatorModal {
 
                 showToast('Submitted stake transaction...', 3000, 'loading');
 
-                closeValidatorModal();
+                validatorStakingModal.close();
                 this.nodeAddressInput.value = ''; // Clear form
                 this.amountInput.value = '';
                 this.close();
-                openValidatorModal();
+                validatorStakingModal.open();
             }
         } catch (error) {
             console.error('Stake transaction error:', error);
@@ -8401,8 +8427,8 @@ async function checkPendingTransactions() {
                     showToast(`${type === 'deposit_stake' ? 'Stake' : 'Unstake'} transaction successful`, 5000, 'success');
                     // refresh only if validator modal is open
                     if (document.getElementById('validatorModal').classList.contains('active')) {
-                        closeValidatorModal();
-                        openValidatorModal();
+                        validatorStakingModal.close();
+                        validatorStakingModal.open();
                     }
                 }
 
@@ -8461,8 +8487,8 @@ async function checkPendingTransactions() {
 
                     if (document.getElementById('validatorModal').classList.contains('active')) {
                         // refresh the validator modal
-                        closeValidatorModal();
-                        openValidatorModal();
+                        validatorStakingModal.close();
+                        validatorStakingModal.open();
                     }
                 }
             } else {
