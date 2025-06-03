@@ -5508,225 +5508,6 @@ function updateWebSocketIndicator() {
 updateWebSocketIndicator.lastSubscribed = 0
 
 // Validator Modals
-async function openValidatorModal() {
-    // Get modal elements
-    const validatorModal = document.getElementById('validatorModal');
-    const loadingElement = document.getElementById('validator-loading');
-    const errorElement = document.getElementById('validator-error-message');
-    const detailsElement = document.getElementById('validator-details');
-    // Get elements needed for conditional logic early
-    const nomineeLabelElement = document.getElementById('validator-nominee-label');
-    const nomineeValueElement = document.getElementById('validator-nominee');
-    const userStakeLibItem = document.getElementById('validator-user-stake-lib-item');
-    const userStakeUsdItem = document.getElementById('validator-user-stake-usd-item');
-    const unstakeButton = document.getElementById('submitUnstake');
-    const stakeButton = document.getElementById('openStakeModal');
-    const pendingSkeletonBar1 = document.getElementById('pending-nominee-skeleton-1');
-    const pendingTxTextInBar = document.getElementById('pending-tx-text-in-bar');
-
-    // Reset UI
-    if (loadingElement) loadingElement.style.display = 'block';
-    if (detailsElement) detailsElement.style.display = 'none';
-    if (errorElement) {
-        errorElement.style.display = 'none';
-        errorElement.textContent = ''; // Clear previous errors
-    }
-    // Reset conditional elements to default state (label text might change later)
-    if (nomineeLabelElement) nomineeLabelElement.textContent = 'Nominated Validator:'; // Default label
-    if (nomineeValueElement) nomineeValueElement.textContent = ''; // Clear value initially
-    // Ensure stake items are visible by default (using flex as defined in styles.css)
-    if (userStakeLibItem) userStakeLibItem.style.display = 'flex';
-    if (userStakeUsdItem) userStakeUsdItem.style.display = 'flex';
-    // Disable unstake button initially while loading/checking
-    if (unstakeButton) unstakeButton.disabled = true;
-    if (stakeButton) stakeButton.disabled = false;
-
-    if (validatorModal) validatorModal.classList.add('active'); // Open modal immediately
-
-    // --- START: New logic for text in skeleton bar ---
-    // Reset elements to default state before checking for pending tx
-    // Pending Transaction UI
-    if (nomineeValueElement) nomineeValueElement.style.display = ''; // Show actual nominee value by default
-    if (pendingTxTextInBar) pendingTxTextInBar.style.display = 'none';
-    if (pendingSkeletonBar1) pendingSkeletonBar1.style.display = 'none';
-
-    let currentPendingTx = null;
-    if (myData && myData.pending && Array.isArray(myData.pending) && myData.pending.length > 0) {
-        currentPendingTx = myData.pending.find(
-            tx => tx.type === 'deposit_stake' || tx.type === 'withdraw_stake'
-        );
-    }
-
-    if (currentPendingTx) {
-        if (detailsElement) detailsElement.style.display = 'block'; // Ensure main section is visible
-        if (pendingSkeletonBar1) pendingSkeletonBar1.style.display = 'flex'; // Use flex to help center text in span
-        if (pendingTxTextInBar) {
-            pendingTxTextInBar.textContent = currentPendingTx.type === 'withdraw_stake' ? 'Pending Unstake Transaction' : 'Pending Stake Transaction';
-            pendingTxTextInBar.style.display = 'block';
-        }
-        if (currentPendingTx.type === 'deposit_stake' && stakeButton) stakeButton.disabled = true;
-    }
-    // --- END: New logic for text in skeleton bar ---
-
-    let nominee = null;
-
-    try {
-        // Fetch Data Concurrently
-        const userAddress = myData?.account?.keys?.address;
-        if (!userAddress) {
-            console.warn("User address not found in myData. Skipping user account fetch.");
-            // Decide how to handle this - maybe show an error or a specific state?
-            // For now, we'll proceed, but nominee/user stake will be unavailable.
-        }
-
-        const [userAccountData, networkAccountData, updatePrices] = await Promise.all([
-            userAddress ? queryNetwork(`/account/${longAddress(userAddress)}`) : Promise.resolve(null), // Fetch User Data if available
-            queryNetwork('/account/0000000000000000000000000000000000000000000000000000000000000000'), // Fetch Network Data
-            updateWalletBalances()
-        ]);
-
-        // Extract Raw Data (API values are now actual BigInt objects or other types)
-        nominee = userAccountData?.account?.operatorAccountInfo?.nominee; // string
-        const userStakedBaseUnits = userAccountData?.account?.operatorAccountInfo?.stake; // BigInt object
-
-        const stakeRequiredUsd = networkAccountData?.account?.current?.stakeRequiredUsd; // BigInt object
-        const stabilityScaleMul = networkAccountData?.account?.current?.stabilityScaleMul; // number
-        const stabilityScaleDiv = networkAccountData?.account?.current?.stabilityScaleDiv; // number
-
-        const marketPrice = await getMarketPrice(); // number or null
-
-        // Calculate Derived Values
-        let stabilityFactor = null;
-        if (stabilityScaleMul != null && stabilityScaleDiv != null && Number(stabilityScaleDiv) !== 0) {
-            stabilityFactor = Number(stabilityScaleMul) / Number(stabilityScaleDiv);
-        }
-
-        let stakeAmountLibBaseUnits = null; // This will be a BigInt object or null
-        if (stakeRequiredUsd != null && typeof stakeRequiredUsd === 'bigint' &&
-            stabilityScaleMul != null && typeof stabilityScaleMul === 'number' &&
-            stabilityScaleDiv != null && typeof stabilityScaleDiv === 'number' && stabilityScaleDiv !== 0) {
-            try {
-                // No need to parse stakeRequiredUsd from string, it's already a BigInt
-                const scaleMulBigInt = BigInt(stabilityScaleMul);
-                const scaleDivBigInt = BigInt(stabilityScaleDiv);
-                if (scaleMulBigInt !== 0n) {
-                    stakeAmountLibBaseUnits = (stakeRequiredUsd * scaleDivBigInt) / scaleMulBigInt;
-                } else {
-                     console.warn("Stability scale multiplier is zero, cannot calculate LIB stake amount.");
-                }
-            } catch (e) {
-                console.error("Error calculating stakeAmountLibBaseUnits with BigInt:", e, {
-                    stakeRequiredUsdBaseUnits,
-                    stabilityScaleMul,
-                    stabilityScaleDiv
-                });
-            }
-        }
-
-        let userStakedUsd = null; // number or null
-        // TODO: Calculate User Staked Amount (USD) using market price - Use stability factor if available?
-        // For now, using market price as implemented previously.
-        if (userStakedBaseUnits != null && typeof userStakedBaseUnits === 'bigint' && marketPrice != null) { // Check it's a BigInt
-            try {
-                // userStakedBaseUnits is already a BigInt object
-                const userStakedLib = Number(userStakedBaseUnits) / 1e18;
-                userStakedUsd = userStakedLib * marketPrice;
-            } catch (e) {
-                console.error("Error calculating userStakedUsd:", e, { userStakedBaseUnits, marketPrice });
-            }
-        }
-
-        let marketStakeUsdBaseUnits = null; // BigInt object or null
-        // Calculate Min Stake at Market (USD) using BigInt and market price
-        if (stakeAmountLibBaseUnits !== null && marketPrice != null) { // stakeAmountLibBaseUnits is BigInt object here
-            try {
-                const stakeAmountLib = Number(stakeAmountLibBaseUnits) / 1e18;
-                const marketStakeUsd = stakeAmountLib * marketPrice;
-                // Approximate back to base units (assuming 18 decimals for USD base units)
-                marketStakeUsdBaseUnits = BigInt(Math.round(marketStakeUsd * 1e18));
-            } catch (e) {
-                console.error("Error calculating marketStakeUsdBaseUnits:", e, { stakeAmountLibBaseUnits, marketPrice });
-            }
-        }
-
-
-        // Format & Update UI
-        // Get references for network info elements
-        const networkStakeUsdValue = document.getElementById('validator-network-stake-usd');
-        const networkStakeLibValue = document.getElementById('validator-network-stake-lib');
-        const stabilityFactorValue = document.getElementById('validator-stability-factor');
-        const marketPriceValue = document.getElementById('validator-market-price');
-        const marketStakeUsdValue = document.getElementById('validator-market-stake-usd');
-        const stakeForm = document.getElementById('stakeForm');
-
-        // stakeAmountLibBaseUnits is a BigInt object or null. Pass its string representation to big2str.
-        if (stakeForm) stakeForm.dataset.minStake = stakeAmountLibBaseUnits === null ? '0' : big2str(stakeAmountLibBaseUnits, 18);
-
-        // stakeRequiredUsd is a BigInt object or null/undefined. Pass its string representation.
-        const displayNetworkStakeUsd = stakeRequiredUsd != null ? '$' + big2str(stakeRequiredUsd, 18).slice(0, 6) : 'N/A';
-        // stakeAmountLibBaseUnits is a BigInt object or null. Pass its string representation.
-        const displayNetworkStakeLib = stakeAmountLibBaseUnits !== null ? big2str(stakeAmountLibBaseUnits, 18).slice(0, 7) : 'N/A';
-        const displayStabilityFactor = stabilityFactor ? stabilityFactor.toFixed(4) : 'N/A';
-        const displayMarketPrice = marketPrice ? '$' + marketPrice.toFixed(4) : 'N/A';
-        // marketStakeUsdBaseUnits is a BigInt object or null. Pass its string representation.
-        const displayMarketStakeUsd = marketStakeUsdBaseUnits !== null ? '$' + big2str(marketStakeUsdBaseUnits, 18).slice(0, 6) : 'N/A';
-
-        if (networkStakeUsdValue) networkStakeUsdValue.textContent = displayNetworkStakeUsd;
-        if (networkStakeLibValue) networkStakeLibValue.textContent = displayNetworkStakeLib;
-        if (stabilityFactorValue) stabilityFactorValue.textContent = displayStabilityFactor;
-        if (marketPriceValue) marketPriceValue.textContent = displayMarketPrice;
-        if (marketStakeUsdValue) marketStakeUsdValue.textContent = displayMarketStakeUsd;
-
-        if (!nominee) {
-            if (nomineeLabelElement) nomineeLabelElement.textContent = 'No Nominated Validator';
-            if (nomineeValueElement) nomineeValueElement.textContent = ''; // Ensure value is empty
-            if (userStakeLibItem) userStakeLibItem.style.display = 'none'; // Hide LIB stake item
-            if (userStakeUsdItem) userStakeUsdItem.style.display = 'none'; // Hide USD stake item
-        } else {
-            // Case: Nominee Exists
-            // Get references for user stake values
-             const userStakeLibValue = document.getElementById('validator-user-stake-lib');
-             const userStakeUsdValue = document.getElementById('validator-user-stake-usd');
-
-            // userStakedBaseUnits is a BigInt object or null/undefined. Pass its string representation.
-            const displayUserStakedLib = userStakedBaseUnits != null ? big2str(userStakedBaseUnits, 18).slice(0, 6) : 'N/A';
-            const displayUserStakedUsd = userStakedUsd != null ? '$' + userStakedUsd.toFixed(4) : 'N/A';
-
-            if (nomineeLabelElement) nomineeLabelElement.textContent = 'Nominated Validator:';
-            if (nomineeValueElement) nomineeValueElement.textContent = nominee;
-            if (userStakeLibValue) userStakeLibValue.textContent = displayUserStakedLib;
-            if (userStakeUsdValue) userStakeUsdValue.textContent = displayUserStakedUsd;
-            // Ensure items are visible (using flex as defined in CSS) - redundant due to reset, but safe
-            if (userStakeLibItem) userStakeLibItem.style.display = 'flex';
-            if (userStakeUsdItem) userStakeUsdItem.style.display = 'flex';
-        }
-
-        if (detailsElement) detailsElement.style.display = 'block'; // Or 'flex' if it's a flex container
-
-    } catch (error) {
-        console.error("Error fetching validator details:", error);
-        // Display error in UI
-        if (errorElement) {
-            errorElement.textContent = 'Failed to load validator details. Please try again later.';
-            errorElement.style.display = 'block';
-        }
-        // Ensure details are hidden if an error occurs
-        if (detailsElement) detailsElement.style.display = 'none';
-        // Ensure unstake button remains disabled on error
-        if (unstakeButton) unstakeButton.disabled = true;
-    } finally {
-        // Hide loading indicator regardless of success or failure
-        if (loadingElement) loadingElement.style.display = 'none';
-        // Set final state of unstake button based on whether a nominee was found
-        if (unstakeButton) {
-             unstakeButton.disabled = !nominee;
-        }
-        if (currentPendingTx) {
-            unstakeButton.disabled = true;
-            stakeButton.disabled = true;
-        }
-    }
-}
 
 // fetching market price by invoking `updateAssetPricesIfNeeded` and extracting from myData.assetPrices
 async function getMarketPrice() {
@@ -5764,122 +5545,6 @@ async function getMarketPrice() {
         return null; // Return null on any unexpected error during the process
     }
 }
-
-// Check if a validator node is active based on reward times
-async function checkValidatorActivity(validatorAddress) {
-    if (!validatorAddress) {
-        console.error("checkValidatorActivity: No validator address provided.");
-        return { isActive: false, error: "No address provided" }; // Cannot determine activity without address
-    }
-    try {
-        const data = await queryNetwork(`/account/${validatorAddress}`);
-        if (data && data.account) {
-            const account = data.account;
-            // Active if reward has started (not 0) but hasn't ended (is 0)
-            const isActive = account.rewardStartTime && account.rewardStartTime !== 0 && (!account.rewardEndTime || account.rewardEndTime === 0);
-            return { isActive: isActive, error: null };
-        } else {
-            console.warn(`checkValidatorActivity: No account data found for validator ${validatorAddress}.`);
-             return { isActive: false, error: "Could not fetch validator data" };
-        }
-    } catch (error) {
-        console.error(`checkValidatorActivity: Error fetching data for validator ${validatorAddress}:`, error);
-        // Network error or other issue fetching data.
-        return { isActive: false, error: "Network error fetching validator status" };
-    }
-}
-
-// handle Unstake Click with transaction confirmation and submission
-async function confirmAndUnstakeCurrentUserNominee() {
-    // Attempt to read nominee from the DOM element populated by openValidatorModal
-    const nomineeElement = document.getElementById('validator-nominee');
-    const nominee = nomineeElement ? nomineeElement.textContent?.trim() : null;
-
-    // Check if we successfully retrieved a nominee address from the DOM
-    if (!nominee || nominee.length < 10) { // Add a basic sanity check for length
-        showToast('Could not find nominated validator.', 4000, 'error');
-        console.warn("confirmAndUnstakeCurrentUserNominee: Nominee not found or invalid in DOM element #validator-nominee.");
-        return;
-    }
-
-    // Check if the validator is active
-    const activityCheck = await checkValidatorActivity(nominee);
-    if (activityCheck.isActive) {
-        showToast('Cannot unstake from an active validator.', 5000, 'error');
-        console.warn(`confirmAndUnstakeCurrentUserNominee: Validator ${nominee} is active.`);
-        return;
-    } else if (activityCheck.error) {
-        showToast(`Error checking validator status: ${activityCheck.error}`, 5000, 'error');
-        return;
-    }
-
-    // Confirmation dialog
-    const confirmationMessage = `Are you sure you want to unstake from validator: ${nominee}?`;
-    if (window.confirm(confirmationMessage)) {
-        //console.log(`User confirmed unstake from: ${nominee}`);
-        showToast('Submitting unstake transaction...', 3000, 'loading');
-        // Call the function to handle the actual transaction submission
-        await submitUnstakeTransaction(nominee);
-    }
-}
-
-async function submitUnstakeTransaction(nodeAddress) {
-    // disable the unstake button, back button, and submitStake button
-    const unstakeButton = document?.getElementById('submitUnstake');
-    const backButton = document?.getElementById('backButton');
-    const submitStakeButton = document?.getElementById('submitStake');
-    if (unstakeButton) unstakeButton.disabled = true;
-    if (backButton) backButton.disabled = true;
-    if (submitStakeButton) submitStakeButton.disabled = true;
-
-
-    try {
-        const response = await postUnstake(nodeAddress);
-        if (response && response.result && response.result.success) {
-
-            myData.wallet.history.unshift({
-                nominee: nodeAddress,
-                amount: bigxnum2big(wei, '0'),
-                memo: 'unstake',
-                sign: 1,
-                status: 'sent',
-                timestamp: getCorrectedTimestamp(),
-                txid: response.txid
-            });
-
-            validatorStakingModal.close();
-            validatorStakingModal.open();
-        } else {
-            // Try to get a more specific reason for failure
-            const reason = response?.result?.reason || 'Unknown error from API.';
-            // not showing toast since shown in injectTx
-            console.error('Unstake failed. API Response:', response);
-        }
-    } catch (error) {
-        console.error('Error submitting unstake transaction:', error);
-        // Provide a user-friendly error message
-        showToast('Unstake transaction failed. Network or server error.', 5000, 'error');
-    } finally {
-        if (unstakeButton) unstakeButton.disabled = false;
-        if (backButton) backButton.disabled = false;
-        if (submitStakeButton) submitStakeButton.disabled = false;
-    }
-}
-
- async function postUnstake(nodeAddress) {
-    // TODO: need to query network for the correct nominator address
-    const unstakeTx = {
-        type: "withdraw_stake",
-        nominator: longAddress(myAccount?.keys?.address),
-        nominee: nodeAddress,
-        force: false,
-        timestamp: getCorrectedTimestamp(),
-    };
-
-    const txid = await signObj(unstakeTx, myAccount.keys)
-    const response = await injectTx(unstakeTx, txid);
-    return response;
- }
 
  class RemoveAccountModal {
     constructor(){
@@ -6693,9 +6358,36 @@ const myProfileModal = new MyProfileModal()
 
 class ValidatorStakingModal {
     constructor() {
+        // Modal and main buttons
         this.modal = document.getElementById('validatorModal');
         this.stakeButton = document.getElementById('openStakeModal');
         this.unstakeButton = document.getElementById('submitUnstake');
+        this.backButton = document.getElementById('closeStakeModal');
+        
+        // UI state elements
+        this.detailsElement = document.getElementById('validator-details');
+        this.loadingElement = document.getElementById('validator-loading');
+        this.errorElement = document.getElementById('validator-error-message');
+        
+        // Display elements
+        this.totalStakeElement = document.getElementById('validator-total-stake');
+        this.totalStakeUsdElement = document.getElementById('validator-total-stake-usd');
+        this.userStakeLibElement = document.getElementById('validator-user-stake-lib');
+        this.userStakeUsdElement = document.getElementById('validator-user-stake-usd');
+        this.nomineeLabelElement = document.getElementById('validator-nominee-label');
+        this.nomineeValueElement = document.getElementById('validator-nominee');
+
+        // Skeleton bar elements
+        this.pendingSkeletonBar = document.getElementById('pending-nominee-skeleton-1');
+        this.pendingTxTextInBar = document.getElementById('pending-tx-text-in-bar');
+
+        // Network info elements
+        this.networkStakeUsdValue = document.getElementById('validator-network-stake-usd');
+        this.networkStakeLibValue = document.getElementById('validator-network-stake-lib');
+        this.stabilityFactorValue = document.getElementById('validator-stability-factor');
+        this.marketPriceValue = document.getElementById('validator-market-price');
+        this.marketStakeUsdValue = document.getElementById('validator-market-stake-usd');
+        this.stakeForm = document.getElementById('stakeForm');
     }
 
     load() {
@@ -6708,17 +6400,307 @@ class ValidatorStakingModal {
         document.getElementById('closeValidatorModal').addEventListener('click', () => this.close());
     }
 
-    open() {
-        // Call the existing openValidatorModal function
-        openValidatorModal();
+    async open() {
+        // Reset UI state
+        this.loadingElement.style.display = 'block';
+        this.detailsElement.style.display = 'none';
+        this.errorElement.style.display = 'none';
+        this.errorElement.textContent = '';
+
+        // Reset conditional elements to default state
+        this.nomineeLabelElement.textContent = 'Nominated Validator:';
+        this.nomineeValueElement.textContent = '';
+        // Ensure stake items are visible by default
+        this.userStakeLibElement.style.display = 'flex';
+        this.userStakeUsdElement.style.display = 'flex';
+        // Disable unstake button initially
+        this.unstakeButton.disabled = true;
+        this.stakeButton.disabled = false;
+
+        // Show the modal
+        this.modal.classList.add('active');
+        
+        // logic for text in skeleton bar
+        // Pending Transaction UI
+        this.nomineeValueElement.style.display = ''; // as in the original code
+        this.pendingTxTextInBar.style.display = 'none';
+        this.pendingSkeletonBar.style.display = 'none';
+
+        let currentPendingTx = null;
+        if (myData && myData.pending && Array.isArray(myData.pending) && myData.pending.length > 0) {
+            currentPendingTx = myData.pending.find(
+                tx => tx.type === 'deposit_stake' || tx.type === 'withdraw_stake'
+            );
+        }
+
+        if (currentPendingTx) {
+            this.detailsElement.style.display = 'block';
+            this.pendingSkeletonBar.style.display = 'flex';
+            this.pendingTxTextInBar.textContent = currentPendingTx.type === 'withdraw_stake' ? 'Pending Unstake Transaction' : 'Pending Stake Transaction';
+            this.pendingTxTextInBar.style.display = 'block';
+
+            if (currentPendingTx.type === 'deposit_stake') {
+                this.stakeButton.disabled = true;
+            }
+        }
+        
+        let nominee = null;
+
+        try {
+            // Fetch Data Concurrently
+            const userAddress = myData?.account?.keys?.address;
+            if (!userAddress) {
+                console.warn("User address not found in myData. Skipping user account fetch.");
+                // Decide how to handle this - maybe show an error or a specific state?
+                // For now, we'll proceed, but nominee/user stake will be unavailable.
+            }
+
+            const [userAccountData, networkAccountData, updatePrices] = await Promise.all([
+                userAddress ? queryNetwork(`/account/${longAddress(userAddress)}`) : Promise.resolve(null), // Fetch User Data if available
+                queryNetwork('/account/0000000000000000000000000000000000000000000000000000000000000000'), // Fetch Network Data
+                updateWalletBalances()
+            ]);
+
+            // Extract Raw Data (API values are now actual BigInt objects or other types)
+            nominee = userAccountData?.account?.operatorAccountInfo?.nominee; // string
+            const userStakedBaseUnits = userAccountData?.account?.operatorAccountInfo?.stake; // BigInt object
+
+            const stakeRequiredUsd = networkAccountData?.account?.current?.stakeRequiredUsd; // BigInt object
+            const stabilityScaleMul = networkAccountData?.account?.current?.stabilityScaleMul; // number
+            const stabilityScaleDiv = networkAccountData?.account?.current?.stabilityScaleDiv; // number
+
+            const marketPrice = await getMarketPrice(); // number or null
+
+            // Calculate Derived Values
+            let stabilityFactor = null;
+            if (stabilityScaleMul != null && stabilityScaleDiv != null && Number(stabilityScaleDiv) !== 0) {
+                stabilityFactor = Number(stabilityScaleMul) / Number(stabilityScaleDiv);
+            }
+
+            let stakeAmountLibBaseUnits = null; // This will be a BigInt object or null
+            if (stakeRequiredUsd != null && typeof stakeRequiredUsd === 'bigint' &&
+                stabilityScaleMul != null && typeof stabilityScaleMul === 'number' &&
+                stabilityScaleDiv != null && typeof stabilityScaleDiv === 'number' && stabilityScaleDiv !== 0) {
+                try {
+                    // No need to parse stakeRequiredUsd from string, it's already a BigInt
+                    const scaleMulBigInt = BigInt(stabilityScaleMul);
+                    const scaleDivBigInt = BigInt(stabilityScaleDiv);
+                    if (scaleMulBigInt !== 0n) {
+                        stakeAmountLibBaseUnits = (stakeRequiredUsd * scaleDivBigInt) / scaleMulBigInt;
+                    } else {
+                        console.warn("Stability scale multiplier is zero, cannot calculate LIB stake amount.");
+                    }
+                } catch (e) {
+                    console.error("Error calculating stakeAmountLibBaseUnits with BigInt:", e, {
+                        stakeRequiredUsdBaseUnits,
+                        stabilityScaleMul,
+                        stabilityScaleDiv
+                    });
+                }
+            }
+
+            let userStakedUsd = null; // number or null
+            // TODO: Calculate User Staked Amount (USD) using market price - Use stability factor if available?
+            // For now, using market price as implemented previously.
+            if (userStakedBaseUnits != null && typeof userStakedBaseUnits === 'bigint' && marketPrice != null) { // Check it's a BigInt
+                try {
+                    // userStakedBaseUnits is already a BigInt object
+                    const userStakedLib = Number(userStakedBaseUnits) / 1e18;
+                    userStakedUsd = userStakedLib * marketPrice;
+                } catch (e) {
+                    console.error("Error calculating userStakedUsd:", e, { userStakedBaseUnits, marketPrice });
+                }
+            }
+
+            let marketStakeUsdBaseUnits = null; // BigInt object or null
+            // Calculate Min Stake at Market (USD) using BigInt and market price
+            if (stakeAmountLibBaseUnits !== null && marketPrice != null) { // stakeAmountLibBaseUnits is BigInt object here
+                try {
+                    const stakeAmountLib = Number(stakeAmountLibBaseUnits) / 1e18;
+                    const marketStakeUsd = stakeAmountLib * marketPrice;
+                    // Approximate back to base units (assuming 18 decimals for USD base units)
+                    marketStakeUsdBaseUnits = BigInt(Math.round(marketStakeUsd * 1e18));
+                } catch (e) {
+                    console.error("Error calculating marketStakeUsdBaseUnits:", e, { stakeAmountLibBaseUnits, marketPrice });
+                }
+            }
+
+
+            // Format & Update UI
+
+            // stakeAmountLibBaseUnits is a BigInt object or null. Pass its string representation to big2str.
+            this.stakeForm.dataset.minStake = stakeAmountLibBaseUnits === null ? '0' : big2str(stakeAmountLibBaseUnits, 18);
+
+            // stakeRequiredUsd is a BigInt object or null/undefined. Pass its string representation.
+            const displayNetworkStakeUsd = stakeRequiredUsd != null ? '$' + big2str(stakeRequiredUsd, 18).slice(0, 6) : 'N/A';
+            // stakeAmountLibBaseUnits is a BigInt object or null. Pass its string representation.
+            const displayNetworkStakeLib = stakeAmountLibBaseUnits !== null ? big2str(stakeAmountLibBaseUnits, 18).slice(0, 7) : 'N/A';
+            const displayStabilityFactor = stabilityFactor ? stabilityFactor.toFixed(4) : 'N/A';
+            const displayMarketPrice = marketPrice ? '$' + marketPrice.toFixed(4) : 'N/A';
+            // marketStakeUsdBaseUnits is a BigInt object or null. Pass its string representation.
+            const displayMarketStakeUsd = marketStakeUsdBaseUnits !== null ? '$' + big2str(marketStakeUsdBaseUnits, 18).slice(0, 6) : 'N/A';
+
+            this.networkStakeUsdValue.textContent = displayNetworkStakeUsd;
+            this.networkStakeLibValue.textContent = displayNetworkStakeLib;
+            this.stabilityFactorValue.textContent = displayStabilityFactor;
+            this.marketPriceValue.textContent = displayMarketPrice;
+            this.marketStakeUsdValue.textContent = displayMarketStakeUsd;
+
+            if (!nominee) {
+                this.nomineeLabelElement.textContent = 'No Nominated Validator';
+                this.nomineeValueElement.textContent = ''; // Ensure value is empty
+                this.userStakeLibElement.style.display = 'none'; // Hide LIB stake item
+                this.userStakeUsdElement.style.display = 'none'; // Hide USD stake item
+            } else {
+                // Case: Nominee Exists
+
+                // userStakedBaseUnits is a BigInt object or null/undefined. Pass its string representation.
+                const displayUserStakedLib = userStakedBaseUnits != null ? big2str(userStakedBaseUnits, 18).slice(0, 6) : 'N/A';
+                const displayUserStakedUsd = userStakedUsd != null ? '$' + userStakedUsd.toFixed(4) : 'N/A';
+
+                this.nomineeLabelElement.textContent = 'Nominated Validator:';
+                this.nomineeValueElement.textContent = nominee;
+                this.userStakeLibElement.textContent = displayUserStakedLib;
+                this.userStakeUsdElement.textContent = displayUserStakedUsd;
+                // Ensure items are visible (using flex as defined in CSS) - redundant due to reset, but safe
+                this.userStakeLibElement.style.display = 'flex';
+                this.userStakeUsdElement.style.display = 'flex';
+            }
+
+            this.detailsElement.style.display = 'block'; // Or 'flex' if it's a flex container
+
+        } catch (error) {
+            console.error("Error fetching validator details:", error);
+            // Display error in UI
+            this.errorElement.textContent = 'Failed to load validator details. Please try again later.';
+            this.errorElement.style.display = 'block';
+            // Ensure details are hidden if an error occurs
+            this.detailsElement.style.display = 'none';
+            // Ensure unstake button remains disabled on error
+            this.unstakeButton.disabled = true;
+        } finally {
+            // Hide loading indicator regardless of success or failure
+            this.loadingElement.style.display = 'none';
+            // Set final state of unstake button based on whether a nominee was found
+            this.unstakeButton.disabled = !nominee;
+            
+            if (currentPendingTx) {
+                this.unstakeButton.disabled = true;
+                this.stakeButton.disabled = true;
+            }
+        }
     }
 
     close() {
         this.modal.classList.remove('active');
     }
 
-    handleUnstake() {
-        confirmAndUnstakeCurrentUserNominee();
+    async handleUnstake() {
+        // Attempt to read nominee from the DOM element populated by openValidatorModal
+        const nominee = this.nomineeValueElement.textContent.trim();
+
+        // Check if we successfully retrieved a nominee address from the DOM
+        if (!nominee || nominee.length < 10) { // Add a basic sanity check for length
+            showToast('Could not find nominated validator.', 4000, 'error');
+            console.warn("ValidatorStakingModal: Nominee not found or invalid in DOM element #validator-nominee.");
+            return;
+        }
+
+        // Check if the validator is active
+        const activityCheck = await this.checkValidatorActivity(nominee);
+        if (activityCheck.isActive) {
+            showToast('Cannot unstake from an active validator.', 5000, 'error');
+            console.warn(`ValidatorStakingModal: Validator ${nominee} is active.`);
+            return;
+        } else if (activityCheck.error) {
+            showToast(`Error checking validator status: ${activityCheck.error}`, 5000, 'error');
+            return;
+        }
+
+        // Confirmation dialog
+        const confirmationMessage = `Are you sure you want to unstake from validator: ${nominee}?`;
+        if (window.confirm(confirmationMessage)) {
+            //console.log(`User confirmed unstake from: ${nominee}`);
+            showToast('Submitting unstake transaction...', 3000, 'loading');
+            // Call the function to handle the actual transaction submission
+            await this.submitUnstakeTransaction(nominee);
+        }
+    }
+
+    async submitUnstakeTransaction(nodeAddress) {
+        // disable the unstake button, back button, and submitStake button
+        this.unstakeButton.disabled = true;
+        this.backButton.disabled = true;
+        this.stakeButton.disabled = true;
+    
+        try {
+            const response = await this.postUnstake(nodeAddress);
+            if (response && response.result && response.result.success) {
+    
+                myData.wallet.history.unshift({
+                    nominee: nodeAddress,
+                    amount: bigxnum2big(wei, '0'),
+                    memo: 'unstake',
+                    sign: 1,
+                    status: 'sent',
+                    timestamp: getCorrectedTimestamp(),
+                    txid: response.txid
+                });
+    
+                this.close();
+                this.open();
+            } else {
+                // not showing toast since shown in injectTx
+                console.error('Unstake failed. API Response:', response);
+            }
+        } catch (error) {
+            console.error('Error submitting unstake transaction:', error);
+            // Provide a user-friendly error message
+            showToast('Unstake transaction failed. Network or server error.', 5000, 'error');
+        } finally {
+            this.unstakeButton.disabled = false;
+            this.backButton.disabled = false;
+            this.stakeButton.disabled = false;
+        }
+    }
+
+    async postUnstake(nodeAddress) {
+        // TODO: need to query network for the correct nominator address
+        const unstakeTx = {
+            type: "withdraw_stake",
+            nominator: longAddress(myAccount?.keys?.address),
+            nominee: nodeAddress,
+            force: false,
+            timestamp: getCorrectedTimestamp(),
+        };
+    
+        const txid = await signObj(unstakeTx, myAccount.keys)
+        const response = await injectTx(unstakeTx, txid);
+        return response;
+     }
+    
+
+    async checkValidatorActivity(validatorAddress) {
+        if (!validatorAddress) {
+            console.error("ValidatorStakingModal: No validator address provided.");
+            return { isActive: false, error: "No address provided" }; // Cannot determine activity without address
+        }
+        try {
+            const data = await queryNetwork(`/account/${validatorAddress}`);
+            if (data && data.account) {
+                const account = data.account;
+                // Active if reward has started (not 0) but hasn't ended (is 0)
+                const isActive = account.rewardStartTime && account.rewardStartTime !== 0 && (!account.rewardEndTime || account.rewardEndTime === 0);
+                return { isActive: isActive, error: null };
+            } else {
+                console.warn(`ValidatorStakingModal: No account data found for validator ${validatorAddress}.`);
+                return { isActive: false, error: "Could not fetch validator data" };
+            }
+        } catch (error) {
+            console.error(`ValidatorStakingModal: Error fetching data for validator ${validatorAddress}:`, error);
+            // Network error or other issue fetching data.
+            return { isActive: false, error: "Network error fetching validator status" };
+        }
     }
 }
 const validatorStakingModal = new ValidatorStakingModal()
