@@ -2657,7 +2657,7 @@ class FriendModal {
         if (!selectedStatus) return;
 
         // send transaction to update chat toll
-        const res = await this.postUpdateTollRequired(this.currentContactAddress, contact.friend)
+        const res = await this.postUpdateTollRequired(this.currentContactAddress, Number(selectedStatus))
         if (res?.transaction?.success === false) {
             console.log(`[handleFriendSubmit] update_chat_toll transaction failed: ${res?.transaction?.reason}. Did not update contact status.`);
             return;
@@ -3818,6 +3818,8 @@ async function injectTx(tx, txid){
                 pendingTxData.address = tx.from; // User's address (longAddress form)
             } else if (tx.type === 'update_chat_toll') {
                 pendingTxData.friend = tx.friend;
+            } else if (tx.type === 'read') {
+                pendingTxData.oldContactTimestamp = tx.oldContactTimestamp;
             } else if (tx.type === 'message' || tx.type === 'transfer' || tx.type === 'deposit_stake' || tx.type === 'withdraw_stake') {
                 pendingTxData.to = tx.to;
             }
@@ -6943,6 +6945,7 @@ class ChatModal {
         this.sendMoneyButton = document.getElementById('chatSendMoneyButton');
         this.retryOfTxId = document.getElementById('retryOfTxId');
         this.messageInput = document.querySelector('.message-input');
+        this.newestReceivedMessage = null;
         
         
         // used by updateTollValue and updateTollRequired
@@ -7068,6 +7071,9 @@ class ChatModal {
      * @returns {void}
      */
     close() {
+        if (this.newestReceivedMessage) {
+            this.sendReadTransaction(this.address);
+        }
         this.modal.classList.remove('active');
         if (document.getElementById('chatsScreen').classList.contains('active')) {
             updateChatList()
@@ -7083,6 +7089,43 @@ class ChatModal {
                 pollChatInterval(pollIntervalNormal) // back to polling at slower rate
             }
         }
+    }
+
+    /**
+     * Sends a read transaction to the contact if the contact's timestamp is less than the newest received message's timestamp
+     * @param {string} contactAddress - The address of the contact
+     * @returns {void}
+     */
+    async sendReadTransaction(contactAddress) {
+        const contact = myData.contacts[contactAddress];
+        const latestMessage = this.newestReceivedMessage;
+        if (contact.timestamp < latestMessage.timestamp) {
+            const readTransaction = await this.createReadTransaction(contactAddress);
+            const txid = await signObj(readTransaction, myAccount.keys)
+            const response = await injectTx(readTransaction, txid)
+            if (!response || !response.result || !response.result.success) {
+                console.warn('read transaction failed to send', response)
+            } else {
+                contact.timestamp = readTransaction.timestamp;
+            }
+        }
+    }
+
+    /**
+     * Creates a read transaction object for the given contact address
+     * @param {string} contactAddress - The address of the contact
+     * @returns {Object} The read transaction object
+     */
+    async createReadTransaction(contactAddress) {
+        const readTransaction = {
+            type: 'read',
+            from: longAddress(myData.account.keys.address),
+            to: longAddress(contactAddress),
+            chatId: hashBytes([longAddress(myData.account.keys.address), longAddress(contactAddress)].sort().join``),
+            timestamp: getCorrectedTimestamp(),
+            oldContactTimestamp: myData.contacts[contactAddress].timestamp,
+        }
+        return readTransaction;
     }
 
     /**
@@ -7335,6 +7378,7 @@ class ChatModal {
         // Since messages are sorted descending (newest first), the first item with my: false is the newest received.
         const newestReceivedItem = messages.find(item => !item.my);
         console.log('appendChatModal: Identified newestReceivedItem data:', newestReceivedItem);
+        this.newestReceivedMessage = newestReceivedItem;
     
         // 2. Clear the entire list
         this.messagesList.innerHTML = '';
@@ -7981,7 +8025,6 @@ class SendModal {
         this.sendForm.reset();
         this.username = null
     }
-    
 
     /**
      * Invoked when the user types in the username input
@@ -8395,6 +8438,10 @@ async function checkPendingTransactions() {
                         showToast(`Update contact status failed: ${failureReason}. Reverting contact to old status.`, 0, "error");
                         // revert the local myData.contacts[toAddress].friend to the old value
                         myData.contacts[pendingTxInfo.to].friend = pendingTxInfo.friend;
+                    } else if (type === 'read') {
+                        showToast(`Read transaction failed: ${failureReason}`, 0, "error");
+                        // revert the local myData.contacts[toAddress].timestamp to the old value
+                        myData.contacts[pendingTxInfo.to].timestamp = pendingTxInfo.oldContactTimestamp;
                     }
                     else { // for messages, transfer etc.
                         showToast(failureReason, 0, "error");
