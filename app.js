@@ -556,11 +556,26 @@ async function handleCreateAccount(event) {
             pqSeed: pqSeed,  // store only the 64 byte seed instead of 32,000 byte public and secret keys
         }
     };
-
-    // Create new data entry
-    myData = newDataRecord(myAccount);
     let waitingToastId = showToast('Creating account...', 0, 'loading');
-    const res = await postRegisterAlias(username, myAccount.keys);
+    let res;
+    // Create new data entry
+    try {
+        await getNetworkParams();
+        myData = newDataRecord(myAccount);
+        res = await postRegisterAlias(username, myAccount.keys);
+    } catch (error) {
+        submitButton.disabled = false;
+        toggleButton.disabled = false;
+        usernameInput.disabled = false;
+        privateKeyInput.disabled = false;
+        backButton.disabled = false;
+        if (waitingToastId) hideToast(waitingToastId);
+        showToast(`Failed to fetch network parameters, try again later.`, 0, 'error');
+        console.error('Failed to fetch network parameters, using defaults:', error);
+        return;
+    }
+    
+    
 
     if (res && res.result && res.result.success && res.txid) {
         const txid = res.txid;
@@ -751,8 +766,8 @@ function newDataRecord(myAccount){
         },
         settings: {
             encrypt: true,
-            toll: parameters.current.defaultToll || 1n * wei,
-            tollUnit: parameters.current.defaultTollUnit || "LIB",
+            toll: parameters?.current?.defaultToll || 1n * wei,
+            tollUnit: parameters?.current?.defaultTollUnit || "LIB",
         }
     }
 
