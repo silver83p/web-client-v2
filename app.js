@@ -7381,8 +7381,8 @@ class ChatModal {
             if (retryTxId) {
                 removeFailedTx(retryTxId, currentAddress);
                 this.retryOfTxId.value = '';
-                failedMessageModal.handleFailedMessageClick.txid = '';
-                failedMessageModal.handleFailedMessageClick.handleFailedMessage = '';
+                failedMessageModal.handleFailedMessageData.txid = '';
+                failedMessageModal.handleFailedMessageData.handleFailedMessage = '';
             }
 
             // --- Optimistic UI Update ---
@@ -7739,11 +7739,10 @@ class FailedMessageModal {
         this.deleteButton = this.modal.querySelector('.delete-button');
         this.closeButton = document.getElementById('closeFailedMessageModal');
         // used by handleFailedMessageClick
-        this.handleFailedMessageClick = {
+        this.handleFailedMessageData = {
             handleFailedMessage: '',
             txid: ''
         }
-        
     }
 
     /**
@@ -7769,8 +7768,8 @@ class FailedMessageModal {
         const originalTxid = messageEl.dataset.txid;
 
         // Store content and txid in properties of handleSendMessage
-        this.handleFailedMessageClick.handleFailedMessage = messageContent;
-        this.handleFailedMessageClick.txid = originalTxid;
+        this.handleFailedMessageData.handleFailedMessage = messageContent;
+        this.handleFailedMessageData.txid = originalTxid;
 
         // Show the modal
         if (this.modal) {
@@ -7785,21 +7784,21 @@ class FailedMessageModal {
      */
     handleFailedMessageRetry() {
         // Use the values stored when handleFailedMessage was called
-        const messageToRetry = this.handleFailedMessageClick.handleFailedMessage;
-        const originalTxid = this.handleFailedMessageClick.txid;
+        const messageToRetry = this.handleFailedMessageData.handleFailedMessage;
+        const originalTxid = this.handleFailedMessageData.txid;
 
-        if (this.messageInput && this.retryTxIdInput && typeof messageToRetry === 'string' && typeof originalTxid === 'string') {
-            this.messageInput.value = messageToRetry;
-            this.retryTxIdInput.value = originalTxid;
+        if (chatModal.messageInput && chatModal.retryOfTxId && typeof messageToRetry === 'string' && typeof originalTxid === 'string') {
+            chatModal.messageInput.value = messageToRetry;
+            chatModal.retryOfTxId.value = originalTxid;
 
             if (this.modal) {
                 this.modal.classList.remove('active');
             }
-            this.messageInput.focus();
+            chatModal.messageInput.focus();
 
             // Clear the stored values after use
-            this.handleFailedMessageClick.handleFailedMessage = '';
-            this.handleFailedMessageClick.txid = '';
+            this.handleFailedMessageData.handleFailedMessage = '';
+            this.handleFailedMessageData.txid = '';
         } else {
             console.error('Error preparing message retry: Necessary elements or data missing.');
             if (this.modal) {
@@ -7814,10 +7813,10 @@ class FailedMessageModal {
      * @returns {void}
      */
     handleFailedMessageDelete() {
-        const originalTxid = this.handleFailedMessageClick.txid;
+        const originalTxid = this.handleFailedMessageData.txid;
 
         if (typeof originalTxid === 'string' && originalTxid) {
-            const currentAddress = this.address
+            const currentAddress = chatModal.address
             removeFailedTx(originalTxid, currentAddress)
 
             if (this.modal) {
@@ -7825,10 +7824,10 @@ class FailedMessageModal {
             }
 
             // Clear the stored values
-            this.handleFailedMessageClick.handleFailedMessage = '';
-            this.handleFailedMessageClick.txid = '';
+            this.handleFailedMessageData.handleFailedMessage = '';
+            this.handleFailedMessageData.txid = '';
             // refresh current chatModal
-            this.appendChatModal();
+            chatModal.appendChatModal();
         } else {
             console.error('Error deleting message: TXID not found.');
             if (this.modal) {
@@ -7847,8 +7846,8 @@ class FailedMessageModal {
             this.modal.classList.remove('active');
         }
         // Clear the stored values when modal is closed
-        this.handleFailedMessageClick.handleFailedMessage = '';
-        this.handleFailedMessageClick.txid = '';
+        this.handleFailedMessageData.handleFailedMessage = '';
+        this.handleFailedMessageData.txid = '';
     }
 
     /**
