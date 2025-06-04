@@ -7120,8 +7120,10 @@ class ChatModal {
      * @returns {void}
      */
     close() {
-        // if newestRecevied message does not have an amount property, then send a read transaction
-        if (this.newestReceivedMessage && !this?.newestReceivedMessage?.amount) {
+        const userResponded = this.hasUserResponded();
+        console.log(`[close] userResponded: ${userResponded}`)
+        // if newestRecevied message does not have an amount property and user has not responded, then send a read transaction
+        if (this?.newestReceivedMessage && !this?.newestReceivedMessage?.amount && !userResponded) {
             this.sendReadTransaction(this.address);
         }
 
@@ -7142,6 +7144,23 @@ class ChatModal {
                 pollChatInterval(pollIntervalNormal) // back to polling at slower rate
             }
         }
+    }
+
+    /**
+     * Checks if the last message is from us and not a payment message
+     * @returns {Promise<boolean>} - True if the last message is from us and not a payment message, false otherwise
+     */
+    hasUserResponded() {
+        // get newest message from first message in myData.contacts[this.address] 
+        const contact = myData.contacts[this.address];
+        if (!contact) {
+            return false;
+        }
+        const lastMessage = contact?.messages?.[0];
+        if (!lastMessage) {
+            return false;
+        }
+        return lastMessage?.my && !lastMessage?.amount;
     }
 
     /**
@@ -7215,6 +7234,7 @@ class ChatModal {
      * @returns {void}
      */
     async sendReadTransaction(contactAddress) {
+        console.log(`[sendReadTransaction] entering function`)
         const contact = myData.contacts[contactAddress];
         const latestMessage = this.newestReceivedMessage;
         // if the other party is not required to pay toll, then don't send a read transaction.
