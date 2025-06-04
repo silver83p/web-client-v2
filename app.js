@@ -6387,7 +6387,7 @@ class ValidatorStakingModal {
         this.modal = document.getElementById('validatorModal');
         this.stakeButton = document.getElementById('openStakeModal');
         this.unstakeButton = document.getElementById('submitUnstake');
-        this.backButton = document.getElementById('closeStakeModal');
+        this.backButton = document.getElementById('closeValidatorModal');
         
         // UI state elements
         this.detailsElement = document.getElementById('validator-details');
@@ -6422,7 +6422,7 @@ class ValidatorStakingModal {
 
         // Add listeners for opening and closing the modal
         document.getElementById('openValidator').addEventListener('click', () => this.open());
-        document.getElementById('closeValidatorModal').addEventListener('click', () => this.close());
+        this.backButton.addEventListener('click', () => this.close());
     }
 
     async open() {
