@@ -4555,11 +4555,12 @@ function showToast(message, duration = 2000, type = 'default') {
       closeBtn.className = 'toast-close-btn';
       closeBtn.setAttribute('aria-label', 'Close');
       closeBtn.innerHTML = '&times;';
-      closeBtn.onclick = (e) => {
-        e.stopPropagation();
+      toast.appendChild(closeBtn);
+
+      // Make the whole toast clickable
+      toast.onclick = () => {
         hideToast(toastId);
       };
-      toast.appendChild(closeBtn);
     } else if (duration > 0) {
       setTimeout(() => {
         hideToast(toastId);
