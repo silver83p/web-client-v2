@@ -7295,10 +7295,18 @@ class ChatModal {
     this.closeButton.addEventListener('click', this.close.bind(this));
     this.sendButton.addEventListener('keydown', ignoreTabKey);
 
+    // Add debounced draft saving
+    this.debouncedSaveDraft = debounce((text) => {
+      this.saveDraft(text);
+    }, 500);
+
     // Add input event listener for message textarea auto-resize
-    this.messageInput.addEventListener('input', function () {
-      this.style.height = '48px';
-      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    this.messageInput.addEventListener('input', (e) => {
+      this.messageInput.style.height = '48px';
+      this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+
+      // Save draft (text is already limited to 2000 chars by maxlength attribute)
+      this.debouncedSaveDraft(e.target.value);
     });
 
     // Add focus event listener for message input to handle scrolling
@@ -7384,6 +7392,9 @@ class ChatModal {
         contactInfoModal.open(createDisplayInfo(contact));
       }
     };
+
+    // Load any draft message
+    this.loadDraft(address);
 
     // Show modal
     this.modal.classList.add('active');
@@ -7752,9 +7763,10 @@ class ChatModal {
 
       insertSorted(chatsData.chats, chatUpdate, 'timestamp');
 
-      // Clear input and reset height
+      // Clear input and reset height, and delete any saved draft
       this.messageInput.value = '';
       this.messageInput.style.height = '48px'; // original height
+      contact.draft = '';
 
       // Update the chat modal UI immediately
       this.appendChatModal(); // This should now display the 'sending' message
@@ -8082,6 +8094,35 @@ class ChatModal {
       updateChatList();
     }
     // No other active view to refresh in this context
+  }
+
+  /**
+   * Saves a draft message for the current contact
+   * @param {string} text - The draft message text to save
+   */
+  saveDraft(text) {
+    if (this.address && myData.contacts[this.address]) {
+      // Sanitize the text before saving
+      const sanitizedText = escapeHtml(text);
+      myData.contacts[this.address].draft = sanitizedText;
+    }
+  }
+
+  /**
+   * Loads a draft message for the current contact if one exists
+   */
+  loadDraft(address) {
+    // Always clear the input first
+    this.messageInput.value = '';
+    this.messageInput.style.height = '48px';
+
+    // Load draft if exists
+    const contact = myData.contacts[address];
+    if (contact?.draft) {
+      this.messageInput.value = contact.draft;
+      // Trigger resize
+      this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+    }
   }
 }
 
