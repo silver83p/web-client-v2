@@ -6297,6 +6297,7 @@ class TollModal {
     this.currentCurrency = 'LIB'; // Initialize currency state
     this.oldToll = null;
     this.minToll = null; // Will be set from network account
+    this.minTollDisplay = document.getElementById('minTollDisplay');
   }
 
   load() {
@@ -6327,8 +6328,7 @@ class TollModal {
 
     // Update min toll display under input
     const minTollValue = parseFloat(big2str(this.minToll, 18)).toFixed(6); // Show 6 decimal places
-    const minTollDisplay = document.getElementById('minTollDisplay');
-    minTollDisplay.textContent = `Minimum toll: ${minTollValue} LIB`;
+    this.minTollDisplay.textContent = `Minimum toll: ${minTollValue} LIB`;
   }
 
   close() {
@@ -6360,14 +6360,11 @@ class TollModal {
     }
 
     // Update min toll display with converted value
-    const minTollDisplay = document.getElementById('minTollDisplay');
-    if (minTollDisplay) {
-      if (this.currentCurrency === 'USD') {
-        const minTollUSD = bigxnum2big(this.minToll, scalabilityFactor.toString());
-        minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(minTollUSD, 18)).toFixed(4)} USD`; // Show 4 decimal places for USD
-      } else {
-        minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`; // Show 6 decimal places for LIB
-      }
+    if (this.currentCurrency === 'USD') {
+      const minTollUSD = bigxnum2big(this.minToll, scalabilityFactor.toString());
+      this.minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(minTollUSD, 18)).toFixed(4)} USD`; // Show 4 decimal places for USD
+    } else {
+      this.minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`; // Show 6 decimal places for LIB
     }
   }
 
