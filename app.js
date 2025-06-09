@@ -6326,7 +6326,7 @@ class TollModal {
     document.getElementById('newTollAmountInput').value = ''; // Clear input field
 
     // Update min toll display under input
-    const minTollValue = big2str(this.minToll, 18).slice(0, -12); // Show fewer digits
+    const minTollValue = parseFloat(big2str(this.minToll, 18)).toFixed(6); // Show 6 decimal places
     const minTollDisplay = document.getElementById('minTollDisplay');
     minTollDisplay.textContent = `Minimum toll: ${minTollValue} LIB`;
   }
@@ -6364,9 +6364,9 @@ class TollModal {
     if (minTollDisplay) {
       if (this.currentCurrency === 'USD') {
         const minTollUSD = bigxnum2big(this.minToll, scalabilityFactor.toString());
-        minTollDisplay.textContent = `Minimum toll: ${big2str(minTollUSD, 18).slice(0, -14)} USD`; // Show fewer digits for USD
+        minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(minTollUSD, 18)).toFixed(4)} USD`; // Show 4 decimal places for USD
       } else {
-        minTollDisplay.textContent = `Minimum toll: ${big2str(this.minToll, 18).slice(0, -12)} LIB`; // Show fewer digits for LIB
+        minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`; // Show 6 decimal places for LIB
       }
     }
   }
@@ -6393,7 +6393,7 @@ class TollModal {
     if (newToll > 0n) {
       if (this.currentCurrency === 'LIB' && newToll < this.minToll) {
         showToast(
-          `Toll must be at least ${big2str(this.minToll, 18).slice(0, -12)} LIB`,
+          `Toll must be at least ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`,
           0,
           'error'
         );
@@ -6406,7 +6406,7 @@ class TollModal {
         if (newTollLIB < this.minToll) {
           const minTollUSD = bigxnum2big(this.minToll, scalabilityFactor.toString());
           showToast(
-            `Toll must be at least ${big2str(minTollUSD, 18).slice(0, -14)} USD`,
+            `Toll must be at least ${parseFloat(big2str(minTollUSD, 18)).toFixed(4)} USD`,
             0,
             'error'
           );
