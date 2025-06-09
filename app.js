@@ -6296,6 +6296,8 @@ class TollModal {
     this.modal = document.getElementById('tollModal');
     this.currentCurrency = 'LIB'; // Initialize currency state
     this.oldToll = null;
+    this.minToll = null; // Will be set from network account
+    this.minTollDisplay = document.getElementById('minTollDisplay');
   }
 
   load() {
@@ -6315,11 +6317,18 @@ class TollModal {
     const toll = myData.settings.toll || 0n;
     const tollUnit = myData.settings.tollUnit || 'LIB';
 
+    // Fetch network parameters to get minToll
+    this.minToll = parameters?.current?.minToll || 1n * wei; // Default to 1 LIB if not set
+
     this.updateTollDisplay(toll, tollUnit);
 
     this.currentCurrency = 'LIB'; // Reset currency state
     document.getElementById('tollCurrencySymbol').textContent = this.currentCurrency;
     document.getElementById('newTollAmountInput').value = ''; // Clear input field
+
+    // Update min toll display under input
+    const minTollValue = parseFloat(big2str(this.minToll, 18)).toFixed(6); // Show 6 decimal places
+    this.minTollDisplay.textContent = `Minimum toll: ${minTollValue} LIB`;
   }
 
   close() {
@@ -6350,10 +6359,13 @@ class TollModal {
       newTollAmountInput.value = convertedValue.toString();
     }
 
-    // convert `currentTollValue`
-    //const currentTollValue = big2str(myData.settings.toll, 18);
-    //const convertedValue = this.currentCurrency === 'USD' ? currentTollValue * marketPrice : currentTollValue;
-    //document.getElementById('currentTollValue').textContent = this.currentCurrency === 'USD' ? `$${convertedValue}` : `${convertedValue} LIB`;
+    // Update min toll display with converted value
+    if (this.currentCurrency === 'USD') {
+      const minTollUSD = bigxnum2big(this.minToll, scalabilityFactor.toString());
+      this.minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(minTollUSD, 18)).toFixed(4)} USD`; // Show 4 decimal places for USD
+    } else {
+      this.minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`; // Show 6 decimal places for LIB
+    }
   }
 
   /**
@@ -6368,10 +6380,37 @@ class TollModal {
 
     if (isNaN(newTollValue) || newTollValue < 0) {
       // console.error("Invalid toll amount");
-      showToast('Invalid toll amount entered.', 'error');
+      showToast('Invalid toll amount entered.', 0, 'error');
       return;
     }
+
     const newToll = bigxnum2big(wei, newTollAmountInput.value);
+
+    // Check if the toll is non-zero but less than minimum
+    if (newToll > 0n) {
+      if (this.currentCurrency === 'LIB' && newToll < this.minToll) {
+        showToast(
+          `Toll must be at least ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`,
+          0,
+          'error'
+        );
+        return;
+      }
+      if (this.currentCurrency === 'USD') {
+        const scalabilityFactor =
+          parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
+        const newTollLIB = bigxnum2big(newToll, (1 / scalabilityFactor).toString());
+        if (newTollLIB < this.minToll) {
+          const minTollUSD = bigxnum2big(this.minToll, scalabilityFactor.toString());
+          showToast(
+            `Toll must be at least ${parseFloat(big2str(minTollUSD, 18)).toFixed(4)} USD`,
+            0,
+            'error'
+          );
+          return;
+        }
+      }
+    }
 
     // Post the new toll to the network
     const response = await this.postToll(newToll, this.currentCurrency);
