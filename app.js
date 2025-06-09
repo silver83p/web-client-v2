@@ -8715,7 +8715,20 @@ class SendAssetFormModal {
     const feeInWei = parameters.current.transactionFee || 1n * wei;
     const maxAmount = BigInt(asset.balance) - feeInWei;
 
-    this.amountInput.value = big2str(maxAmount > 0n ? maxAmount : 0n, 18).slice(0, -16);
+    // Check if we're in USD mode
+    const isUSD = this.balanceSymbol.textContent === 'USD';
+
+    if (isUSD) {
+      const scalabilityFactor =
+        parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
+      // Convert to USD before displaying
+      const maxAmountUSD =
+        parseFloat(big2str(maxAmount > 0n ? maxAmount : 0n, 18)) * scalabilityFactor;
+      this.amountInput.value = maxAmountUSD.toString();
+    } else {
+      // Display in LIB
+      this.amountInput.value = big2str(maxAmount > 0n ? maxAmount : 0n, 18).slice(0, -16);
+    }
     this.amountInput.dispatchEvent(new Event('input'));
   }
 
@@ -8748,7 +8761,7 @@ class SendAssetFormModal {
   async updateBalanceDisplay(asset) {
     if (!asset) {
       document.getElementById('balanceAmount').textContent = '0.0000';
-      document.getElementById('balanceSymbol').textContent = '';
+      document.getElementById('availableBalanceSymbol').textContent = '';
       document.getElementById('transactionFee').textContent = '0.00';
       return;
     }
@@ -8773,15 +8786,17 @@ class SendAssetFormModal {
 
     // Set the base LIB values first
     document.getElementById('balanceAmount').textContent = balanceInLIB;
-    document.getElementById('transactionFee').textContent = feeInLIB;
+    document.getElementById('transactionFee').textContent = feeInLIB + ' LIB';
+    document.getElementById('availableBalanceSymbol').textContent = asset.symbol;
 
     // If currently showing USD, convert the displayed values
     if (isCurrentlyUSD) {
       const balanceAmount = document.getElementById('balanceAmount');
       const transactionFee = document.getElementById('transactionFee');
 
-      balanceAmount.textContent = (parseFloat(balanceInLIB) * scalabilityFactor).toString();
-      transactionFee.textContent = (parseFloat(feeInLIB) * scalabilityFactor).toString();
+      balanceAmount.textContent = '$' + (parseFloat(balanceInLIB) * scalabilityFactor).toString();
+      transactionFee.textContent = '$' + (parseFloat(feeInLIB) * scalabilityFactor).toString();
+      document.getElementById('availableBalanceSymbol').textContent = '';
     }
   }
 
@@ -8880,11 +8895,13 @@ class SendAssetFormModal {
     if (!isLib) {
       sendAmount.value = sendAmount.value * scalabilityFactor;
       balanceAmount.textContent = '$' + (parseFloat(balanceInLIB) * scalabilityFactor).toString();
+      document.getElementById('availableBalanceSymbol').textContent = '';
       transactionFee.textContent = '$' + (parseFloat(feeInLIB) * scalabilityFactor).toString();
     } else {
       sendAmount.value = sendAmount.value / scalabilityFactor;
       balanceAmount.textContent = balanceInLIB;
-      transactionFee.textContent = feeInLIB;
+      document.getElementById('availableBalanceSymbol').textContent = 'LIB';
+      transactionFee.textContent = feeInLIB + ' LIB';
     }
   }
 }
