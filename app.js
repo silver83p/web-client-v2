@@ -8551,6 +8551,10 @@ class SendAssetFormModal {
     this.needTollInfo = false;
     this.tollInfo = {};
     this.tollMemoSpan = document.getElementById('tollMemo');
+    // Add balance element references
+    this.balanceAmount = document.getElementById('balanceAmount');
+    this.transactionFee = document.getElementById('transactionFee');
+    this.balanceWarning = document.getElementById('balanceWarning');
   }
 
   /**
@@ -8846,6 +8850,7 @@ class SendAssetFormModal {
     const asset = myData.wallet.assets[this.assetSelectDropdown.value];
     const feeInWei = parameters.current.transactionFee || 1n * wei;
     const maxAmount = BigInt(asset.balance) - feeInWei;
+    const maxAmountStr = big2str(maxAmount > 0n ? maxAmount : 0n, 18).slice(0, -16);
 
     // Check if we're in USD mode
     const isUSD = this.balanceSymbol.textContent === 'USD';
@@ -8854,12 +8859,10 @@ class SendAssetFormModal {
       const scalabilityFactor =
         parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
       // Convert to USD before displaying
-      const maxAmountUSD =
-        parseFloat(big2str(maxAmount > 0n ? maxAmount : 0n, 18)) * scalabilityFactor;
-      this.amountInput.value = maxAmountUSD.toString();
+      this.amountInput.value = (parseFloat(maxAmountStr) * scalabilityFactor).toString();
     } else {
       // Display in LIB
-      this.amountInput.value = big2str(maxAmount > 0n ? maxAmount : 0n, 18).slice(0, -16);
+      this.amountInput.value = maxAmountStr;
     }
     this.amountInput.dispatchEvent(new Event('input'));
   }
@@ -8892,9 +8895,8 @@ class SendAssetFormModal {
    */
   async updateBalanceDisplay(asset) {
     if (!asset) {
-      document.getElementById('balanceAmount').textContent = '0.0000';
-      document.getElementById('availableBalanceSymbol').textContent = '';
-      document.getElementById('transactionFee').textContent = '0.00';
+      this.balanceAmount.textContent = '0.0000';
+      this.transactionFee.textContent = '0.00';
       return;
     }
 
@@ -8904,32 +8906,18 @@ class SendAssetFormModal {
       parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
 
     // Preserve the current toggle state (LIB/USD) instead of overwriting it
-    const balanceSymbolElement = document.getElementById('balanceSymbol');
-    const currentSymbol = balanceSymbolElement.textContent;
+    const currentSymbol = this.balanceSymbol.textContent;
     const isCurrentlyUSD = currentSymbol === 'USD';
 
     // Only set to asset symbol if it's empty (initial state)
     if (!currentSymbol) {
-      balanceSymbolElement.textContent = asset.symbol;
+      this.balanceSymbol.textContent = asset.symbol;
     }
 
     const balanceInLIB = big2str(BigInt(asset.balance), 18).slice(0, -12);
     const feeInLIB = big2str(txFeeInLIB, 18).slice(0, -16);
 
-    // Set the base LIB values first
-    document.getElementById('balanceAmount').textContent = balanceInLIB;
-    document.getElementById('transactionFee').textContent = feeInLIB + ' LIB';
-    document.getElementById('availableBalanceSymbol').textContent = asset.symbol;
-
-    // If currently showing USD, convert the displayed values
-    if (isCurrentlyUSD) {
-      const balanceAmount = document.getElementById('balanceAmount');
-      const transactionFee = document.getElementById('transactionFee');
-
-      balanceAmount.textContent = '$' + (parseFloat(balanceInLIB) * scalabilityFactor).toString();
-      transactionFee.textContent = '$' + (parseFloat(feeInLIB) * scalabilityFactor).toString();
-      document.getElementById('availableBalanceSymbol').textContent = '';
-    }
+    this.updateBalanceAndFeeDisplay(balanceInLIB, feeInLIB, isCurrentlyUSD, scalabilityFactor);
   }
 
   /**
@@ -8955,20 +8943,16 @@ class SendAssetFormModal {
    * @returns {Promise<void>}
    */
   async refreshSendButtonDisabledState() {
-    const sendToAddressError = document.getElementById('sendToAddressError');
     // Address is valid if its error/status message is visible and set to 'found'.
     const isAddressConsideredValid =
-      sendToAddressError.style.display === 'inline' && sendToAddressError.textContent === 'found';
-    //console.log(`isAddressConsideredValid ${isAddressConsideredValid}`);
+      this.usernameAvailable.style.display === 'inline' &&
+      this.usernameAvailable.textContent === 'found';
 
-    const amountInput = document.getElementById('sendAmount');
-    const amount = amountInput.value;
-    const assetIndex = document.getElementById('sendAsset').value;
-    const balanceWarning = document.getElementById('balanceWarning');
+    const amount = this.amountInput.value;
+    const assetIndex = this.assetSelectDropdown.value;
 
     // Check if amount is in USD and convert to LIB for validation
-    const balanceSymbol = document.getElementById('balanceSymbol');
-    const isUSD = balanceSymbol.textContent === 'USD';
+    const isUSD = this.balanceSymbol.textContent === 'USD';
     let amountForValidation = amount;
 
     if (isUSD && amount) {
@@ -8982,27 +8966,28 @@ class SendAssetFormModal {
     const amountBigInt = bigxnum2big(wei, amountForValidation.toString());
 
     // validateBalance returns false if the amount/balance is invalid.
-    const isAmountAndBalanceValid = await validateBalance(amountBigInt, assetIndex, balanceWarning);
-    console.log(`isAmountAndBalanceValid ${isAmountAndBalanceValid}`);
-
-    const submitButton = document.querySelector('#sendForm button[type="submit"]');
+    const isAmountAndBalanceValid = await validateBalance(
+      amountBigInt,
+      assetIndex,
+      this.balanceWarning
+    );
 
     let isAmountAndTollValid = true;
     if (this.foundAddressObject.address) {
-      if (amountInput.value.trim() != '') {
-        isAmountAndTollValid = this.validateToll(amountBigInt, assetIndex, balanceWarning);
+      if (this.amountInput.value.trim() != '') {
+        isAmountAndTollValid = this.validateToll(amountBigInt);
         console.log('ismountAndTollValid ' + isAmountAndTollValid);
       }
     }
     // Enable button only if both conditions are met.
     if (isAddressConsideredValid && isAmountAndBalanceValid && isAmountAndTollValid) {
-      submitButton.disabled = false;
+      this.submitButton.disabled = false;
     } else {
-      submitButton.disabled = true;
+      this.submitButton.disabled = true;
     }
   }
 
-  validateToll(amount, assetIndex = 0, balanceWarning = null) {
+  validateToll(amount) {
     // check if user is required to pay a toll
     if (this.tollInfo.required == 1) {
       if (this.memoInput.value.trim() != '') {
@@ -9024,8 +9009,8 @@ class SendAssetFormModal {
           `toll > amount  ${big2str(tollInLIB, 8)} > ${big2str(amountInLIB, 8)} : ${tollInLIB > amountInLIB}`
         );
         if (tollInLIB > amountInLIB) {
-          balanceWarning.textContent = 'Amount is less than toll for memo.';
-          balanceWarning.style.display = 'block';
+          this.balanceWarning.textContent = 'Amount is less than toll for memo.';
+          this.balanceWarning.style.display = 'block';
           return false;
         }
       }
@@ -9041,14 +9026,10 @@ class SendAssetFormModal {
    */
   async handleToggleBalance(e) {
     e.preventDefault();
-    const balanceSymbol = document.getElementById('balanceSymbol');
-    balanceSymbol.textContent = balanceSymbol.textContent === 'LIB' ? 'USD' : 'LIB';
-    const sendAmount = document.getElementById('sendAmount');
-    const balanceAmount = document.getElementById('balanceAmount');
-    const transactionFee = document.getElementById('transactionFee');
+    this.balanceSymbol.textContent = this.balanceSymbol.textContent === 'LIB' ? 'USD' : 'LIB';
 
     // check the context value of the button to determine if it's LIB or USD
-    const isLib = balanceSymbol.textContent === 'LIB';
+    const isLib = this.balanceSymbol.textContent === 'LIB';
 
     // get the scalability factor for LIB/USD conversion
     await getNetworkParams();
@@ -9063,15 +9044,30 @@ class SendAssetFormModal {
 
     // if isLib is false, convert the sendAmount to USD
     if (!isLib) {
-      sendAmount.value = sendAmount.value * scalabilityFactor;
-      balanceAmount.textContent = '$' + (parseFloat(balanceInLIB) * scalabilityFactor).toString();
-      document.getElementById('availableBalanceSymbol').textContent = '';
-      transactionFee.textContent = '$' + (parseFloat(feeInLIB) * scalabilityFactor).toString();
+      this.amountInput.value = this.amountInput.value * scalabilityFactor;
     } else {
-      sendAmount.value = sendAmount.value / scalabilityFactor;
-      balanceAmount.textContent = balanceInLIB;
-      document.getElementById('availableBalanceSymbol').textContent = 'LIB';
-      transactionFee.textContent = feeInLIB + ' LIB';
+      this.amountInput.value = this.amountInput.value / scalabilityFactor;
+    }
+
+    this.updateBalanceAndFeeDisplay(balanceInLIB, feeInLIB, !isLib, scalabilityFactor);
+  }
+
+  /**
+   * Updates the display of balance and fee amounts with appropriate formatting
+   * @param {string} balanceInLIB - The balance amount in LIB
+   * @param {string} feeInLIB - The fee amount in LIB
+   * @param {boolean} isUSD - Whether to display in USD format
+   * @param {number} scalabilityFactor - The factor to convert between LIB and USD
+   */
+  updateBalanceAndFeeDisplay(balanceInLIB, feeInLIB, isUSD, scalabilityFactor) {
+    if (isUSD) {
+      this.balanceAmount.textContent =
+        '$' + (parseFloat(balanceInLIB) * scalabilityFactor).toPrecision(6);
+      this.transactionFee.textContent =
+        '$' + (parseFloat(feeInLIB) * scalabilityFactor).toPrecision(2);
+    } else {
+      this.balanceAmount.textContent = balanceInLIB + ' LIB';
+      this.transactionFee.textContent = feeInLIB + ' LIB';
     }
   }
 }
