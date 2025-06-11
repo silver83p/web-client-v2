@@ -196,10 +196,10 @@ async function checkOnlineStatus() {
 }
 
 async function checkUsernameAvailability(username, address, foundAddressObject) {
-  if (foundAddressObject){
+  if (foundAddressObject) {
     foundAddressObject.address = null;
   }
-// First check if we're offline
+  // First check if we're offline
   if (!isOnline) {
     console.log('Checking username availability offline');
     // When offline, check local storage only
@@ -8533,7 +8533,7 @@ class SendAssetFormModal {
     this.balanceSymbol = document.getElementById('balanceSymbol');
     this.availableBalance = document.getElementById('availableBalance');
     this.toggleBalanceButton = document.getElementById('toggleBalance');
-    this.foundAddressObject = {address:null};
+    this.foundAddressObject = { address: null };
     this.needTollInfo = false;
     this.tollInfo = {};
     this.tollMemoSpan = document.getElementById('tollMemo');
@@ -8574,7 +8574,7 @@ class SendAssetFormModal {
     });
     // event listener for toggle LIB/USD button
     this.toggleBalanceButton.addEventListener('click', this.handleToggleBalance.bind(this));
-    this.memoInput.addEventListener('input', this.handleMemoInputChange.bind(this))
+    this.memoInput.addEventListener('input', this.handleMemoInputChange.bind(this));
   }
 
   /**
@@ -8643,7 +8643,7 @@ class SendAssetFormModal {
       clearTimeout(this.sendAssetFormModalCheckTimeout);
     }
 
-    this.clearFormInfo()
+    this.clearFormInfo();
     this.foundAddressObject.address = null;
 
     // Check if username is too short
@@ -8683,8 +8683,7 @@ class SendAssetFormModal {
       if (this.foundAddressObject.address) {
         this.needTollInfo = true;
         await this.validateForm();
-      }
-      else{
+      } else {
         await this.refreshSendButtonDisabledState();
       }
     }, 1000);
@@ -8717,7 +8716,7 @@ class SendAssetFormModal {
       // build string to display under memo input. with lib amoutn and (usd amount)
       /* const tollInfoString = `Toll:  */
       this.updateMemoTollUI();
-      this.refreshSendButtonDisabledState()
+      this.refreshSendButtonDisabledState();
     }
   }
 
@@ -8749,8 +8748,8 @@ class SendAssetFormModal {
     let display;
     if (this.tollInfo.required == 1) {
       display = `${mainString} (${otherString})`;
-      if (this.memoInput.value.trim() == ''){
-        display = ''
+      if (this.memoInput.value.trim() == '') {
+        display = '';
       }
     } else if (this.tollInfo.required == 2) {
       this.tollMemoSpan.style.color = 'red';
@@ -8761,17 +8760,17 @@ class SendAssetFormModal {
       display = `free (${mainString} (${otherString}))`;
     }
     //display the container
-    if (display != ''){
-      display = 'Toll: ' + display
+    if (display != '') {
+      display = 'Toll: ' + display;
     }
     this.tollMemoSpan.textContent = display;
   }
 
-  clearFormInfo(){
-    this.tollMemoSpan.textContent = ''
+  clearFormInfo() {
+    this.tollMemoSpan.textContent = '';
   }
 
-  handleMemoInputChange(){
+  handleMemoInputChange() {
     if (this.foundAddressObject.address) {
       this.validateForm();
     }
@@ -8976,10 +8975,10 @@ class SendAssetFormModal {
     const submitButton = document.querySelector('#sendForm button[type="submit"]');
 
     let isAmountAndTollValid = true;
-    if (this.foundAddressObject.address){
-      if (amountInput.value.trim() != ''){
-        isAmountAndTollValid = this.validateToll(amountBigInt, assetIndex, balanceWarning)
-        console.log('ismountAndTollValid '+isAmountAndTollValid)
+    if (this.foundAddressObject.address) {
+      if (amountInput.value.trim() != '') {
+        isAmountAndTollValid = this.validateToll(amountBigInt, assetIndex, balanceWarning);
+        console.log('ismountAndTollValid ' + isAmountAndTollValid);
       }
     }
     // Enable button only if both conditions are met.
@@ -8990,11 +8989,11 @@ class SendAssetFormModal {
     }
   }
 
-  validateToll(amount, assetIndex = 0, balanceWarning = null){
+  validateToll(amount, assetIndex = 0, balanceWarning = null) {
     // check if user is required to pay a toll
-    if (this.tollInfo.required == 1){
-      if (this.memoInput.value.trim() != ''){
-        console.log('checking if toll > amount')
+    if (this.tollInfo.required == 1) {
+      if (this.memoInput.value.trim() != '') {
+        console.log('checking if toll > amount');
         const scaleMul = parameters.current.stabilityScaleMul || 1;
         const scaleDiv = parameters.current.stabilityScaleDiv || 1;
         const factor = scaleDiv !== 0 ? scaleMul / scaleDiv : 1;
@@ -9005,13 +9004,15 @@ class SendAssetFormModal {
         }
         */
         let tollInLIB = this.tollInfo.toll;
-        if (this.tollInfo.tollUnit !== 'LIB'){
+        if (this.tollInfo.tollUnit !== 'LIB') {
           tollInLIB = bigxnum2big(this.tollInfo.toll, (1.0 / factor).toString());
         }
-        console.log(`toll > amount  ${big2str(tollInLIB,8)} > ${big2str(amountInLIB,8)} : ${tollInLIB>amountInLIB}`)
-        if (tollInLIB > amountInLIB){
-          balanceWarning.textContent = 'Amount is less than toll for memo.'
-          balanceWarning.style.display = 'block'
+        console.log(
+          `toll > amount  ${big2str(tollInLIB, 8)} > ${big2str(amountInLIB, 8)} : ${tollInLIB > amountInLIB}`
+        );
+        if (tollInLIB > amountInLIB) {
+          balanceWarning.textContent = 'Amount is less than toll for memo.';
+          balanceWarning.style.display = 'block';
           return false;
         }
       }
