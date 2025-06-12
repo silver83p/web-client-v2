@@ -4618,6 +4618,14 @@ small {
   min-height: 1.3em; /* Match parent's line-height */
 }
 
+.last-item {
+  display: block;
+  width: 0;
+  height: 0;
+  border: none;
+  background: none;
+}
+
 .last-item:focus {
   outline: none;
 }
