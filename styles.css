@@ -4617,3 +4617,7 @@ small {
   display: inline-block; /* Ensure consistent layout */
   min-height: 1.3em; /* Match parent's line-height */
 }
+
+.last-item:focus {
+  outline: none;
+}
