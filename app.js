@@ -175,6 +175,7 @@ let checkPendingTransactionsIntervalId = null;
 // Used in getNetworkParams function
 const NETWORK_ACCOUNT_UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
 const NETWORK_ACCOUNT_ID = '0000000000000000000000000000000000000000000000000000000000000000';
+const MAX_TOLL = 1_000_000; // 1M limit
 
 // TODO - get the parameters from the network
 // mock network parameters
@@ -6396,7 +6397,6 @@ class TollModal {
     let newTollValue = parseFloat(newTollAmountInput.value);
 
     if (isNaN(newTollValue) || newTollValue < 0) {
-      // console.error("Invalid toll amount");
       showToast('Invalid toll amount entered.', 0, 'error');
       return;
     }
@@ -6426,6 +6426,23 @@ class TollModal {
           );
           return;
         }
+      }
+    }
+
+    // Add maximum toll validation
+    if (this.currentCurrency === 'LIB') {
+      if (newTollValue > MAX_TOLL) {
+        showToast(`Toll cannot exceed ${MAX_TOLL} LIB`, 0, 'error');
+        return;
+      }
+    } else {
+      // For USD, convert the max toll to USD for comparison
+      const scalabilityFactor =
+        parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
+      const maxTollUSD = MAX_TOLL * scalabilityFactor;
+      if (newTollValue > maxTollUSD) {
+        showToast(`Toll cannot exceed ${maxTollUSD.toFixed(2)} USD`, 0, 'error');
+        return;
       }
     }
 
@@ -9397,4 +9414,3 @@ async function getNetworkParams() {
   }
 }
 getNetworkParams.timestamp = 0;
-
