@@ -7512,6 +7512,9 @@ class ChatModal {
 
     this.sendReclaimTollTransaction(this.address);
 
+    // Save any unsaved draft before closing
+    this.debouncedSaveDraft(this.messageInput.value);
+
     this.modal.classList.remove('active');
     if (document.getElementById('chatsScreen').classList.contains('active')) {
       updateChatList();
@@ -7846,7 +7849,9 @@ class ChatModal {
       // Clear input and reset height, and delete any saved draft
       this.messageInput.value = '';
       this.messageInput.style.height = '48px'; // original height
-      contact.draft = '';
+
+      // Call debounced save directly with empty string
+      this.debouncedSaveDraft('');
 
       // Update the chat modal UI immediately
       this.appendChatModal(); // This should now display the 'sending' message
