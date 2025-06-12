@@ -1824,15 +1824,26 @@ async function updateContactsList() {
   // Helper to render a contact item
   const renderContactItem = async (contact, itemClass) => {
     const identicon = await generateIdenticon(contact.address);
+    const contactName =
+      contact.name ||
+      contact.senderInfo?.name ||
+      contact.username ||
+      `${contact.address.slice(0, 8)}...${contact.address.slice(-6)}`;
+    const contactInfo =
+      contact.email ||
+      contact.x ||
+      contact.phone ||
+      `${contact.address.slice(0, 8)}…${contact.address.slice(-6)}`;
+
     return `
             <li class="${itemClass}">
                 <div class="chat-avatar">${identicon}</div>
                 <div class="chat-content">
                     <div class="chat-header">
-                        <div class="chat-name">${contact.name || contact.senderInfo?.name || contact.username || `${contact.address.slice(0, 8)}...${contact.address.slice(-6)}`}</div>
+                        <div class="chat-name">${escapeHtml(contactName)}</div>
                     </div>
                     <div class="contact-list-info">
-                        ${contact.email || contact.x || contact.phone || `${contact.address.slice(0, 8)}…${contact.address.slice(-6)}`}
+                        ${escapeHtml(contactInfo)}
                     </div>
                 </div>
             </li>
@@ -3362,6 +3373,13 @@ async function updateTransactionHistory() {
     .map((tx) => {
       const txidAttr = tx?.txid ? `data-txid="${tx.txid}"` : '';
       const statusAttr = tx?.status ? `data-status="${tx.status}"` : '';
+      const contactDisplay = escapeHtml(
+        tx.nominee ||
+          contacts[tx.address]?.name ||
+          contacts[tx.address]?.senderInfo?.name ||
+          contacts[tx.address]?.username ||
+          `${contacts[tx.address]?.address?.slice(0, 8)}...${contacts[tx.address]?.address?.slice(-6)}`
+      );
       return `
         <div class="transaction-item" data-address="${tx.address}" ${txidAttr} ${statusAttr}>
             <div class="transaction-info">
@@ -3374,7 +3392,7 @@ async function updateTransactionHistory() {
             </div>
             <div class="transaction-details">
                 <div class="transaction-address">
-                    ${tx.sign === -1 ? 'To:' : 'From:'} ${tx.nominee || contacts[tx.address]?.name || contacts[tx.address]?.senderInfo?.name || contacts[tx.address]?.username || `${contacts[tx.address]?.address.slice(0, 8)}...${contacts[tx.address]?.address.slice(-6)}`}
+                    ${tx.sign === -1 ? 'To:' : 'From:'} ${contactDisplay}
                 </div>
                 <div class="transaction-time">${formatTime(tx.timestamp)}</div>
             </div>
