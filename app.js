@@ -8367,6 +8367,9 @@ class NewChatModal {
     // Check if contact exists
     if (!chatsData.contacts[recipientAddress]) {
       createNewContact(recipientAddress, username, 2);
+      // TODO: uncomment after backend support updating tollRequired before chatId is created
+      // update to not require toll
+      //friendModal.postUpdateTollRequired(recipientAddress, 0);
     }
     chatsData.contacts[recipientAddress].username = username;
 
