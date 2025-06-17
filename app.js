@@ -2526,6 +2526,12 @@ async function handleSendAsset(event) {
     const response = await postAssetTransfer(toAddress, amount, payload, keys);
 
     if (!response || !response.result || !response.result.success) {
+      const str = response.result.reason;
+      const regex = /toll/i;
+
+      if (str.match(regex) || str.match(/at least/i)) {
+       await sendAssetFormModal.reopen();
+      }
       throw new Error('Transaction failed');
     }
 
@@ -7328,7 +7334,7 @@ class ChatModal {
   /**
    * Opens the chat modal for the given address.
    * @param {string} address - The address of the contact to open the chat modal for.
-   * @returns {void}
+   * @returns {Promise<void>}
    */
   async open(address) {
     friendModal.setAddress(address);
@@ -7760,6 +7766,7 @@ class ChatModal {
 
       // Call debounced save directly with empty string
       this.debouncedSaveDraft('');
+      contact.draft = '';
 
       // Update the chat modal UI immediately
       this.appendChatModal(); // This should now display the 'sending' message
@@ -7774,6 +7781,12 @@ class ChatModal {
 
       if (!response || !response.result || !response.result.success) {
         console.log('message failed to send', response);
+        const str = response.result.reason;
+        const regex = /toll/i;
+  
+        if (str.match(regex)) {
+          await this.reopen();
+        }
         //let userMessage = 'Message failed to send. Please try again.';
         //const reason = response.result?.reason || '';
 
@@ -8110,6 +8123,12 @@ class ChatModal {
       // Trigger resize
       this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
     }
+  }
+
+  async reopen() {
+    const tempAddress = this.address;
+    this.close();
+    await this.open(tempAddress);
   }
 }
 
@@ -8515,7 +8534,7 @@ class SendAssetFormModal {
 
   /**
    * Opens the send asset modal
-   * @returns {void}
+   * @returns {Promise<void>}
    */
   async open() {
     this.modal.classList.add('active');
@@ -8554,7 +8573,7 @@ class SendAssetFormModal {
 
   /**
    * Closes the send asset modal
-   * @returns {void}
+   * @returns {Promise<void>}
    */
   async close() {
     await updateChatList();
@@ -8970,6 +8989,21 @@ class SendAssetFormModal {
       this.transactionFee.textContent = feeInLIB + ' LIB';
     }
   }
+
+  /**
+   * Reopens the send asset form modal with the previous values
+   * @returns {Promise<void>}
+   */
+  async reopen() {
+    const tempUsername = this.usernameInput?.value;
+    const tempAmount = this.amountInput?.value;
+    const tempMemo = this.memoInput?.value;
+    await this.close();
+    this.username = tempUsername;
+    await this.open();
+    this.amountInput.value = tempAmount;
+    this.memoInput.value = tempMemo || '';
+  }
 }
 
 const sendAssetFormModal = new SendAssetFormModal();
@@ -9099,7 +9133,16 @@ async function checkPendingTransactions() {
             showToast(`Unstake failed: ${failureReason}`, 0, 'error');
           } else if (type === 'deposit_stake') {
             showToast(`Stake failed: ${failureReason}`, 0, 'error');
-          } else if (type === 'toll') {
+          } else if (type === 'message') {
+            if (chatModal.modal.classList.contains('active')) {
+              await chatModal.reopen();
+            }
+          } else if (type === 'transfer') {
+            if (sendAssetFormModal.modal.classList.contains('active')) {
+              await sendAssetFormModal.reopen();
+            }
+          }
+          else if (type === 'toll') {
             showToast(
               `Toll submission failed! Reverting to old toll: ${tollModal.oldToll}. Failure reason: ${failureReason}. `,
               0,
