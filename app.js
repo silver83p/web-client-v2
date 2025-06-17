@@ -2321,10 +2321,7 @@ function fillStakeAddressFromQR(data) {
  */
 async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   if (balanceWarning) balanceWarning.style.display = 'none';
-  if (!amount) {
-    console.warn('[validateBalance] amount is 0');
-    return false;
-  } else if (amount < 0) {
+  if (amount < 0n) {
     console.warn('[validateBalance] amount is negative');
     if (balanceWarning) balanceWarning.style.display = 'block';
     balanceWarning.textContent = 'Amount cannot be negative';
@@ -2334,7 +2331,7 @@ async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   await getNetworkParams();
   const asset = myData.wallet.assets[assetIndex];
   const feeInWei = parameters.current.transactionFee || 1n * wei;
-  const totalRequired = bigxnum2big(1n, amount.toString()) + feeInWei;
+  const totalRequired = amount + feeInWei;
   const hasInsufficientBalance = BigInt(asset.balance) < totalRequired;
 
   if (balanceWarning) {
@@ -7626,7 +7623,8 @@ class ChatModal {
         return;
       }
 
-      const sufficientBalance = await validateBalance(this.toll);
+      const amount = this.tollRequiredToSend ? this.toll : 0n;
+      const sufficientBalance = await validateBalance(amount);
       if (!sufficientBalance) {
         showToast('Insufficient balance for toll and fee', 0, 'error');
         this.sendButton.disabled = false;
