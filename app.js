@@ -2321,8 +2321,9 @@ function fillStakeAddressFromQR(data) {
  */
 async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   if (balanceWarning) balanceWarning.style.display = 'none';
-  if (amount < 0n) {
-    console.warn('[validateBalance] amount is negative');
+  if (amount == 0n) {
+    return false;
+  } else if (amount < 0n) {
     if (balanceWarning) balanceWarning.style.display = 'block';
     balanceWarning.textContent = 'Amount cannot be negative';
     return false;
@@ -9015,13 +9016,20 @@ class SendAssetFormModal {
     const isAddressConsideredValid =
       this.usernameAvailable.style.display === 'inline' && this.usernameAvailable.textContent === 'found';
 
-    const amount = this.amountInput.value;
+    const amount = this.amountInput.value.trim();
+
+    if (amount == '') {
+      this.balanceWarning.textContent = '';
+      this.balanceWarning.style.display = 'none';
+      this.submitButton.disabled = true;
+      return;
+    }
+
     const assetIndex = this.assetSelectDropdown.value;
 
     // Check if amount is in USD and convert to LIB for validation
     const isUSD = this.balanceSymbol.textContent === 'USD';
     let amountForValidation = amount;
-
     if (isUSD && amount) {
       await getNetworkParams();
       const scalabilityFactor = parameters.current.stabilityScaleMul / parameters.current.stabilityScaleDiv;
