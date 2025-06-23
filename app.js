@@ -802,6 +802,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Send Asset Modal
   sendAssetFormModal.load();
 
+  // Receive Modal
+  receiveModal.load();
+
   // Add event listeners for send asset confirmation modal
   document.getElementById('closeSendAssetConfirmModal').addEventListener('click', closeSendAssetConfirmModal);
   document.getElementById('confirmSendButton').addEventListener('click', handleSendAsset);
@@ -8681,6 +8684,9 @@ const sendAssetFormModal = new SendAssetFormModal();
 
 class ReceiveModal {
   constructor() {
+  }
+
+  load() {
     this.modal = document.getElementById('receiveModal');
     this.assetSelect = document.getElementById('receiveAsset');
     this.amountInput = document.getElementById('receiveAmount');
@@ -8693,10 +8699,6 @@ class ReceiveModal {
     // Create debounced function
     this.debouncedUpdateQRCode = debounce(() => this.updateQRCode(), 300);
 
-    this.setupEventListeners();
-  }
-
-  setupEventListeners() {
     // Modal open/close
     document.getElementById('openReceiveModal').addEventListener('click', () => this.open());
     document.getElementById('closeReceiveModal').addEventListener('click', () => this.close());
@@ -8916,7 +8918,6 @@ class ReceiveModal {
 }
 
 // initialize the receive modal
-// eslint-disable-next-line no-unused-vars
 const receiveModal = new ReceiveModal();
 
 /**
