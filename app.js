@@ -5883,7 +5883,7 @@ class TollModal {
 
     this.updateTollDisplay(toll, tollUnit);
 
-    this.currentCurrency = 'LIB'; // Reset currency state
+    this.currentCurrency = tollUnit;
     document.getElementById('tollCurrencySymbol').textContent = this.currentCurrency;
     this.newTollAmountInputElement.value = ''; // Clear input field
     this.warningMessageElement.textContent = '';
@@ -5927,6 +5927,7 @@ class TollModal {
     } else {
       this.minTollDisplay.textContent = `Minimum toll: ${parseFloat(big2str(this.minToll, 18)).toFixed(6)} LIB`; // Show 6 decimal places for LIB
     }
+    this.updateSaveButtonState();
   }
 
   /**
@@ -6113,6 +6114,22 @@ class TollModal {
 
     // Update save button state
     this.saveButton.disabled = !isValid;
+
+    // Additional check: disable if the new toll is the same as the current toll
+    if (isValid) {
+      const newTollValue = parseFloat(this.newTollAmountInputElement.value);
+      const newTollBigInt = bigxnum2big(wei, this.newTollAmountInputElement.value);
+      const currentToll = myData.settings.toll;
+      const currentTollUnit = myData.settings.tollUnit;
+
+      if (!isNaN(newTollValue)) {
+        if (currentTollUnit === this.currentCurrency) {
+          if (newTollBigInt === currentToll) {
+            this.saveButton.disabled = true;
+          }
+        } 
+      }
+    }
 
     // Update warning message
     if (warningMessage) {
