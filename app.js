@@ -2702,8 +2702,22 @@ async function openEditContactModal() {
 
   // Update the avatar section
   avatarDiv.innerHTML = identicon;
-  nameDiv.textContent = document.getElementById('contactInfoName').textContent;
-  subtitleDiv.textContent = document.getElementById('contactInfoUsername').textContent;
+  // update the name and subtitle
+  nameDiv.textContent = document.getElementById('contactInfoUsername').textContent;
+  subtitleDiv.textContent = document.getElementById('contactInfoModal').querySelector('.subtitle').textContent;
+
+  // update the provided name
+  const providedNameContainer = document.getElementById('editContactProvidedNameContainer');
+  const providedNameDiv = providedNameContainer.querySelector('.contact-info-value');
+
+  // if the textContent is 'Not provided', set it to an empty string
+  const providedName = document.getElementById('contactInfoProvidedName').textContent;
+  if (providedName === 'Not provided') {
+    providedNameContainer.style.display = 'none';
+  } else {
+    providedNameDiv.textContent = providedName;
+    providedNameContainer.style.display = 'block';
+  }
 
   // Get the original name from the contact info display
   const contactNameDisplay = document.getElementById('contactInfoName');
