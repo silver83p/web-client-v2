@@ -2231,6 +2231,9 @@ class ContactInfoModal {
   }
 }
 
+// Create a singleton instance
+const contactInfoModal = new ContactInfoModal();
+
 class FriendModal {
   constructor() {
     this.modal = document.getElementById('friendModal');
@@ -2547,9 +2550,6 @@ function handleSaveEditContact() {
     }
   }
 }
-
-// Create a singleton instance
-const contactInfoModal = new ContactInfoModal();
 
 function handleSignOut() {
   // Clear intervals
