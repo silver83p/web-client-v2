@@ -279,320 +279,6 @@ function getAvailableUsernames() {
   return Object.keys(netidAccounts.usernames);
 }
 
-function openCreateAccountModal() {
-  document.getElementById('createAccountModal').classList.add('active');
-}
-
-// Check availability on input changes
-let createAccountCheckTimeout;
-function handleCreateAccountInput(e) {
-  const username = normalizeUsername(e.target.value);
-  e.target.value = username;
-  const usernameAvailable = document.getElementById('newUsernameAvailable');
-  const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
-
-  // Clear previous timeout
-  if (createAccountCheckTimeout) {
-    clearTimeout(createAccountCheckTimeout);
-  }
-
-  // Reset display
-  usernameAvailable.style.display = 'none';
-  // username available test: change to false to test pending register tx
-  submitButton.disabled = true;
-
-  // Check if username is too short
-  if (username.length < 3) {
-    usernameAvailable.textContent = 'too short';
-    usernameAvailable.style.color = '#dc3545';
-    usernameAvailable.style.display = 'inline';
-    return;
-  }
-
-  // Check network availability
-  createAccountCheckTimeout = setTimeout(async () => {
-    const taken = await checkUsernameAvailability(username);
-    if (taken == 'taken') {
-      usernameAvailable.textContent = 'taken';
-      usernameAvailable.style.color = '#dc3545';
-      usernameAvailable.style.display = 'inline';
-      // username available test: comment out to test pending register tx
-      submitButton.disabled = true;
-    } else if (taken == 'available') {
-      usernameAvailable.textContent = 'available';
-      usernameAvailable.style.color = '#28a745';
-      usernameAvailable.style.display = 'inline';
-      submitButton.disabled = false;
-    } else {
-      usernameAvailable.textContent = 'network error';
-      usernameAvailable.style.color = '#dc3545';
-      usernameAvailable.style.display = 'inline';
-      submitButton.disabled = true;
-    }
-  }, 1000);
-}
-
-function closeCreateAccountModal() {
-  document.getElementById('createAccountModal').classList.remove('active');
-}
-
-async function handleCreateAccount(event) {
-  // disable submit button
-  const submitButton = document.querySelector('#createAccountForm button[type="submit"]');
-  submitButton.disabled = true;
-  // disable input fields, back button, and toggle button
-  const toggleButton = document.getElementById('togglePrivateKeyInput');
-  const usernameInput = document.getElementById('newUsername');
-  const privateKeyInput = document.getElementById('newPrivateKey');
-  const backButton = document.getElementById('closeCreateAccountModal');
-
-  toggleButton.disabled = true;
-  usernameInput.disabled = true;
-  privateKeyInput.disabled = true;
-  backButton.disabled = true;
-
-  event.preventDefault();
-  const username = normalizeUsername(document.getElementById('newUsername').value);
-
-  // Get network ID from network.js
-  const { netid } = network;
-
-  // Get existing accounts or create new structure
-  const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
-
-  // Ensure netid and usernames objects exist
-  if (!existingAccounts.netids[netid]) {
-    existingAccounts.netids[netid] = { usernames: {} };
-  }
-
-  // Get private key from input or generate new one
-  const providedPrivateKey = document.getElementById('newPrivateKey').value;
-  const privateKeyError = document.getElementById('newPrivateKeyError');
-  let privateKey, privateKeyHex;
-
-  if (providedPrivateKey) {
-    // Validate and normalize private key
-    const validation = validatePrivateKey(providedPrivateKey);
-    if (!validation.valid) {
-      privateKeyError.textContent = validation.message;
-      privateKeyError.style.color = '#dc3545';
-      privateKeyError.style.display = 'inline';
-      // Re-enable controls on validation failure
-      submitButton.disabled = false;
-      toggleButton.disabled = false;
-      usernameInput.disabled = false;
-      privateKeyInput.disabled = false;
-      backButton.disabled = false;
-      return;
-    }
-
-    privateKey = hex2bin(validation.key);
-    privateKeyHex = validation.key;
-    privateKeyError.style.display = 'none';
-  } else {
-    privateKey = generateRandomPrivateKey();
-    privateKeyHex = bin2hex(privateKey);
-    privateKeyError.style.display = 'none'; // Ensure hidden if generated
-  }
-
-  function validatePrivateKey(key) {
-    // Trim whitespace
-    key = key.trim();
-
-    // Remove 0x prefix if present
-    if (key.startsWith('0x')) {
-      key = key.slice(2);
-    }
-
-    // Convert to lowercase
-    key = key.toLowerCase();
-
-    // Validate hex characters
-    const hexRegex = /^[0-9a-f]*$/;
-    if (!hexRegex.test(key)) {
-      return {
-        valid: false,
-        message: 'Invalid characters - only 0-9 and a-f allowed',
-      };
-    }
-
-    // Validate length (64 chars for 32 bytes)
-    if (key.length !== 64) {
-      return {
-        valid: false,
-        message: 'Invalid length - must be 64 hex characters',
-      };
-    }
-
-    return {
-      valid: true,
-      key: key,
-    };
-  }
-
-  // Generate uncompressed public key
-  const publicKey = getPublicKey(privateKey);
-  const publicKeyHex = bin2hex(publicKey);
-  const pqSeed = bin2hex(generateRandomBytes(64));
-
-  // Generate address from public key
-  const address = generateAddress(publicKey);
-  const addressHex = bin2hex(address);
-
-  // If a private key was provided, check if the derived address already exists on the network
-  if (providedPrivateKey) {
-    try {
-      const accountCheckAddress = longAddress(addressHex);
-      console.log(`Checking network for existing account at address: ${accountCheckAddress}`);
-      const accountInfo = await queryNetwork(`/account/${accountCheckAddress}`);
-
-      // Check if the query returned data indicating an account exists.
-      // This assumes a non-null `accountInfo` with an `account` property means it exists.
-      if (accountInfo && accountInfo.account) {
-        console.log('Account already exists for this private key:', accountInfo);
-        privateKeyError.textContent = 'An account already exists for this private key.';
-        privateKeyError.style.color = '#dc3545';
-        privateKeyError.style.display = 'inline';
-        // Re-enable controls when account already exists
-        submitButton.disabled = false;
-        toggleButton.disabled = false;
-        usernameInput.disabled = false;
-        privateKeyInput.disabled = false;
-        backButton.disabled = false;
-        return; // Stop the account creation process
-      } else {
-        console.log('No existing account found for this private key.');
-        privateKeyError.style.display = 'none';
-      }
-    } catch (error) {
-      console.error('Error checking for existing account:', error);
-      privateKeyError.textContent = 'Network error checking key. Please try again.';
-      privateKeyError.style.color = '#dc3545';
-      privateKeyError.style.display = 'inline';
-      // Re-enable controls on network error
-      submitButton.disabled = false;
-      toggleButton.disabled = false;
-      usernameInput.disabled = false;
-      privateKeyInput.disabled = false;
-      backButton.disabled = false;
-      return; // Stop process on error
-    }
-  }
-
-  // Create new account entry
-  myAccount = {
-    netid,
-    username,
-    chatTimestamp: 0,
-    keys: {
-      address: addressHex,
-      public: publicKeyHex,
-      secret: privateKeyHex,
-      type: 'secp256k1',
-      pqSeed: pqSeed, // store only the 64 byte seed instead of 32,000 byte public and secret keys
-    },
-  };
-  let waitingToastId = showToast('Creating account...', 0, 'loading');
-  let res;
-  // Create new data entry
-  try {
-    await getNetworkParams();
-    myData = newDataRecord(myAccount);
-    res = await postRegisterAlias(username, myAccount.keys);
-  } catch (error) {
-    submitButton.disabled = false;
-    toggleButton.disabled = false;
-    usernameInput.disabled = false;
-    privateKeyInput.disabled = false;
-    backButton.disabled = false;
-    if (waitingToastId) hideToast(waitingToastId);
-    showToast(`Failed to fetch network parameters, try again later.`, 0, 'error');
-    console.error('Failed to fetch network parameters, using defaults:', error);
-    return;
-  }
-
-  if (res && res.result && res.result.success && res.txid) {
-    const txid = res.txid;
-
-    try {
-      // Start interval since trying to create account and tx should be in pending
-      if (!checkPendingTransactionsIntervalId) {
-        checkPendingTransactionsIntervalId = setInterval(checkPendingTransactions, 5000);
-      }
-
-      // Wait for the transaction confirmation
-      const confirmationDetails = await pendingPromiseService.register(txid);
-      if (
-        confirmationDetails.username !== username ||
-        confirmationDetails.address !== longAddress(myAccount.keys.address)
-      ) {
-        throw new Error('Confirmation details mismatch.');
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (waitingToastId) hideToast(waitingToastId);
-      showToast('Account created successfully!', 3000, 'success');
-      submitButton.disabled = false;
-      toggleButton.disabled = false;
-      usernameInput.disabled = false;
-      privateKeyInput.disabled = false;
-      backButton.disabled = false;
-      closeCreateAccountModal();
-      document.getElementById('welcomeScreen').style.display = 'none';
-      // TODO: may not need to get set since gets set in `getChats`. Need to check signin flow.
-      //getChats.lastCall = getCorrectedTimestamp();
-      // Store updated accounts back in localStorage
-      existingAccounts.netids[netid].usernames[username] = { address: myAccount.keys.address };
-      localStorage.setItem('accounts', stringify(existingAccounts));
-      saveState();
-
-      signInModal.open(username);
-    } catch (error) {
-      if (waitingToastId) hideToast(waitingToastId);
-      console.log(`DEBUG: handleCreateAccount error`, JSON.stringify(error, null, 2));
-      showToast(`account creation failed: ${error}`, 0, 'error');
-      submitButton.disabled = false;
-      toggleButton.disabled = false;
-      usernameInput.disabled = false;
-      privateKeyInput.disabled = false;
-      backButton.disabled = false;
-
-      // Clear interval
-      if (checkPendingTransactionsIntervalId) {
-        clearInterval(checkPendingTransactionsIntervalId);
-        checkPendingTransactionsIntervalId = null;
-      }
-
-      // Note: `checkPendingTransactions` will also remove the item from `myData.pending` if it's rejected by the service.
-      return;
-    }
-  } else {
-    if (waitingToastId) hideToast(waitingToastId);
-    console.error(`DEBUG: handleCreateAccount error in else`, JSON.stringify(res, null, 2));
-
-    // Clear intervals
-    if (updateWebSocketIndicatorIntervalId && wsManager) {
-      clearInterval(updateWebSocketIndicatorIntervalId);
-      updateWebSocketIndicatorIntervalId = null;
-    }
-    if (checkPendingTransactionsIntervalId) {
-      clearInterval(checkPendingTransactionsIntervalId);
-      checkPendingTransactionsIntervalId = null;
-    }
-    if (getSystemNoticeIntervalId) {
-      clearInterval(getSystemNoticeIntervalId);
-      getSystemNoticeIntervalId = null;
-    }
-
-    // no toast here since injectTx will show it
-    submitButton.disabled = false;
-    toggleButton.disabled = false;
-    usernameInput.disabled = false;
-    privateKeyInput.disabled = false;
-    backButton.disabled = false;
-    return;
-  }
-}
-
 function newDataRecord(myAccount) {
 
   const myData = {
@@ -723,19 +409,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   signInBtn.addEventListener('click', () => signInModal.open());
 
   // Create Account Modal
-  createAccountBtn.addEventListener('click', () => {
-    document.getElementById('newUsername').value = '';
-    document.getElementById('newPrivateKey').value = '';
-    document.getElementById('newUsernameAvailable').style.display = 'none';
-    document.getElementById('newPrivateKeyError').style.display = 'none';
-    openCreateAccountModal();
-  });
-  document.getElementById('closeCreateAccountModal').addEventListener('click', closeCreateAccountModal);
-  document.getElementById('createAccountForm').addEventListener('submit', handleCreateAccount);
-
-  // Event listener for the private key toggle checkbox
-  const togglePrivateKeyInput = document.getElementById('togglePrivateKeyInput');
-  togglePrivateKeyInput.addEventListener('change', handleTogglePrivateKeyInput);
+  createAccountBtn.addEventListener('click', () => createAccountModal.openWithReset());
+  createAccountModal.load();
 
   // Account Form Modal
   myProfileModal.load();
@@ -967,9 +642,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Toggle the visual state class on the button
     this.classList.toggle('toggled-visible');
   });
-
-  // create account button listener to clear message input on create account
-  document.getElementById('newUsername').addEventListener('input', handleCreateAccountInput);
 
   // Event Listerns for FailedPaymentModal
   const failedPaymentModal = document.getElementById('failedPaymentModal');
@@ -2263,7 +1935,7 @@ class SignInModal {
     // If no accounts exist, close modal and open Create Account modal
     if (usernames.length === 0) {
       this.close();
-      openCreateAccountModal();
+      createAccountModal.open();
       return;
     }
 
@@ -2351,7 +2023,7 @@ class SignInModal {
 
       document.getElementById('newPrivateKey').value = privateKey;
       this.close();
-      openCreateAccountModal();
+      createAccountModal.open();
       // Dispatch a change event to trigger the availability check
       newUsernameInput.dispatchEvent(new Event('input'));
       return;
@@ -8327,6 +7999,341 @@ class NewChatModal {
 
 const newChatModal = new NewChatModal();
 
+// Create Account Modal
+class CreateAccountModal {
+  constructor() {
+    this.checkTimeout = null;
+  }
+
+  load() {
+    this.modal = document.getElementById('createAccountModal');
+    this.form = document.getElementById('createAccountForm');
+    this.usernameInput = document.getElementById('newUsername');
+    this.privateKeyInput = document.getElementById('newPrivateKey');
+    this.privateKeySection = document.getElementById('privateKeySection');
+    this.toggleButton = document.getElementById('togglePrivateKeyInput');
+    this.backButton = document.getElementById('closeCreateAccountModal');
+    this.submitButton = this.form.querySelector('button[type="submit"]');
+    this.usernameAvailable = document.getElementById('newUsernameAvailable');
+    this.privateKeyError = document.getElementById('newPrivateKeyError');
+
+    // Setup event listeners
+    this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+    this.usernameInput.addEventListener('input', (e) => this.handleUsernameInput(e));
+    this.toggleButton.addEventListener('change', () => this.handleTogglePrivateKeyInput());
+    this.backButton.addEventListener('click', () => this.close());
+  }
+
+  open() {
+    this.modal.classList.add('active');
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+  }
+
+  openWithReset() {
+    // Clear form fields
+    this.usernameInput.value = '';
+    this.privateKeyInput.value = '';
+    this.usernameAvailable.style.display = 'none';
+    this.privateKeyError.style.display = 'none';
+    
+    // Open the modal
+    this.open();
+  }
+
+  isOpen() {
+    return this.modal.classList.contains('active');
+  }
+
+  handleUsernameInput(e) {
+    const username = normalizeUsername(e.target.value);
+    e.target.value = username;
+
+    // Clear previous timeout
+    if (this.checkTimeout) {
+      clearTimeout(this.checkTimeout);
+    }
+
+    // Reset display
+    this.usernameAvailable.style.display = 'none';
+    this.submitButton.disabled = true;
+
+    // Check if username is too short
+    if (username.length < 3) {
+      this.usernameAvailable.textContent = 'too short';
+      this.usernameAvailable.style.color = '#dc3545';
+      this.usernameAvailable.style.display = 'inline';
+      return;
+    }
+
+    // Check network availability
+    this.checkTimeout = setTimeout(async () => {
+      const taken = await checkUsernameAvailability(username);
+      if (taken == 'taken') {
+        this.usernameAvailable.textContent = 'taken';
+        this.usernameAvailable.style.color = '#dc3545';
+        this.usernameAvailable.style.display = 'inline';
+        this.submitButton.disabled = true;
+      } else if (taken == 'available') {
+        this.usernameAvailable.textContent = 'available';
+        this.usernameAvailable.style.color = '#28a745';
+        this.usernameAvailable.style.display = 'inline';
+        this.submitButton.disabled = false;
+      } else {
+        this.usernameAvailable.textContent = 'network error';
+        this.usernameAvailable.style.color = '#dc3545';
+        this.usernameAvailable.style.display = 'inline';
+        this.submitButton.disabled = true;
+      }
+    }, 1000);
+  }
+
+  handleTogglePrivateKeyInput() {
+    const isChecked = this.toggleButton.checked;
+    this.privateKeySection.style.display = isChecked ? 'block' : 'none';
+    this.privateKeyInput.value = '';
+    
+    if (!isChecked) {
+      this.privateKeyError.style.display = 'none';
+    }
+  }
+
+  validatePrivateKey(key) {
+    // Trim whitespace
+    key = key.trim();
+
+    // Remove 0x prefix if present
+    if (key.startsWith('0x')) {
+      key = key.slice(2);
+    }
+
+    // Convert to lowercase
+    key = key.toLowerCase();
+
+    // Validate hex characters
+    const hexRegex = /^[0-9a-f]*$/;
+    if (!hexRegex.test(key)) {
+      return {
+        valid: false,
+        message: 'Invalid characters - only 0-9 and a-f allowed',
+      };
+    }
+
+    // Validate length (64 chars for 32 bytes)
+    if (key.length !== 64) {
+      return {
+        valid: false,
+        message: 'Invalid length - must be 64 hex characters',
+      };
+    }
+
+    return {
+      valid: true,
+      key: key,
+    };
+  }
+
+  async handleSubmit(event) {
+    // Disable submit button
+    this.submitButton.disabled = true;
+    // Disable input fields, back button, and toggle button
+    this.toggleButton.disabled = true;
+    this.usernameInput.disabled = true;
+    this.privateKeyInput.disabled = true;
+    this.backButton.disabled = true;
+
+    event.preventDefault();
+    const username = normalizeUsername(this.usernameInput.value);
+
+    // Get network ID from network.js
+    const { netid } = network;
+
+    // Get existing accounts or create new structure
+    const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+
+    // Ensure netid and usernames objects exist
+    if (!existingAccounts.netids[netid]) {
+      existingAccounts.netids[netid] = { usernames: {} };
+    }
+
+    // Get private key from input or generate new one
+    const providedPrivateKey = this.privateKeyInput.value;
+    let privateKey, privateKeyHex;
+
+    if (providedPrivateKey) {
+      // Validate and normalize private key
+      const validation = this.validatePrivateKey(providedPrivateKey);
+      if (!validation.valid) {
+        this.privateKeyError.textContent = validation.message;
+        this.privateKeyError.style.color = '#dc3545';
+        this.privateKeyError.style.display = 'inline';
+        // Re-enable controls on validation failure
+        this.reEnableControls();
+        return;
+      }
+
+      privateKey = hex2bin(validation.key);
+      privateKeyHex = validation.key;
+      this.privateKeyError.style.display = 'none';
+    } else {
+      privateKey = generateRandomPrivateKey();
+      privateKeyHex = bin2hex(privateKey);
+      this.privateKeyError.style.display = 'none'; // Ensure hidden if generated
+    }
+
+    // Generate uncompressed public key
+    const publicKey = getPublicKey(privateKey);
+    const publicKeyHex = bin2hex(publicKey);
+    const pqSeed = bin2hex(generateRandomBytes(64));
+
+    // Generate address from public key
+    const address = generateAddress(publicKey);
+    const addressHex = bin2hex(address);
+
+    // If a private key was provided, check if the derived address already exists on the network
+    if (providedPrivateKey) {
+      try {
+        const accountCheckAddress = longAddress(addressHex);
+        console.log(`Checking network for existing account at address: ${accountCheckAddress}`);
+        const accountInfo = await queryNetwork(`/account/${accountCheckAddress}`);
+
+        // Check if the query returned data indicating an account exists.
+        // This assumes a non-null `accountInfo` with an `account` property means it exists.
+        if (accountInfo && accountInfo.account) {
+          console.log('Account already exists for this private key:', accountInfo);
+          this.privateKeyError.textContent = 'An account already exists for this private key.';
+          this.privateKeyError.style.color = '#dc3545';
+          this.privateKeyError.style.display = 'inline';
+          // Re-enable controls when account already exists
+          this.reEnableControls();
+          return; // Stop the account creation process
+        } else {
+          console.log('No existing account found for this private key.');
+          this.privateKeyError.style.display = 'none';
+        }
+      } catch (error) {
+        console.error('Error checking for existing account:', error);
+        this.privateKeyError.textContent = 'Network error checking key. Please try again.';
+        this.privateKeyError.style.color = '#dc3545';
+        this.privateKeyError.style.display = 'inline';
+        // Re-enable controls on network error
+        this.reEnableControls();
+        return; // Stop process on error
+      }
+    }
+
+    // Create new account entry
+    myAccount = {
+      netid,
+      username,
+      chatTimestamp: 0,
+      keys: {
+        address: addressHex,
+        public: publicKeyHex,
+        secret: privateKeyHex,
+        type: 'secp256k1',
+        pqSeed: pqSeed, // store only the 64 byte seed instead of 32,000 byte public and secret keys
+      },
+    };
+    let waitingToastId = showToast('Creating account...', 0, 'loading');
+    let res;
+    // Create new data entry
+    try {
+      await getNetworkParams();
+      myData = newDataRecord(myAccount);
+      res = await postRegisterAlias(username, myAccount.keys);
+    } catch (error) {
+      this.reEnableControls();
+      if (waitingToastId) hideToast(waitingToastId);
+      showToast(`Failed to fetch network parameters, try again later.`, 0, 'error');
+      console.error('Failed to fetch network parameters, using defaults:', error);
+      return;
+    }
+
+    if (res && res.result && res.result.success && res.txid) {
+      const txid = res.txid;
+
+      try {
+        // Start interval since trying to create account and tx should be in pending
+        if (!checkPendingTransactionsIntervalId) {
+          checkPendingTransactionsIntervalId = setInterval(checkPendingTransactions, 5000);
+        }
+
+        // Wait for the transaction confirmation
+        const confirmationDetails = await pendingPromiseService.register(txid);
+        if (
+          confirmationDetails.username !== username ||
+          confirmationDetails.address !== longAddress(myAccount.keys.address)
+        ) {
+          throw new Error('Confirmation details mismatch.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (waitingToastId) hideToast(waitingToastId);
+        showToast('Account created successfully!', 3000, 'success');
+        this.reEnableControls();
+        this.close();
+        document.getElementById('welcomeScreen').style.display = 'none';
+        // TODO: may not need to get set since gets set in `getChats`. Need to check signin flow.
+        //getChats.lastCall = getCorrectedTimestamp();
+        // Store updated accounts back in localStorage
+        existingAccounts.netids[netid].usernames[username] = { address: myAccount.keys.address };
+        localStorage.setItem('accounts', stringify(existingAccounts));
+        saveState();
+
+        signInModal.open(username);
+      } catch (error) {
+        if (waitingToastId) hideToast(waitingToastId);
+        console.log(`DEBUG: handleCreateAccount error`, JSON.stringify(error, null, 2));
+        showToast(`account creation failed: ${error}`, 0, 'error');
+        this.reEnableControls();
+
+        // Clear interval
+        if (checkPendingTransactionsIntervalId) {
+          clearInterval(checkPendingTransactionsIntervalId);
+          checkPendingTransactionsIntervalId = null;
+        }
+
+        // Note: `checkPendingTransactions` will also remove the item from `myData.pending` if it's rejected by the service.
+        return;
+      }
+    } else {
+      if (waitingToastId) hideToast(waitingToastId);
+      console.error(`DEBUG: handleCreateAccount error in else`, JSON.stringify(res, null, 2));
+
+      // Clear intervals
+      if (updateWebSocketIndicatorIntervalId && wsManager) {
+        clearInterval(updateWebSocketIndicatorIntervalId);
+        updateWebSocketIndicatorIntervalId = null;
+      }
+      if (checkPendingTransactionsIntervalId) {
+        clearInterval(checkPendingTransactionsIntervalId);
+        checkPendingTransactionsIntervalId = null;
+      }
+      if (getSystemNoticeIntervalId) {
+        clearInterval(getSystemNoticeIntervalId);
+        getSystemNoticeIntervalId = null;
+      }
+
+      // no toast here since injectTx will show it
+      this.reEnableControls();
+      return;
+    }
+  }
+
+  reEnableControls() {
+    this.submitButton.disabled = false;
+    this.toggleButton.disabled = false;
+    this.usernameInput.disabled = false;
+    this.privateKeyInput.disabled = false;
+    this.backButton.disabled = false;
+  }
+}
+
+// Initialize the create account modal
+const createAccountModal = new CreateAccountModal();
+
 // Send Asset Form Modal
 class SendAssetFormModal {
   constructor() {
@@ -9347,7 +9354,7 @@ async function checkPendingTransactions() {
     }
   }
   // if createAccountModal is open, skip balance change
-  if (!document.getElementById('createAccountModal').classList.contains('active')) {
+  if (!createAccountModal.isOpen()) {
     updateWalletBalances();
   }
 }
@@ -9408,21 +9415,6 @@ const pendingPromiseService = (() => {
 
   return { register, resolve, reject };
 })();
-
-function handleTogglePrivateKeyInput() {
-  const privateKeySection = document.getElementById('privateKeySection');
-  const newPrivateKeyInput = document.getElementById('newPrivateKey');
-  const togglePrivateKeyInput = document.getElementById('togglePrivateKeyInput');
-
-  // clear the newPrivateKeyInput
-  newPrivateKeyInput.value = '';
-
-  if (togglePrivateKeyInput.checked) {
-    privateKeySection.style.display = 'block';
-  } else {
-    privateKeySection.style.display = 'none';
-  }
-}
 
 /*
  * Used to prevent tab from working.
