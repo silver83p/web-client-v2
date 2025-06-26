@@ -814,6 +814,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Add refresh balance button handler
   document.getElementById('refreshBalance').addEventListener('click', async () => {
+    const button = document.getElementById('refreshBalance');
+    
+    // Add active class for animation
+    button.classList.add('active');
+    
+    // Remove active class after animation completes
+    setTimeout(() => {
+      button.classList.remove('active');
+      // Force blur to remove focus
+      button.blur();
+    }, 300);
+
     // await updateWalletBalances();
     updateWalletView();
   });
@@ -4631,7 +4643,7 @@ function markConnectivityDependentElements() {
       element.setAttribute('data-requires-connection', 'true');
 
       // Add tooltip for disabled state
-      element.title = 'This feature requires an internet connection';
+      // element.title = 'This feature requires an internet connection';
 
       // Add aria label for accessibility
       element.setAttribute('aria-disabled', !isOnline);
