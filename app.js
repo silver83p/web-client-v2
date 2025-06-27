@@ -139,6 +139,11 @@ import {
 // Put standalone conversion function in lib.js
 import {
   normalizeUsername,
+  normalizeName,
+  normalizePhone,
+  normalizeEmail,
+  normalizeLinkedinUsername,
+  normalizeXTwitterUsername,
   generateIdenticon,
   formatTime,
   isValidEthereumAddress,
@@ -9570,111 +9575,6 @@ function cleanSenderInfo(si) {
     csi.x = normalizeUsername(si.x).slice(0,40)
   }
   return csi;
-}
-
-/**
- * Normalizes a string to a name. Keeps only alphabet and space characters; lowercase all letters; capitalize the first letter of each word.
- * @param {string} s - The string to normalize.
- * @param {boolean} final - Whether to apply strict validation rules.
- * @returns {string} - The normalized string.
- */
-function normalizeName(s, final = false) {
-  if (!s) return '';
-  let normalized = s
-    .replace(/[^a-zA-Z\s]/g, '') // keep only alphabet and space characters
-    .toLowerCase() // lowercase all letters
-    .replace(/\b\w/g, c => c.toUpperCase()) // capitalize first letter of each word
-    .substring(0, 20); // limit to 20 characters
-  
-  if (final) {
-    normalized = normalized.trim();
-    normalized = normalized.replace(/\s+/g, ' ');
-  }
-  return normalized;
-}
-
-// this function noralizes and returns phone number; allowing for country codes
-function normalizePhone(s, final = false) {
-  if (!s) return '';
-  // remove all non-digit characters
-  let normalized = s.replace(/\D/g, ''); 
-  // limit to 20 characters
-  normalized = normalized.substring(0, 20);
-  // if final is true, wipe out if less than 7 digits
-  if (final && normalized.length < 7) {
-    normalized = '';
-  }
-  return normalized;
-}
-
-// this function normalizes emails; keeps only characters allowed in email addresses; makes letters lower case
-function normalizeEmail(s) {
-  if (!s) return '';
-  // Convert to lowercase
-  s = s.toLowerCase();  
-  // Remove any whitespace
-  s = s.trim();
-  // Keep only valid email characters
-  s = s.replace(/[^a-z0-9._%+-@]/g, '');
-  // limit to 256 characters
-  s = s.substring(0, 256);
-  return s;
-}
-
-function normalizeLinkedinUsername(username, final = false) {
-  if (!username) return '';
-  let normalized = username;
-  if (normalized.includes('/')) {
-    // Remove trailing slashes
-    normalized = normalized.replace(/\/+$/, '');        
-    // Keep only the username from the URL
-    normalized = normalized.substring(normalized.lastIndexOf('/') + 1);
-  }
-  // Step 1: Remove all characters that are not letters, numbers, or hyphens
-  normalized = normalized.replace(/[^a-zA-Z0-9-]/g, '');  
-  // Step 2: Replace consecutive hyphens with a single hyphen
-  normalized = normalized.replace(/-+/g, '-');  
-  // Remove leading hyphens
-  normalized = normalized.replace(/^-+/, '');    
-  // Step 3: Truncate to maximum length (30 characters)
-  normalized = normalized.substring(0, 30);  
-  // Step 4: If final is true, apply strict validation rules
-  if (final) {
-    // Remove trailing hyphens
-    normalized = normalized.replace(/-+$/, '');        
-    // If still empty or too short after cleanup, return empty string
-    if (normalized.length < 3) {
-      normalized = '';
-    }
-  }  
-  return normalized;
-}
-
-function normalizeXTwitterUsername(username, final = false) {
-  if (!username) return '';
-  let normalized = username;
-  if (normalized.includes('/')) {
-    // Remove trailing slashes
-    normalized = normalized.replace(/\/+$/, '');        
-    // Keep only the username from the URL
-    normalized = normalized.substring(normalized.lastIndexOf('/') + 1);
-  }
-  // Step 3: Remove all characters that are not letters, numbers, or underscores
-  normalized = normalized.replace(/[^a-zA-Z0-9_]/g, '');  
-  // Step 4: Truncate to maximum length (15 characters)
-  normalized = normalized.substring(0, 15);  
-  // Step 5: If final is true, apply strict validation rules
-  if (final) {
-    // Ensure it's not only numbers
-    if (normalized && /^\d+$/.test(normalized)) {
-      normalized = ''
-    }   
-  }
-  // Ensure minimum length of 1 character
-  if (normalized.length < 1) {
-    normalized = '';
-  } 
-  return normalized;
 }
 
 /** Normalizes a string to a float and limits the number of decimals to 18 and the number of digits before the decimal point to 9.
