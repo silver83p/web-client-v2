@@ -9583,7 +9583,9 @@ function normalizeEmail(s) {
   // Remove any whitespace
   s = s.trim();
   // Keep only valid email characters
-  s = s.replace(/[^a-z0-9._%+-@]/g, '');  
+  s = s.replace(/[^a-z0-9._%+-@]/g, '');
+  // limit to 255 characters
+  s = s.substring(0, 256);
   return s;
 }
 
