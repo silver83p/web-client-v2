@@ -470,10 +470,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('confirmSendButton').addEventListener('click', handleSendAsset);
   document.getElementById('cancelSendButton').addEventListener('click', closeSendAssetConfirmModal);
 
-  document.getElementById('openHistoryModal').addEventListener('click', openHistoryModal);
-  document.getElementById('closeHistoryModal').addEventListener('click', closeHistoryModal);
-  document.getElementById('historyAsset').addEventListener('change', updateHistoryAddresses);
-  document.getElementById('transactionList').addEventListener('click', handleHistoryItemClick);
+  // History Modal
+  historyModal.load();
 
   document.getElementById('switchToChats').addEventListener('click', () => switchView('chats'));
   document.getElementById('switchToContacts').addEventListener('click', () => switchView('contacts'));
@@ -1880,7 +1878,7 @@ async function handleSendAsset(event) {
     document.getElementById('sendMemo').value = '';
     document.getElementById('sendToAddressError').style.display = 'none';
     // Show history modal after successful transaction
-    openHistoryModal();
+    historyModal.open();
     /*
         const sendToAddressError = document.getElementById('sendToAddressError');
         if (sendToAddressError) {
@@ -2552,6 +2550,159 @@ class EditContactModal {
 // make singleton instance
 const editContactModal = new EditContactModal();
 
+class HistoryModal {
+  constructor() {
+    // No DOM dependencies in constructor
+  }
+
+  load() {
+    // DOM elements - only accessed when DOM is ready
+    this.modal = document.getElementById('historyModal');
+    this.assetSelect = document.getElementById('historyAsset');
+    this.transactionList = document.getElementById('transactionList');
+    this.openButton = document.getElementById('openHistoryModal');
+    this.closeButton = document.getElementById('closeHistoryModal');
+
+    // Cache the form container for scrollToTop
+    this.formContainer = this.modal.querySelector('.form-container');
+
+    // Setup event listeners
+    this.openButton.addEventListener('click', () => this.open());
+    this.closeButton.addEventListener('click', () => this.close());
+    this.assetSelect.addEventListener('change', () => this.handleAssetChange());
+    this.transactionList.addEventListener('click', (event) => this.handleItemClick(event));
+  }
+
+  open() {
+    this.modal.classList.add('active');
+    this.populateAssets();
+    this.updateTransactionHistory();
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+    this.openButton.classList.remove('has-notification');
+    document.getElementById('switchToWallet').classList.remove('has-notification');
+  }
+
+  populateAssets() {
+    const walletData = myData.wallet;
+    
+    if (!walletData.assets || walletData.assets.length === 0) {
+      this.assetSelect.innerHTML = '<option value="">No assets available</option>';
+      return;
+    }
+    
+    this.assetSelect.innerHTML = walletData.assets
+      .map((asset, index) => `<option value="${index}">${asset.name} (${asset.symbol})</option>`)
+      .join('');
+  }
+
+  async updateTransactionHistory() {
+    await updateChatList();
+    
+    const walletData = myData.wallet;
+    const assetIndex = this.assetSelect.value;
+    
+    if (!walletData.assets || walletData.assets.length === 0) {
+      this.showEmptyState();
+      return;
+    }
+    
+    const asset = walletData.assets[assetIndex];
+    const contacts = myData.contacts;
+    
+    this.transactionList.innerHTML = walletData.history
+      .map((tx) => {
+        const txidAttr = tx?.txid ? `data-txid="${tx.txid}"` : '';
+        const statusAttr = tx?.status ? `data-status="${tx.status}"` : '';
+        const contactName = getContactDisplayName(contacts[tx.address]);
+        
+        return `
+          <div class="transaction-item" data-address="${tx.address}" ${txidAttr} ${statusAttr}>
+            <div class="transaction-info">
+              <div class="transaction-type ${tx.sign === -1 ? 'send' : 'receive'}">
+                ${tx.sign === -1 ? '↑ Sent' : '↓ Received'}
+              </div>
+              <div class="transaction-amount">
+                ${tx.sign === -1 ? '-' : '+'} ${(Number(tx.amount) / Number(wei)).toFixed(6)} ${asset.symbol}
+              </div>
+            </div>
+            <div class="transaction-details">
+              <div class="transaction-address">
+                ${tx.sign === -1 ? 'To:' : 'From:'} ${tx.nominee || contactName}
+              </div>
+              <div class="transaction-time">${formatTime(tx.timestamp)}</div>
+            </div>
+            ${tx.memo ? `<div class="transaction-memo">${linkifyUrls(tx.memo)}</div>` : ''}
+          </div>
+        `;
+      })
+      .join('');
+    
+    // Scroll the form container to top after rendering
+    requestAnimationFrame(() => (this.formContainer.scrollTop = 0));
+  }
+
+  showEmptyState() {
+    this.transactionList.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size: 2rem; margin-bottom: 1rem"></div>
+        <div style="font-weight: bold; margin-bottom: 0.5rem">No Transactions</div>
+        <div>Your transaction history will appear here</div>
+      </div>`;
+  }
+
+  async handleAssetChange() {
+    await this.updateTransactionHistory();
+  }
+
+  handleItemClick(event) {
+    const item = event.target.closest('.transaction-item');
+    
+    if (!item) return;
+    
+    if (item.dataset.status === 'failed') {
+      console.log(`Not opening chatModal for failed transaction`);
+      
+      if (event.target.closest('.transaction-item')) {
+        handleFailedPaymentClick(item.dataset.txid, item);
+      }
+      return;
+    }
+    
+    const memo = item.querySelector('.transaction-memo')?.textContent;
+    if (memo === 'stake' || memo === 'unstake') {
+      validatorStakingModal.open();
+      return;
+    }
+    
+    const address = item.dataset.address;
+    if (address && myData.contacts[address]) {
+      // Close contact info modal if open
+      if (document.getElementById('contactInfoModal').classList.contains('active')) {
+        document.getElementById('contactInfoModal').classList.remove('active');
+      }
+      
+      this.close();
+      chatModal.open(address);
+    }
+  }
+
+  // Public method for external updates
+  async refresh() {
+    if (this.isOpen()) {
+      await this.updateTransactionHistory();
+    }
+  }
+
+  isOpen() {
+    return this.modal.classList.contains('active');
+  }
+}
+
+// Create singleton instance
+const historyModal = new HistoryModal();
 
 function handleSignOut() {
   // Clear intervals
@@ -2812,152 +2963,6 @@ async function updateAssetPricesIfNeeded() {
       }
     } catch (error) {
       console.error(`Failed to update price for ${asset.symbol}`, error);
-    }
-  }
-}
-
-function openHistoryModal() {
-  const modal = document.getElementById('historyModal');
-  modal.classList.add('active');
-
-  // Get wallet data
-  const walletData = myData.wallet;
-
-  const assetSelect = document.getElementById('historyAsset');
-
-  // Check if we have any assets
-  if (!walletData.assets || walletData.assets.length === 0) {
-    assetSelect.innerHTML = '<option value="">No assets available</option>';
-    return;
-  }
-  // Populate assets dropdown
-  assetSelect.innerHTML = walletData.assets
-    .map((asset, index) => `<option value="${index}">${asset.name} (${asset.symbol})</option>`)
-    .join('');
-
-  // Update addresses for first asset
-  updateHistoryAddresses();
-}
-
-function closeHistoryModal() {
-  document.getElementById('historyModal').classList.remove('active');
-  document.getElementById('openHistoryModal').classList.remove('has-notification');
-  document.getElementById('switchToWallet').classList.remove('has-notification');
-}
-
-function updateHistoryAddresses() {
-  // TODO get rid of this function after changing all refrences
-  // Update transaction history
-  updateTransactionHistory();
-}
-
-async function updateTransactionHistory() {
-  await updateChatList();
-
-  const walletData = myData.wallet;
-
-  const assetIndex = document.getElementById('historyAsset').value;
-  const transactionList = document.getElementById('transactionList');
-
-  // Check if we have any assets
-  if (!walletData.assets || walletData.assets.length === 0) {
-    transactionList.innerHTML = `
-            <div class="empty-state">
-                <div style="font-size: 2rem; margin-bottom: 1rem"></div>
-                <div style="font-weight: bold; margin-bottom: 0.5rem">No Transactions</div>
-                <div>Your transaction history will appear here</div>
-            </div>`;
-    return;
-  }
-
-  const asset = walletData.assets[assetIndex];
-  const contacts = myData.contacts;
-
-  transactionList.innerHTML = walletData.history
-    .map((tx) => {
-      const txidAttr = tx?.txid ? `data-txid="${tx.txid}"` : '';
-      const statusAttr = tx?.status ? `data-status="${tx.status}"` : '';
-      const contactName = getContactDisplayName(contacts[tx.address]);
-      return `
-        <div class="transaction-item" data-address="${tx.address}" ${txidAttr} ${statusAttr}>
-            <div class="transaction-info">
-                <div class="transaction-type ${tx.sign === -1 ? 'send' : 'receive'}">
-                    ${tx.sign === -1 ? '↑ Sent' : '↓ Received'}
-                </div>
-                <div class="transaction-amount">
-                    ${tx.sign === -1 ? '-' : '+'} ${(Number(tx.amount) / Number(wei)).toFixed(6)} ${asset.symbol}
-                </div>
-            </div>
-            <div class="transaction-details">
-                <div class="transaction-address">
-                    ${tx.sign === -1 ? 'To:' : 'From:'} ${tx.nominee || contactName}
-                </div>
-                <div class="transaction-time">${formatTime(tx.timestamp)}</div>
-            </div>
-            ${tx.memo ? `<div class="transaction-memo">${linkifyUrls(tx.memo)}</div>` : ''}
-        </div>
-    `;
-    })
-    .join('');
-
-  // Scroll the form container to top after rendering
-  requestAnimationFrame(() => {
-    const modal = document.getElementById('historyModal');
-    const formContainer = modal?.querySelector('.form-container'); // Find the form container within the modal
-    if (formContainer) {
-      formContainer.scrollTop = 0;
-    }
-  });
-}
-
-// Handle clicks on transaction history items
-function handleHistoryItemClick(event) {
-  // Find the closest ancestor element with the class 'transaction-item'
-  const item = event.target.closest('.transaction-item');
-
-  if (item.dataset.status === 'failed') {
-    console.log(`Not opening chatModal for failed transaction`);
-
-    // if not data-address then we can assume it's a stake or unstake transaction so when clicking on it it should lead to the validator modal
-    // TODO: remove this maybe since it should be removed from history receipt when we know it has failed when checking receipt right?
-    /* if (!item.dataset.address) {
-            openValidatorModal();
-            return;
-        } */
-
-    if (event.target.closest('.transaction-item')) {
-      handleFailedPaymentClick(item.dataset.txid, item);
-    }
-
-    return;
-  }
-
-  // if not data-address then we can assume it's a stake or unstake transaction so when clicking on it it should lead to the validator modal
-  /* if (!item.dataset.address) {
-        openValidatorModal();
-        return;
-    } */
-
-  if (item) {
-    // Check if this is a stake/unstake transaction by looking at the memo
-    const memo = item.querySelector('.transaction-memo')?.textContent;
-    if (memo === 'stake' || memo === 'unstake') {
-      validatorStakingModal.open();
-      return;
-    }
-
-    // Get the address from the data-address attribute
-    const address = item.dataset.address;
-    if (address && myData.contacts[address]) {
-      // close contactInfoModal if it is open
-      if (document.getElementById('contactInfoModal').classList.contains('active')) {
-        document.getElementById('contactInfoModal').classList.remove('active');
-      }
-
-      // Close the history modal
-      closeHistoryModal();
-      // Open the chat modal for the corresponding address
-      chatModal.open(address);
     }
   }
 }
@@ -3368,15 +3373,13 @@ async function processChats(chats, keys) {
           added += 1;
 
           const walletScreenActive = document.getElementById('walletScreen')?.classList.contains('active');
-          const historyModalActive = document.getElementById('historyModal')?.classList.contains('active');
           // Update wallet view if it's active
           if (walletScreenActive) {
             updateWalletView();
           }
           // update history modal if it's active
-          if (historyModalActive) {
-            updateTransactionHistory();
-          }
+          historyModal.refresh();
+
           // Always play transfer sound for new transfers
           playTransferSound(true);
           // is chatModal of sender address is active
@@ -7562,13 +7565,12 @@ class ChatModal {
   refreshCurrentView(txid) {
     // contactAddress is kept for potential future use but not needed for this txid-based logic
     const chatsScreen = document.getElementById('chatsScreen');
-    const historyModal = document.getElementById('historyModal');
     const messagesList = this.modal ? this.messagesList : null;
 
     // 1. Refresh History Modal if active
-    if (historyModal && historyModal.classList.contains('active')) {
+    if (historyModal.isOpen()) {
       console.log('DEBUG: Refreshing transaction history modal due to transaction failure.');
-      updateTransactionHistory();
+      historyModal.refresh();
     }
     // 2. Refresh Chat Modal if active AND the failed txid's message is currently rendered
     if (this.modal && this.modal.classList.contains('active') && txid && messagesList) {
