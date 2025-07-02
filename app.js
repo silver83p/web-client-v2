@@ -361,11 +361,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Welcome Screen
   welcomeScreen.load()
 
-  // Add event listeners
-  document.getElementById('toggleMenu').addEventListener('click', () => menuModal.open());
-
   // Footer
   footer.load();
+
+  // Header
+  header.load();
 
   // Chats Screen
   chatsScreen.load();
@@ -451,10 +451,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // add event listener for last-item to prevent tab
   document.querySelectorAll('.last-item').forEach((item) => {
     item.addEventListener('keydown', ignoreTabKey);
-  });
-  // add event listener for first-item to prevent shift+tab
-  document.querySelectorAll('.logo-link').forEach((item) => {
-    item.addEventListener('keydown', ignoreShiftTabKey);
   });
 
   // Add refresh balance button handler
@@ -833,6 +829,8 @@ class WelcomeScreen {
     this.createAccountButton = document.getElementById('createAccountButton');
     this.importAccountButton = document.getElementById('importAccountButton');
     this.welcomeButtons = document.querySelector('.welcome-buttons');
+    this.logoLink = this.screen.querySelector('.logo-link');
+    this.logoLink.addEventListener('keydown', ignoreShiftTabKey);  // add event listener for first-item to prevent shift+tab
     
     this.signInButton.addEventListener('click', () => signInModal.open());
     this.createAccountButton.addEventListener('click', () => createAccountModal.openWithReset());
@@ -881,6 +879,39 @@ class WelcomeScreen {
 }
 
 const welcomeScreen = new WelcomeScreen
+
+class Header {
+  constructor() {}
+
+  load() {
+    this.header = document.getElementById('header');
+    this.text = this.header.querySelector('.app-name');
+    this.logoLink = this.header.querySelector('.logo-link');
+    this.menuButton = document.getElementById('toggleMenu');
+
+    this.logoLink.addEventListener('keydown', ignoreShiftTabKey); // add event listener for first-item to prevent shift+tab
+    this.menuButton.addEventListener('click', () => menuModal.open());
+  }
+
+  open() {
+    this.header.classList.add('active');
+  }
+
+  close() {
+    this.header.classList.remove('active');
+  }
+
+  isActive() {
+    return this.header.classList.contains('active');
+  }
+
+  setText(newText) {
+    this.text.textContent = newText;
+  }
+
+}
+
+const header = new Header();
 
 class Footer {
   constructor() {
@@ -944,7 +975,7 @@ class Footer {
       }
   
       // Show header and footer
-      document.getElementById('header').classList.add('active');
+      header.open();
       footer.open();
   
       // Update header with username if signed in
@@ -1404,12 +1435,12 @@ class MenuModal {
     myProfileModal.close();
 
     // Hide header and footer
-    document.getElementById('header').classList.remove('active');
+    header.close();
     footer.close();
     footer.newChatButton.classList.remove('visible');
 
     // Reset header text
-    document.querySelector('.app-name').textContent = 'Liberdus';
+    header.setText('Liberdus');
 
     // Hide all app screens
     document.querySelectorAll('.app-screen').forEach((screen) => {
