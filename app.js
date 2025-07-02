@@ -474,6 +474,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Search Messages Modal
   searchMessagesModal.load();
 
+  // Contact Search Modal
+  searchContactsModal.load();
+
   // History Modal
   historyModal.load();
 
@@ -533,47 +536,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     searchMessagesModal.open();
   });
 
-  // Add contact search functionality
+  // Add contact search functionality on contact list screen
   const contactSearchInput = document.getElementById('contactSearchInput');
-  const contactSearch = document.getElementById('contactSearch');
-  const contactSearchModal = document.getElementById('contactSearchModal');
 
   // Open contact search modal when clicking the search bar
   contactSearchInput.addEventListener('click', () => {
-    contactSearchModal.classList.add('active');
-    contactSearch.focus();
+    searchContactsModal.open();
   });
-
-  // Close contact search modal
-  document.getElementById('closeContactSearchModal').addEventListener('click', () => {
-    contactSearchModal.classList.remove('active');
-    contactSearch.value = '';
-    document.getElementById('contactSearchResults').innerHTML = '';
-  });
-
-  // Handle contact search input with debounce
-  contactSearch.addEventListener(
-    'input',
-    debounce(
-      (e) => {
-        const searchText = e.target.value.trim();
-
-        // Just clear results if empty
-        if (!searchText) {
-          document.getElementById('contactSearchResults').innerHTML = '';
-          return;
-        }
-
-        const results = searchContacts(searchText);
-        if (results.length === 0) {
-          searchMessagesModal.displayEmptyState('contactSearchResults', 'No contacts found');
-        } else {
-          displayContactResults(results, searchText);
-        }
-      },
-      (searchText) => (searchText.length === 1 ? 600 : 300)
-    )
-  ); // Dynamic wait time
 
   // Omar added
   document.getElementById('scanQRButton').addEventListener('click', () => scanQRModal.open());
@@ -3952,109 +3921,158 @@ class SearchMessagesModal {
 
 const searchMessagesModal = new SearchMessagesModal();
 
+class SearchContactsModal {
+  constructor() {}
 
-// Contact search functions
-function searchContacts(searchText) {
-  if (!searchText || !myData?.contacts) return [];
+  load() {
+    this.modal = document.getElementById('contactSearchModal');
+    this.searchInput = document.getElementById('contactSearch');
+    this.resultsContainer = document.getElementById('contactSearchResults');
+    this.closeButton = document.getElementById('closeContactSearchModal');
+    
+    this.closeButton.addEventListener('click', () => { this.close(); });
+    this.searchInput.addEventListener(
+      'input',
+      debounce(
+        (e) => {
+          const searchText = e.target.value.trim();
 
-  const results = [];
-  const searchLower = searchText.toLowerCase();
+          // Just clear results if empty
+          if (!searchText) {
+            document.getElementById('contactSearchResults').innerHTML = '';
+            return;
+          }
 
-  // Search through all contacts
-  Object.entries(myData.contacts).forEach(([address, contact]) => {
-    // Fields to search through
-    const searchFields = [
-      contact.username,
-      contact.name,
-      contact.email,
-      contact.phone,
-      contact.linkedin,
-      contact.x,
-    ].filter(Boolean); // Remove null/undefined values
+          const results = this.searchContacts(searchText);
+          if (results.length === 0) {
+            searchMessagesModal.displayEmptyState('contactSearchResults', 'No contacts found');
+          } else {
+            this.displayContactResults(results, searchText);
+          }
+        },
+        (searchText) => (searchText.length === 1 ? 600 : 300)
+      )
+    );
+  }
 
-    // Check if any field matches
-    const matches = searchFields.some((field) => field.toLowerCase().includes(searchLower));
+  open() {
+    this.modal.classList.add('active');
+    this.searchInput.focus();
+  }
 
-    if (matches) {
-      // Determine match type for sorting
-      const exactMatch = searchFields.some((field) => field.toLowerCase() === searchLower);
-      const startsWithMatch = searchFields.some((field) => field.toLowerCase().startsWith(searchLower));
+  close() {
+    this.modal.classList.remove('active');
+    this.searchInput.value = '';
+    this.resultsContainer.innerHTML = '';
+  }
 
-      results.push({
-        ...contact,
-        address,
-        matchType: exactMatch ? 2 : startsWithMatch ? 1 : 0,
-      });
-    }
-  });
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
 
-  // Sort results by match type and then alphabetically by username
-  return results.sort((a, b) => {
-    if (a.matchType !== b.matchType) {
-      return b.matchType - a.matchType;
-    }
-    return (a.username || '').localeCompare(b.username || '');
-  });
-}
+  searchContacts(searchText) {
+    if (!searchText || !myData?.contacts) return [];
 
-function displayContactResults(results, searchText) {
-  const resultsContainer = document.getElementById('contactSearchResults');
-  resultsContainer.innerHTML = '';
+    const results = [];
+    const searchLower = searchText.toLowerCase();
 
-  results.forEach(async (contact) => {
-    const contactElement = document.createElement('div');
-    contactElement.className = 'chat-item contact-item';
+    // Search through all contacts
+    Object.entries(myData.contacts).forEach(([address, contact]) => {
+      // Fields to search through
+      const searchFields = [
+        contact.username,
+        contact.name,
+        contact.email,
+        contact.phone,
+        contact.linkedin,
+        contact.x,
+      ].filter(Boolean); // Remove null/undefined values
 
-    // Generate identicon for the contact
-    const identicon = await generateIdenticon(contact.address);
+      // Check if any field matches
+      const matches = searchFields.some((field) => field.toLowerCase().includes(searchLower));
 
-    // Determine which field matched for display
-    const matchedField = [
-      { field: 'username', value: contact.username },
-      { field: 'name', value: contact.name },
-      { field: 'email', value: contact.email },
-      { field: 'phone', value: contact.phone },
-      { field: 'linkedin', value: contact.linkedin },
-      { field: 'x', value: contact.x },
-    ].find((f) => f.value && f.value.toLowerCase().includes(searchText.toLowerCase()));
+      if (matches) {
+        // Determine match type for sorting
+        const exactMatch = searchFields.some((field) => field.toLowerCase() === searchLower);
+        const startsWithMatch = searchFields.some((field) => field.toLowerCase().startsWith(searchLower));
 
-    // Create match preview with label and highlighted matched value
-    const matchPreview = matchedField
-      ? `${matchedField.field}: ${matchedField.value.replace(
-          new RegExp(searchText, 'gi'),
-          (match) => `<mark>${match}</mark>`
-        )}`
-      : '';
-    const displayedName = getContactDisplayName(contact);
-
-    contactElement.innerHTML = `
-            <div class="chat-avatar">
-                ${identicon}
-            </div>
-            <div class="chat-content">
-                <div class="chat-header">
-                    <span class="chat-name">${displayedName}</span>
-                </div>
-                <div class="chat-message">
-                    <span class="match-label">${matchPreview}</span>
-                </div>
-            </div>
-        `;
-
-    // Add click handler to show contact info
-    contactElement.addEventListener('click', () => {
-      // clear search results and input contactSearchResults
-      document.getElementById('contactSearchResults').innerHTML = '';
-      document.getElementById('contactSearch').value = '';
-      // Create display info and open contact info modal
-      contactInfoModal.open(createDisplayInfo(contact));
-      // Close the search modal
-      document.getElementById('contactSearchModal').classList.remove('active');
+        results.push({
+          ...contact,
+          address,
+          matchType: exactMatch ? 2 : startsWithMatch ? 1 : 0,
+        });
+      }
     });
 
-    resultsContainer.appendChild(contactElement);
-  });
+    // Sort results by match type and then alphabetically by username
+    return results.sort((a, b) => {
+      if (a.matchType !== b.matchType) {
+        return b.matchType - a.matchType;
+      }
+      return (a.username || '').localeCompare(b.username || '');
+    });
+  }
+
+  displayContactResults(results, searchText) {
+    this.resultsContainer.innerHTML = '';
+
+    results.forEach(async (contact) => {
+      const contactElement = document.createElement('div');
+      contactElement.className = 'chat-item contact-item';
+
+      // Generate identicon for the contact
+      const identicon = await generateIdenticon(contact.address);
+
+      // Determine which field matched for display
+      const matchedField = [
+        { field: 'username', value: contact.username },
+        { field: 'name', value: contact.name },
+        { field: 'email', value: contact.email },
+        { field: 'phone', value: contact.phone },
+        { field: 'linkedin', value: contact.linkedin },
+        { field: 'x', value: contact.x },
+      ].find((f) => f.value && f.value.toLowerCase().includes(searchText.toLowerCase()));
+
+      // Create match preview with label and highlighted matched value
+      const matchPreview = matchedField
+        ? `${matchedField.field}: ${matchedField.value.replace(
+            new RegExp(searchText, 'gi'),
+            (match) => `<mark>${match}</mark>`
+          )}`
+        : '';
+      const displayedName = getContactDisplayName(contact);
+
+      contactElement.innerHTML = `
+              <div class="chat-avatar">
+                  ${identicon}
+              </div>
+              <div class="chat-content">
+                  <div class="chat-header">
+                      <span class="chat-name">${displayedName}</span>
+                  </div>
+                  <div class="chat-message">
+                      <span class="match-label">${matchPreview}</span>
+                  </div>
+              </div>
+          `;
+
+      // Add click handler to show contact info
+      contactElement.addEventListener('click', () => {
+        // clear search results and input contactSearchResults
+        this.resultsContainer.innerHTML = '';
+        this.searchInput.value = '';
+        // Create display info and open contact info modal
+        contactInfoModal.open(createDisplayInfo(contact));
+        // Close the search modal
+        this.close();
+      });
+
+      this.resultsContainer.appendChild(contactElement);
+    });
+  }
 }
+
+const searchContactsModal = new SearchContactsModal();
 
 // Create a display info object from a contact object
 function createDisplayInfo(contact) {
