@@ -468,6 +468,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Scan QR Modal
   scanQRModal.load();
 
+  // Search Messages Modal
+  searchMessagesModal.load();
+
   // Add event listeners for send asset confirmation modal
   document.getElementById('closeSendAssetConfirmModal').addEventListener('click', closeSendAssetConfirmModal);
   document.getElementById('confirmSendButton').addEventListener('click', handleSendAsset);
@@ -525,33 +528,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('searchResults').innerHTML = '';
   });
 
-  // Handle search input with debounce
-  messageSearch.addEventListener(
-    'input',
-    debounce((e) => {
-      const searchText = e.target.value.trim();
-      if (searchText.length < 2) {
-        displayEmptyState('searchResults', 'No messages found');
-        return;
-      }
-
-      const results = searchMessages(searchText);
-      if (results.length === 0) {
-        displayEmptyState('searchResults', 'No messages found');
-      } else {
-        displaySearchResults(results);
-      }
-    }, 300)
-  );
-
-  // Handle message search input
-  document.getElementById('messageSearch').addEventListener('input', (e) => {
-    handleMessageSearchInput(e);
-  });
 
   // Handle search input click
+  // this is the button on the chat screen
   document.getElementById('searchInput').addEventListener('click', (e) => {
-    handleSearchInputClick(e);
+    searchMessagesModal.open();
   });
 
   // Add contact search functionality
@@ -587,7 +568,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const results = searchContacts(searchText);
         if (results.length === 0) {
-          displayEmptyState('contactSearchResults', 'No contacts found');
+          searchMessagesModal.displayEmptyState('contactSearchResults', 'No contacts found');
         } else {
           displayContactResults(results, searchText);
         }
@@ -4090,159 +4071,181 @@ function setupAppStateManagement() {
     }
 } */
 
-// Add these search-related functions
-function searchMessages(searchText) {
-  if (!searchText || !myData?.contacts) return [];
+class SearchMessagesModal {
+  constructor() {}
 
-  const results = [];
-  const searchLower = searchText.toLowerCase();
+  load() {
+    this.modal = document.getElementById('searchModal');
+    this.searchInput = document.getElementById('messageSearch');
+    this.closeButton = document.getElementById('closeSearchModal');
+    this.searchResults = document.getElementById('searchResults');
 
-  // Search through all contacts and their messages
-  Object.entries(myData.contacts).forEach(([address, contact]) => {
-    if (!contact.messages) return;
+    this.closeButton.addEventListener('click', () => {this.close();});
+    this.searchInput.addEventListener('input', (e) => {this.handleMessageSearchInput(e);});
+  }
 
-    contact.messages.forEach((message, index) => {
-      if (message.message.toLowerCase().includes(searchLower)) {
-        // Highlight matching text
-        const messageText = escapeHtml(message.message);
-        const highlightedText = messageText.replace(new RegExp(searchText, 'gi'), (match) => `<mark>${match}</mark>`);
-        const displayedName = getContactDisplayName(contact);
-        results.push({
-          contactAddress: address,
-          username: displayedName,
-          messageId: index,
-          message: message, // Pass the entire message object
-          timestamp: message.timestamp,
-          preview: truncateMessage(highlightedText, 100),
-          my: message.my, // Include the my property
-        });
-      }
-    });
-  });
+  open() {
+    this.modal.classList.add('active');
+    this.searchInput.focus();
+  }
 
-  return results.sort((a, b) => b.timestamp - a.timestamp);
-}
+  close() {
+    this.modal.classList.remove('active');
+    this.searchInput.value = '';
+    this.searchResults.innerHTML = '';
+  }
 
-function displaySearchResults(results) {
-  const searchResults = document.getElementById('searchResults');
-  // Create a ul element to properly contain the list items
-  const resultsList = document.createElement('ul');
-  resultsList.className = 'chat-list';
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
 
-  results.forEach(async (result) => {
-    const resultElement = document.createElement('li');
-    resultElement.className = 'chat-item search-result-item';
+  searchMessages(searchText) {
+    if (!searchText || !myData?.contacts) return [];
 
-    // Generate identicon for the contact
-    const identicon = await generateIdenticon(result.contactAddress);
+    const results = [];
+    const searchLower = searchText.toLowerCase();
 
-    // Format message preview with "You:" prefix if it's a sent message
-    // make this textContent?
-    const messagePreview = result.my ? `You: ${result.preview}` : `${result.preview}`;
+    // Search through all contacts and their messages
+    Object.entries(myData.contacts).forEach(([address, contact]) => {
+      if (!contact.messages) return;
 
-    resultElement.innerHTML = `
-            <div class="chat-avatar">
-                ${identicon}
-            </div>
-            <div class="chat-content">
-                <div class="chat-header">
-                    <div class="chat-name">${result.username}</div>
-                    <div class="chat-time">${formatTime(result.timestamp)}</div>
-                </div>
-                <div class="chat-message">
-                    ${messagePreview}
-                </div>
-            </div>
-        `;
-
-    resultElement.addEventListener('click', (event) => {
-      event.stopImmediatePropagation(); // Stop all other listeners and bubbling immediately
-      // clear search input and clear results
-      document.getElementById('messageSearch').value = '';
-      document.getElementById('searchResults').innerHTML = '';
-      handleSearchResultClick(result);
+      contact.messages.forEach((message, index) => {
+        if (message.message.toLowerCase().includes(searchLower)) {
+          // Highlight matching text
+          const messageText = escapeHtml(message.message);
+          const highlightedText = messageText.replace(new RegExp(searchText, 'gi'), (match) => `<mark>${match}</mark>`);
+          const displayedName = getContactDisplayName(contact);
+          results.push({
+            contactAddress: address,
+            username: displayedName,
+            messageId: message.txid,
+            message: message, // Pass the entire message object
+            timestamp: message.timestamp,
+            preview: truncateMessage(highlightedText, 100),
+            my: message.my, // Include the my property
+          });
+        }
+      });
     });
 
-    resultsList.appendChild(resultElement);
-  });
+    return results.sort((a, b) => b.timestamp - a.timestamp);
+  }
 
-  // Clear and append the new list
-  searchResults.innerHTML = '';
-  searchResults.appendChild(resultsList);
-}
+  // this is also used by contact search 
+  displayEmptyState(containerId, message = 'No results found') {
+    const resultsContainer = document.getElementById(containerId);
+    resultsContainer.innerHTML = `
+          <div class="empty-state">
+              <div class="empty-state-message">${message}</div>
+          </div>
+      `;
+  }
 
-function displayEmptyState(containerId, message = 'No results found') {
-  const resultsContainer = document.getElementById(containerId);
-  resultsContainer.innerHTML = `
-        <div class="empty-state">
-            <div class="empty-state-message">${message}</div>
-        </div>
-    `;
-}
+  handleSearchResultClick(result) {
+    try {
+      // Close search modal
+      this.close();
 
-function handleSearchResultClick(result) {
-  try {
-    // Close search modal
-    document.getElementById('searchModal').classList.remove('active');
+      // Switch to chats view if not already there
+      switchView('chats');
 
-    // Switch to chats view if not already there
-    switchView('chats');
+      // Open the chat with this contact
+      chatModal.open(result.contactAddress);
 
-    // Open the chat with this contact
-    chatModal.open(result.contactAddress);
+      // Scroll to and highlight the message
+      // could move this into chat modal class as scrollToMessage
+      setTimeout(() => {
+        const messageSelector = `[data-txid="${result.messageId}"]`;
+        const messageElement = document.querySelector(messageSelector);
+        if (messageElement) {
+          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          messageElement.classList.add('highlighted');
+          setTimeout(() => messageElement.classList.remove('highlighted'), 2000);
+        } else {
+          console.error('Message element not found for selector:', messageSelector);
+          // Could add a toast notification here
+        }
+      }, 300);
+    } catch (error) {
+      console.error('Error handling search result:', error);
+      // Could add error notification here
+    }
+  }
 
-    // Scroll to and highlight the message
-    setTimeout(() => {
-      const messageSelector = `[data-message-id="${result.messageId}"]`;
-      const messageElement = document.querySelector(messageSelector);
-      if (messageElement) {
-        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        messageElement.classList.add('highlighted');
-        setTimeout(() => messageElement.classList.remove('highlighted'), 2000);
-      } else {
-        console.error('Message element not found for selector:', messageSelector);
-        // Could add a toast notification here
-      }
-    }, 300);
-  } catch (error) {
-    console.error('Error handling search result:', error);
-    // Could add error notification here
+  displaySearchResults(results) {
+    // Create a ul element to properly contain the list items
+    const resultsList = document.createElement('ul');
+    resultsList.className = 'chat-list';
+
+    results.forEach(async (result) => {
+      const resultElement = document.createElement('li');
+      resultElement.className = 'chat-item search-result-item';
+
+      // Generate identicon for the contact
+      const identicon = await generateIdenticon(result.contactAddress);
+
+      // Format message preview with "You:" prefix if it's a sent message
+      // make this textContent?
+      const messagePreview = result.my ? `You: ${result.preview}` : `${result.preview}`;
+
+      resultElement.innerHTML = `
+              <div class="chat-avatar">
+                  ${identicon}
+              </div>
+              <div class="chat-content">
+                  <div class="chat-header">
+                      <div class="chat-name">${result.username}</div>
+                      <div class="chat-time">${formatTime(result.timestamp)}</div>
+                  </div>
+                  <div class="chat-message">
+                      ${messagePreview}
+                  </div>
+              </div>
+          `;
+
+      resultElement.addEventListener('click', (event) => {
+        event.stopImmediatePropagation(); // Stop all other listeners and bubbling immediately
+        // clear search input and clear results
+        document.getElementById('messageSearch').value = '';
+        document.getElementById('searchResults').innerHTML = '';
+        this.handleSearchResultClick(result);
+      });
+
+      resultsList.appendChild(resultElement);
+    });
+
+    // Clear and append the new list
+    this.searchResults.innerHTML = '';
+    this.searchResults.appendChild(resultsList);
+  }
+
+  handleMessageSearchInput(e) {
+    // debounced search
+    const debouncedSearch = debounce(
+      (searchText) => {
+        const trimmedText = searchText.trim();
+
+        if (!trimmedText) {
+          this.searchResults.innerHTML = '';
+          return;
+        }
+
+        const results = this.searchMessages(trimmedText);
+        if (results.length === 0) {
+          this.displayEmptyState('searchResults', 'No messages found');
+        } else {
+          this.displaySearchResults(results);
+        }
+      },
+      (searchText) => (searchText.length === 1 ? 600 : 300)
+    );
+
+    debouncedSearch(e.target.value);
   }
 }
 
-function handleSearchInputClick() {
-  const messageSearch = document.getElementById('messageSearch');
-  const searchModal = document.getElementById('searchModal');
+const searchMessagesModal = new SearchMessagesModal();
 
-  searchModal.classList.add('active');
-  messageSearch.focus();
-}
-
-function handleMessageSearchInput(e) {
-  const searchResults = document.getElementById('searchResults');
-
-  // debounced search
-  const debouncedSearch = debounce(
-    (searchText) => {
-      const trimmedText = searchText.trim();
-
-      if (!trimmedText) {
-        searchResults.innerHTML = '';
-        return;
-      }
-
-      const results = searchMessages(trimmedText);
-      if (results.length === 0) {
-        displayEmptyState('searchResults', 'No messages found');
-      } else {
-        displaySearchResults(results);
-      }
-    },
-    (searchText) => (searchText.length === 1 ? 600 : 300)
-  );
-
-  debouncedSearch(e.target.value);
-}
 
 // Contact search functions
 function searchContacts(searchText) {
