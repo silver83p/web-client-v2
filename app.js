@@ -406,6 +406,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('toggleMenu').addEventListener('click', toggleMenu);
   document.getElementById('closeMenu').addEventListener('click', toggleMenu);
 
+  // Footer
+  footer.load();
+
   // About and Contact Modals
   aboutModal.load();
   contactModal.load();
@@ -479,10 +482,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // History Modal
   historyModal.load();
-
-  document.getElementById('switchToChats').addEventListener('click', () => switchView('chats'));
-  document.getElementById('switchToContacts').addEventListener('click', () => switchView('contacts'));
-  document.getElementById('switchToWallet').addEventListener('click', () => switchView('wallet'));
 
   document.getElementById('handleSignOut').addEventListener('click', handleSignOut);
   document.getElementById('closeContactInfoModal').addEventListener('click', () => contactInfoModal.close());
@@ -1062,141 +1061,160 @@ async function updateWalletBalances() {
   myData.wallet.timestamp = now;
 }
 
-async function switchView(view) {
-  // Store the current view for potential rollback
-  const previousView = document.querySelector('.app-screen.active')?.id?.replace('Screen', '') || 'chats';
-  const previousButton = document.querySelector('.nav-button.active');
-
-  // Initialize WebSocket connection regardless of view
-  if (wsManager) {
-    wsManager.initializeWebSocketManager();
+class Footer {
+  constructor() {
+    // No DOM dependencies in constructor
   }
 
-  try {
-    // Direct references to view elements
-    const chatScreen = document.getElementById('chatsScreen');
-    const contactsScreen = document.getElementById('contactsScreen');
-    const walletScreen = document.getElementById('walletScreen');
+  load() {
+    // DOM elements - only accessed when DOM is ready
+    this.footer = document.getElementById('footer');
+    this.chatButton = document.getElementById('switchToChats');
+    this.contactsButton = document.getElementById('switchToContacts');
+    this.walletButton = document.getElementById('switchToWallet');
+    this.newChatButton = document.getElementById('newChatButton');
+    this.lastItem = this.footer.querySelector('.last-item');
 
-    // Direct references to button elements
-    const chatButton = document.getElementById('switchToChats');
-    const contactsButton = document.getElementById('switchToContacts');
-    const walletButton = document.getElementById('switchToWallet');
+    this.newChatButton.addEventListener('click', () => newChatModal.openNewChatModal());
+    this.chatButton.addEventListener('click', () => this.switchView('chats'));
+    this.contactsButton.addEventListener('click', () => this.switchView('contacts'));
+    this.walletButton.addEventListener('click', () => this.switchView('wallet'));
+  }
 
-    // Hide all screens
-    chatScreen.classList.remove('active');
-    contactsScreen.classList.remove('active');
-    walletScreen.classList.remove('active');
+  open() {
+    this.footer.classList.add('active');
+  }
 
-    // Show selected screen
-    document.getElementById(`${view}Screen`).classList.add('active');
+  close() {
+    this.footer.classList.remove('active');
+  }
 
-    // Update nav buttons - remove active class from all
-    chatButton.classList.remove('active');
-    contactsButton.classList.remove('active');
-    walletButton.classList.remove('active');
-
-    // Add active class to selected button
-    if (view === 'chats') {
-      chatButton.classList.add('active');
-    } else if (view === 'contacts') {
-      contactsButton.classList.add('active');
-    } else if (view === 'wallet') {
-      walletButton.classList.add('active');
+  async switchView(view) {
+    // Store the current view for potential rollback
+    const previousView = document.querySelector('.app-screen.active')?.id?.replace('Screen', '') || 'chats';
+    const previousButton = document.querySelector('.nav-button.active');
+  
+    // Initialize WebSocket connection regardless of view
+    if (wsManager) {
+      wsManager.initializeWebSocketManager();
     }
-
-    // Show header and footer
-    document.getElementById('header').classList.add('active');
-    document.getElementById('footer').classList.add('active');
-
-    // Update header with username if signed in
-    const appName = document.querySelector('.app-name');
-    if (myAccount && myAccount.username) {
-      appName.textContent = `${myAccount.username}`;
-    } else {
-      appName.textContent = '';
-    }
-
-    // Show/hide new chat button
-    const newChatButton = document.getElementById('newChatButton');
-    if (view === 'chats' || view === 'contacts') {
-      newChatButton.classList.add('visible');
-    } else {
-      newChatButton.classList.remove('visible');
-    }
-
-    // Update lists when switching views
-    if (view === 'chats') {
-      chatButton.classList.remove('has-notification');
-      // TODO: maybe need to invoke updateChatData here?
-      await updateChatList();
-      if (isOnline) {
-        if (wsManager && !wsManager.isSubscribed()) {
-          pollChatInterval(pollIntervalNormal);
-        }
-      }
-
-      // focus onto last-item in the footer
-      const footer = document.getElementById('footer');
-      const lastItem = footer.querySelector('.last-item');
-      if (lastItem) {
-        lastItem.focus();
-      }
-    } else if (view === 'contacts') {
-      await updateContactsList();
-    } else if (view === 'wallet') {
-      walletButton.classList.remove('has-notification');
-      await updateWalletView();
-    }
-  } catch (error) {
-    console.error(`Error switching to ${view} view:`, error);
-
-    // Restore previous view if there was an error
-    if (previousView && previousButton) {
-      console.log(`Restoring previous view: ${previousView}`);
-
-      // Get references to screens and buttons
+  
+    try {
+      // Direct references to view elements
       const chatScreen = document.getElementById('chatsScreen');
       const contactsScreen = document.getElementById('contactsScreen');
       const walletScreen = document.getElementById('walletScreen');
-
-      const chatButton = document.getElementById('switchToChats');
-      const contactsButton = document.getElementById('switchToContacts');
-      const walletButton = document.getElementById('switchToWallet');
-
-      // Hide all screens with direct references
+  
+      // Hide all screens
       chatScreen.classList.remove('active');
       contactsScreen.classList.remove('active');
       walletScreen.classList.remove('active');
-
-      // Show previous screen
-      const previousScreenElement = document.getElementById(`${previousView}Screen`);
-      if (previousScreenElement) {
-        previousScreenElement.classList.add('active');
+  
+      // Show selected screen
+      document.getElementById(`${view}Screen`).classList.add('active');
+  
+      // Update nav buttons - remove active class from all
+      this.chatButton.classList.remove('active');
+      this.contactsButton.classList.remove('active');
+      this.walletButton.classList.remove('active');
+  
+      // Add active class to selected button
+      if (view === 'chats') {
+        this.chatButton.classList.add('active');
+      } else if (view === 'contacts') {
+        this.contactsButton.classList.add('active');
+      } else if (view === 'wallet') {
+        this.walletButton.classList.add('active');
       }
-
-      // Remove active class from all buttons with direct references
-      chatButton.classList.remove('active');
-      contactsButton.classList.remove('active');
-      walletButton.classList.remove('active');
-
-      // Add active to the correct button based on previousView
-      if (previousView === 'chats') {
-        chatButton.classList.add('active');
-      } else if (previousView === 'contacts') {
-        contactsButton.classList.add('active');
-      } else if (previousView === 'wallet') {
-        walletButton.classList.add('active');
+  
+      // Show header and footer
+      document.getElementById('header').classList.add('active');
+      footer.open();
+  
+      // Update header with username if signed in
+      const appName = document.querySelector('.app-name');
+      if (myAccount && myAccount.username) {
+        appName.textContent = `${myAccount.username}`;
       } else {
-        // Fallback if previousButton is available
-        previousButton.classList.add('active');
+        appName.textContent = '';
       }
-
-      // Display error toast to user
-      showToast(`Failed to switch to ${view} view`, 3000, 'error');
+  
+      // Show/hide new chat button
+      if (view === 'chats' || view === 'contacts') {
+        this.newChatButton.classList.add('visible');
+      } else {
+        this.newChatButton.classList.remove('visible');
+      }
+  
+      // Update lists when switching views
+      if (view === 'chats') {
+        this.chatButton.classList.remove('has-notification');
+        // TODO: maybe need to invoke updateChatData here?
+        await updateChatList();
+        if (isOnline) {
+          if (wsManager && !wsManager.isSubscribed()) {
+            pollChatInterval(pollIntervalNormal);
+          }
+        }
+  
+        // focus onto last-item in the footer
+        if (footer.lastItem) {
+          footer.lastItem.focus();
+        }
+      } else if (view === 'contacts') {
+        await updateContactsList();
+      } else if (view === 'wallet') {
+        this.walletButton.classList.remove('has-notification');
+        await updateWalletView();
+      }
+    } catch (error) {
+      console.error(`Error switching to ${view} view:`, error);
+  
+      // Restore previous view if there was an error
+      if (previousView && previousButton) {
+        console.log(`Restoring previous view: ${previousView}`);
+  
+        // Get references to screens and buttons
+        const chatScreen = document.getElementById('chatsScreen');
+        const contactsScreen = document.getElementById('contactsScreen');
+        const walletScreen = document.getElementById('walletScreen');
+  
+        // Hide all screens with direct references
+        chatScreen.classList.remove('active');
+        contactsScreen.classList.remove('active');
+        walletScreen.classList.remove('active');
+  
+        // Show previous screen
+        const previousScreenElement = document.getElementById(`${previousView}Screen`);
+        if (previousScreenElement) {
+          previousScreenElement.classList.add('active');
+        }
+  
+        // Remove active class from all buttons with direct references
+        this.chatButton.classList.remove('active');
+        this.contactsButton.classList.remove('active');
+        this.walletButton.classList.remove('active');
+  
+        // Add active to the correct button based on previousView
+        if (previousView === 'chats') {
+          this.chatButton.classList.add('active');
+        } else if (previousView === 'contacts') {
+          this.contactsButton.classList.add('active');
+        } else if (previousView === 'wallet') {
+          this.walletButton.classList.add('active');
+        } else {
+          // Fallback if previousButton is available
+          previousButton.classList.add('active');
+        }
+  
+        // Display error toast to user
+        showToast(`Failed to switch to ${view} view`, 3000, 'error');
+      }
     }
   }
 }
+
+const footer = new Footer();
 
 // Update contacts list UI
 async function updateContactsList() {
@@ -1905,7 +1923,7 @@ class SignInModal {
     // Close modal and proceed to app
     this.close();
     document.getElementById('welcomeScreen').style.display = 'none';
-    await switchView('chats'); // Default view
+    await footer.switchView('chats'); // Default view
   }
 
   async handleUsernameChange() {
@@ -2477,7 +2495,7 @@ class HistoryModal {
   close() {
     this.modal.classList.remove('active');
     this.openButton.classList.remove('has-notification');
-    document.getElementById('switchToWallet').classList.remove('has-notification');
+    footer.walletButton.classList.remove('has-notification');
   }
 
   populateAssets() {
@@ -2643,8 +2661,8 @@ function handleSignOut() {
 
   // Hide header and footer
   document.getElementById('header').classList.remove('active');
-  document.getElementById('footer').classList.remove('active');
-  document.getElementById('newChatButton').classList.remove('visible');
+  footer.close();
+  footer.newChatButton.classList.remove('visible');
 
   // Reset header text
   document.querySelector('.app-name').textContent = 'Liberdus';
@@ -3327,10 +3345,8 @@ async function processChats(chats, keys) {
 
         // Only suppress notification if we're ACTIVELY viewing this chat and if not a transfer
         if (!inActiveChatWithSender && !hasNewTransfer) {
-          // Add notification indicator to Chats tab if we're not on it
-          const chatsButton = document.getElementById('switchToChats');
           if (!document.getElementById('chatsScreen').classList.contains('active')) {
-            chatsButton.classList.add('has-notification');
+            footer.chatButton.classList.add('has-notification');
           }
         }
       }
@@ -3338,9 +3354,8 @@ async function processChats(chats, keys) {
       // Show transfer notification even if no messages were added
       if (hasNewTransfer) {
         // Add notification indicator to Wallet tab if we're not on it
-        const walletButton = document.getElementById('switchToWallet');
         if (!document.getElementById('walletScreen').classList.contains('active')) {
-          walletButton.classList.add('has-notification');
+          footer.walletButton.classList.add('has-notification');
         }
         // Add notification to openHistoryModal wallet-action-button
         const historyButton = document.getElementById('openHistoryModal');
@@ -3822,7 +3837,7 @@ class SearchMessagesModal {
       this.close();
 
       // Switch to chats view if not already there
-      switchView('chats');
+      footer.switchView('chats');
 
       // Open the chat with this contact
       chatModal.open(result.contactAddress);
@@ -6626,7 +6641,7 @@ class ChatModal {
     this.messageByteCounter.style.display = 'none';
 
     friendModal.setAddress(address);
-    document.getElementById('newChatButton').classList.remove('visible');
+    footer.newChatButton.classList.remove('visible');
     const contact = myData.contacts[address];
     friendModal.updateFriendButton(contact, 'addFriendButtonChat');
     // Set user info
@@ -6731,11 +6746,11 @@ class ChatModal {
     this.modal.classList.remove('active');
     if (document.getElementById('chatsScreen').classList.contains('active')) {
       updateChatList();
-      document.getElementById('newChatButton').classList.add('visible');
+      footer.newChatButton.classList.add('visible');
     }
     if (document.getElementById('contactsScreen').classList.contains('active')) {
       updateContactsList();
-      document.getElementById('newChatButton').classList.add('visible');
+      footer.newChatButton.classList.add('visible');
     }
     this.address = null;
     if (isOnline) {
@@ -7604,7 +7619,6 @@ const failedMessageModal = new FailedMessageModal();
 class NewChatModal {
   constructor() {
     this.modal = document.getElementById('newChatModal');
-    this.newChatButton = document.getElementById('newChatButton');
     this.closeNewChatModalButton = document.getElementById('closeNewChatModal');
     this.newChatForm = document.getElementById('newChatForm');
     this.usernameAvailable = document.getElementById('chatRecipientError');
@@ -7618,7 +7632,6 @@ class NewChatModal {
    * @returns {void}
    */
   load() {
-    this.newChatButton.addEventListener('click', this.openNewChatModal.bind(this));
     this.closeNewChatModalButton.addEventListener('click', this.closeNewChatModal.bind(this));
     this.newChatForm.addEventListener('submit', this.handleNewChat.bind(this));
     this.recipientInput.addEventListener('input', debounce(this.handleUsernameInput.bind(this), 300));
@@ -7631,7 +7644,7 @@ class NewChatModal {
    */
   openNewChatModal() {
     this.modal.classList.add('active');
-    this.newChatButton.classList.remove('visible');
+    footer.newChatButton.classList.remove('visible');
     this.usernameAvailable.style.display = 'none';
     this.submitButton.disabled = true;
 
@@ -7655,10 +7668,10 @@ class NewChatModal {
     this.modal.classList.remove('active');
     this.newChatForm.reset();
     if (document.getElementById('chatsScreen').classList.contains('active')) {
-      this.newChatButton.classList.add('visible');
+      footer.newChatButton.classList.add('visible');
     }
     if (document.getElementById('contactsScreen').classList.contains('active')) {
-      this.newChatButton.classList.add('visible');
+      footer.newChatButton.classList.add('visible');
     }
   }
 
