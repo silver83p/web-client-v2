@@ -321,6 +321,73 @@ function newDataRecord(myAccount) {
   return myData;
 }
 
+/**
+ * Handle native app subscription tokens and handle subscription
+ * This is used to subscribe to push notifications for the native app
+ * @returns {Promise<void>}
+ */
+async function handleNativeAppSubscription() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const deviceToken = urlParams.get('device_token');
+  const pushToken = urlParams.get('push_token');
+  
+  if (deviceToken && pushToken) {
+    console.log('Native app subscription tokens detected:', { deviceToken, pushToken });
+    
+    try {
+      // Get the user's address from localStorage if available
+      const { netid } = network;
+      const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+      const netidAccounts = existingAccounts.netids[netid];
+      
+      let addresses = [];
+      if (netidAccounts?.usernames) {
+        // Get addresses from all stored accounts and convert to long format
+        addresses = Object.values(netidAccounts.usernames).map(account => longAddress(account.address));
+      }
+      
+      const payload = {
+        deviceToken,
+        expoPushToken: pushToken,
+        addresses: addresses
+      };
+      
+      // Get the appropriate gateway for this request
+      const selectedGateway = getGatewayForRequest();
+      if (!selectedGateway) {
+        console.error('No gateway available for subscription request');
+        showToast('No gateway available', 3000, 'error');
+        return;
+      }
+      
+      const SUBSCRIPTION_API = `${selectedGateway.web}/notifier/subscribe`;
+
+      console.log('payload', payload);
+      console.log('SUBSCRIPTION_API', SUBSCRIPTION_API);
+      
+      const response = await fetch(SUBSCRIPTION_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Subscription successful:', result);
+        /* showToast('Push notifications enabled', 3000, 'success'); */
+      } else {
+        console.error('Subscription failed:', response.status, response.statusText);
+        /* showToast('Failed to enable push notifications', 3000, 'error'); */
+      }
+    } catch (error) {
+      console.error('Error subscribing to push notifications:', error);
+      /* showToast('Error enabling push notifications', 3000, 'error'); */
+    }
+  }
+}
+
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
   await checkVersion(); // version needs to be checked before anything else happens
@@ -332,6 +399,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('unload', handleUnload);
   window.addEventListener('beforeunload', handleBeforeUnload);
   document.addEventListener('visibilitychange', handleVisibilityChange); // Keep as document
+
+  // Check for native app subscription tokens and handle subscription
+  handleNativeAppSubscription();
 
   // Sign In Modal
   signInModal.load();
@@ -445,6 +515,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Deprecated - do not want to encourage or confuse users with this feature since on IOS uses seperate local storage
   //setupAddToHomeScreen();
 });
+
+
 
 function handleUnload() {
   console.log('in handleUnload');
