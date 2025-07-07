@@ -516,8 +516,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   //setupAddToHomeScreen();
 });
 
-
-
 function handleUnload() {
   console.log('in handleUnload');
   if (menuModal.isSignoutExit) {
@@ -1166,11 +1164,12 @@ class MenuModal {
 
   open() {
     this.modal.classList.add('active');
+    enterFullscreen();
   }
 
   close() {
-    
-    this.modal.classList.remove('active');  
+    this.modal.classList.remove('active');
+    enterFullscreen();
   }
 
   isActive() {
@@ -1883,6 +1882,9 @@ class SignInModal {
     if (event) {
       event.preventDefault();
     }
+
+    enterFullscreen();
+    
     const username = this.usernameSelect.value;
 
     // Get network ID from network.js
@@ -7412,6 +7414,7 @@ class CreateAccountModal {
 
   open() {
     this.modal.classList.add('active');
+    enterFullscreen();
   }
 
   close() {
@@ -9661,4 +9664,17 @@ function getContactDisplayName(contact) {
   return contact?.name || 
          contact?.username || 
          `${contact?.address?.slice(0, 8)}...${contact?.address?.slice(-6)}`;
+}
+
+function isMobile() {
+  return /Android|webOS|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function enterFullscreen() {
+  if (isMobile()) {
+  console.log('in enterFullscreen');
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    } 
+  }
 }
