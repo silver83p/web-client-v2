@@ -407,6 +407,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check for native app subscription tokens and handle subscription
   handleNativeAppSubscription();
 
+  // Unlock Modal
+  unlockModal.load();
+
   // Sign In Modal
   signInModal.load();
 
@@ -623,12 +626,23 @@ class WelcomeScreen {
     this.versionDisplay.textContent = myVersion + ' ' + version;
     this.networkNameDisplay.textContent = network.name;
     
-    this.signInButton.addEventListener('click', () => signInModal.open());
-    this.createAccountButton.addEventListener('click', () => createAccountModal.openWithReset());
+    this.signInButton.addEventListener('click', () => {
+      if (localStorage.lock && unlockModal.isLocked()) {
+        unlockModal.open();
+      } else {
+        signInModal.open();
+      }
+    });
+    this.createAccountButton.addEventListener('click', () => {
+      if (localStorage.lock && unlockModal.isLocked()) {
+        unlockModal.open();
+      } else {
+        createAccountModal.openWithReset();
+      }
+    });
     this.importAccountButton.addEventListener('click', () => restoreAccountModal.open());
 
     this.orderButtons();
-    
   }
 
   open() {
@@ -1222,6 +1236,9 @@ class MenuModal {
       wsManager.disconnect();
       wsManager = null;
     }
+
+    // Lock the app
+    unlockModal.lock();
 
     // Save myData to localStorage if it exists
     saveState();
@@ -9383,9 +9400,10 @@ class LockModal {
     this.headerCloseButton.addEventListener('click', () => this.close());
     this.lockForm.addEventListener('submit', (event) => this.handleSubmit(event));
     // dynamic button state
-    this.newPasswordInput.addEventListener('input', () => this.updateButtonState());
-    this.confirmNewPasswordInput.addEventListener('input', () => this.updateButtonState());
-    this.oldPasswordInput.addEventListener('input', () => this.updateButtonState());
+    this.newPasswordInput.addEventListener('input', () => debounce(this.updateButtonState(), 250));
+    this.confirmNewPasswordInput.addEventListener('input', () => debounce(this.updateButtonState(), 250));
+    this.oldPasswordInput.addEventListener('input', () => debounce(this.updateButtonState(), 250));
+    this.passwordWarning = this.modal.querySelector('#passwordWarning');
   }
 
   open() {
@@ -9449,6 +9467,8 @@ class LockModal {
         showToast('Invalid password. Please try again.', 0, 'error');
         return;
       }
+
+      showToast('Password updated', 2000, 'success');
       
       // Save the key in localStorage with a key of "lock"
       localStorage.lock = key;
@@ -9476,12 +9496,34 @@ class LockModal {
       isValid = isValid && oldPassword.length > 0;
     }
     
+    // Validate password requirements and set appropriate warnings
+    let warningMessage = '';
+    
+    // Check if password is at least 4 characters
+    if (newPassword.length > 0 && newPassword.length < 4) {
+      isValid = false;
+      warningMessage = 'Password must be at least 4 characters.';
+    }
     // Check if passwords match
-    if (newPassword && confirmPassword) {
-      isValid = isValid && newPassword === confirmPassword;
+    else if (newPassword && confirmPassword && newPassword !== confirmPassword) {
+      isValid = false;
+      warningMessage = 'Password confirmation does not match.';
+    }
+    // Check if new password is same as old password
+    else if (newPassword && oldPassword && newPassword === oldPassword) {
+      isValid = false;
+      warningMessage = 'New password cannot be the same as the old password.';
     }
     
+    // Update button state and warnings
     this.lockButton.disabled = !isValid;
+    
+    if (warningMessage) {
+      this.passwordWarning.textContent = warningMessage;
+      this.passwordWarning.style.display = 'block';
+    } else {
+      this.passwordWarning.style.display = 'none';
+    }
   }
 
   clearInputs() {
@@ -9491,6 +9533,78 @@ class LockModal {
   }
 }
 const lockModal = new LockModal();
+
+/**
+ * Unlock Modal
+ * @class
+ * @description A modal for unlocking the app
+ */
+class UnlockModal {
+  constructor() {
+    this.locked = true;
+  }
+
+  load() {
+    this.modal = document.getElementById('unlockModal');
+    this.closeButton = document.getElementById('closeUnlockModal');
+    this.unlockForm = document.getElementById('unlockForm');
+    this.passwordInput = this.modal.querySelector('#password');
+    this.unlockButton = this.modal.querySelector('.update-button');
+
+    this.closeButton.addEventListener('click', () => this.close());
+    this.unlockForm.addEventListener('submit', (event) => this.handleSubmit(event));
+    this.passwordInput.addEventListener('input', () => this.updateButtonState());
+  }
+
+  open() {
+    this.modal.classList.add('active');
+  }
+
+  close() {
+    this.passwordInput.value = '';
+    this.modal.classList.remove('active');
+  }
+
+  async handleSubmit(event) {
+    event.preventDefault();
+    const password = this.passwordInput.value;
+    const key = await passwordToKey(password);
+    if (!key) {
+      showToast('Invalid password. Please try again.', 0, 'error');
+      return;
+    }
+    if (key === localStorage.lock) {
+      showToast('Unlock successful', 2000, 'success');
+      this.unlock();
+      this.close();
+      signInModal.open();
+    } else {
+      showToast('Invalid password. Please try again.', 0, 'error');
+    }
+  }
+
+  updateButtonState() {
+    const password = this.passwordInput.value;
+    this.unlockButton.disabled = password.length === 0;
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
+  isLocked() {
+    return this.locked;
+  }
+
+  lock() {
+    this.locked = true;
+  }
+
+  unlock() {
+    this.locked = false;
+  }
+}
+const unlockModal = new UnlockModal();
 
 /**
  * Remove failed transaction from the contacts messages, pending, and wallet history
