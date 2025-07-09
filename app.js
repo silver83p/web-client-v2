@@ -157,6 +157,7 @@ const pollIntervalChatting = 5000; // in millseconds
 //network.explorer.url = "http://test.liberdus.com:6001"   // URL of the chain explorer
 const MAX_MEMO_BYTES = 1000; // 1000 bytes for memos
 const MAX_CHAT_MESSAGE_BYTES = 1000; // 1000 bytes for chat messages
+const BRIDGE_USERNAME = 'liberdusbridge';
 
 let myData = null;
 let myAccount = null; // this is set to myData.account for convience
@@ -500,6 +501,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Friend Modal
   friendModal.load();
+
+  // Bridge Modal
+  bridgeModal.load();
 
   // add event listener for back-button presses to prevent shift+tab
   document.querySelectorAll('.back-button').forEach((button) => {
@@ -1169,6 +1173,8 @@ class MenuModal {
     this.signOutButton.addEventListener('click', () => this.handleSignOut());
     this.backupButton = document.getElementById('openBackupModalButton');
     this.backupButton.addEventListener('click', () => backupAccountModal.open());
+    this.bridgeButton = document.getElementById('openBridge');
+    this.bridgeButton.addEventListener('click', () => bridgeModal.open());
   }
 
   open() {
@@ -9309,6 +9315,44 @@ class FailedTransactionModal {
 }
 
 const failedTransactionModal = new FailedTransactionModal();
+
+class BridgeModal {
+  constructor() {}
+
+  load() {
+    this.modal = document.getElementById('bridgeModal');
+    this.closeButton = document.getElementById('closeBridgeModal');
+    this.bridgeToPolygonButton = document.getElementById('bridgeToPolygon');
+    this.bridgeFromPolygonButton = document.getElementById('bridgeFromPolygon');
+
+    this.closeButton.addEventListener('click', () => this.close());
+    // this.bridgeFromPolygonButton.addEventListener('click', () => {window.open('./bridge', '_blank');});
+    this.bridgeToPolygonButton.addEventListener('click', () => this.openSendAssetModalToBridge());
+  }
+
+  open() {
+    this.modal.classList.add('active');
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
+  openSendAssetModalToBridge() {
+    this.close();
+    sendAssetFormModal.open();
+    sendAssetFormModal.usernameInput.value = BRIDGE_USERNAME;
+    sendAssetFormModal.usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  
+}
+
+const bridgeModal = new BridgeModal();
 
 /**
  * Remove failed transaction from the contacts messages, pending, and wallet history
