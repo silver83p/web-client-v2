@@ -400,9 +400,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupConnectivityDetection();
 
   // Add unload handler to save myData
-  window.addEventListener('unload', handleUnload);
-  window.addEventListener('beforeunload', handleBeforeUnload);
-  document.addEventListener('visibilitychange', handleVisibilityChange); // Keep as document
+  window.addEventListener('unload', async () => await handleUnload());
+  window.addEventListener('beforeunload', async () => await handleBeforeUnload());
+  document.addEventListener('visibilitychange', async () => await handleVisibilityChange()); // Keep as document
 
   // Check for native app subscription tokens and handle subscription
   handleNativeAppSubscription();
@@ -529,7 +529,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   //setupAddToHomeScreen();
 });
 
-function handleUnload() {
+async function handleUnload() {
   console.log('in handleUnload');
   if (menuModal.isSignoutExit) {
     return;
@@ -541,12 +541,12 @@ function handleUnload() {
       wsManager = null;
     }
 
-    saveState();
+    await saveState();
   }
 }
 
 // Add unload handler to save myData
-function handleBeforeUnload(e) {
+async function handleBeforeUnload(e) {
   console.log('in handleBeforeUnload', e);
   // Clean up WebSocket connection
   if (wsManager) {
@@ -554,7 +554,7 @@ function handleBeforeUnload(e) {
     wsManager = null;
   }
 
-  saveState();
+  await saveState();
   if (menuModal.isSignoutExit) {
     window.removeEventListener('beforeunload', handleBeforeUnload);
     return;
@@ -572,7 +572,7 @@ async function handleVisibilityChange() {
   }
 
   if (document.visibilityState === 'hidden') {
-    saveState();
+    await saveState();
     // if chatModal was opened, save the last message count
     if (chatModal.isActive() && chatModal.address) {
       const contact = myData.contacts[chatModal.address];
@@ -598,6 +598,94 @@ async function handleVisibilityChange() {
   }
 }
 
+async function encryptAllAccounts(oldPassword, newPassword) {
+  const oldEncKey = !oldPassword ? null : await passwordToKey(oldPassword+'liberdusData');
+  const newEncKey = !newPassword ? null : await passwordToKey(newPassword+'liberdusData');
+  // Get all accounts from localStorage
+  const accountsObj = parse(localStorage.getItem('accounts') || 'null');
+  if (!accountsObj.netids) return;
+
+  console.log('looping through all netids')
+  for (const netid in accountsObj.netids) {
+    const usernamesObj = accountsObj.netids[netid]?.usernames;
+    if (!usernamesObj) continue;
+    console.log('looping through all accounts for '+netid)
+    for (const username in usernamesObj) {
+      const key = `${username}_${netid}`;
+      let data = localStorage.getItem(key);
+      if (!data) continue;
+      console.log('about to reencrypt '+key)
+
+      // If oldEncKey is set, decrypt; otherwise, treat as plaintext
+      if (oldEncKey) {
+        try {
+          data = await decryptData(data, oldEncKey);
+        } catch (e) {
+          console.error(`Failed to decrypt data for ${key}:`, e);
+          continue;
+        }
+      }
+
+      /*
+      // If data is still not an object, parse it
+      let parsedData;
+      try {
+        parsedData = typeof data === 'string' ? parse(data) : data;
+      } catch (e) {
+        console.error(`Failed to parse data for ${key}:`, e);
+        continue;
+      }
+
+      // Stringify for storage
+      let newData = stringify(parsedData);
+      */
+      let newData = data;
+
+      // If newEncKey is set, encrypt; otherwise, store as plaintext
+      if (newEncKey) {
+        try {
+          newData = await encryptData(newData, newEncKey);
+        } catch (e) {
+          console.error(`Failed to encrypt data for ${key}:`, e);
+          continue;
+        }
+      }
+
+      // Save to localStorage (encrypted version uses _ suffix)
+      localStorage.setItem(`${key}`, newData);
+    }
+  }
+}
+
+/*
+In unlock
+checkKey = passwordToKey(password)
+if (localStore.lock != checkKey){
+  error
+  return
+}
+encKey = passwordToKey(password+"liberdusData")
+*/
+
+/*
+data = localStore.get(username_netid_)
+if (localStore.lock){
+  data = decryptData(data, encKey)
+}
+myData = parse(data)
+*/
+
+/* when a lock is getting set or password getting changed
+encryptAllAccounts(oldEncKey, newEncKey)  if null it means we didn't have a key
+  loop through all username_netid
+    read data from localStore
+    unencrypt the data with oldEncKey
+    encrypte the data with newEncKey
+    save data to localStore
+*/
+
+
+/*
 function saveState() {
   console.log('in saveState');
   if (myData && myAccount && myAccount.username && myAccount.netid) {
@@ -605,6 +693,29 @@ function saveState() {
     localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
   }
 }
+*/
+
+async function saveState() {
+  console.log('in saveState');
+  if (myData && myAccount && myAccount.username && myAccount.netid) {
+    console.log('saving state');
+    let data = stringify(myData)
+    if (localStorage.lock && lockModal.encKey){  // Consider what happens if localStorage.lock was manually deleted
+      data = await encryptData(data, lockModal.encKey)
+    }
+    localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, data);
+  }
+}
+
+async function loadState(account){
+  let data = localStorage.getItem(account);
+  if (!data) { return null; }
+  if (localStorage.lock && lockModal.encKey) {
+    data = await decryptData(data, lockModal.encKey)
+  }
+  return parse(data);
+}
+
 
 class WelcomeScreen {
   constructor() {}
@@ -1190,7 +1301,7 @@ class MenuModal {
     this.aboutButton = document.getElementById('openAbout');
     this.aboutButton.addEventListener('click', () => aboutModal.open());
     this.signOutButton = document.getElementById('handleSignOut');
-    this.signOutButton.addEventListener('click', () => this.handleSignOut());
+    this.signOutButton.addEventListener('click', async () => await this.handleSignOut());
     this.backupButton = document.getElementById('openBackupModalButton');
     this.backupButton.addEventListener('click', () => backupAccountModal.open());
     this.bridgeButton = document.getElementById('openBridge');
@@ -1211,7 +1322,7 @@ class MenuModal {
     return this.modal.classList.contains('active');
   }
   
-  handleSignOut() {
+  async handleSignOut() {
     // Clear intervals
     if (updateWebSocketIndicatorIntervalId && wsManager) {
       clearInterval(updateWebSocketIndicatorIntervalId);
@@ -1243,7 +1354,7 @@ class MenuModal {
     unlockModal.lock();
 
     // Save myData to localStorage if it exists
-    saveState();
+    await saveState();
     /*
       if (myData && myAccount) {
           localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
@@ -1939,7 +2050,8 @@ class SignInModal {
 
     // Check if the button text is 'Recreate'
     if (this.submitButton.textContent === 'Recreate') {
-      const myData = parse(localStorage.getItem(`${username}_${netid}`));
+//      const myData = parse(localStorage.getItem(`${username}_${netid}`));
+      const myData = await loadState(`${username}_${netid}`);
       const privateKey = myData.account.keys.secret;
       createAccountModal.usernameInput.value = username;
 
@@ -1951,7 +2063,7 @@ class SignInModal {
       return;
     }
 
-    myData = parse(localStorage.getItem(`${username}_${netid}`));
+    myData = await loadState(`${username}_${netid}`)
     if (!myData) {
       console.log('Account data not found');
       return;
@@ -2310,8 +2422,9 @@ class FriendModal {
     // Mark that we need to update the contact list
     this.needsContactListUpdate = true;
 
+    // TODO - do we really need to saveState here
     // Save state
-    saveState();
+//    saveState();
 
     // Update the friend button
     this.updateFriendButton(contact, 'addFriendButtonContactInfo');
@@ -7749,9 +7862,8 @@ class CreateAccountModal {
     try {
       await getNetworkParams();
       const storedKey = `${username}_${netid}`;
-      const storedData = localStorage.getItem(storedKey);
-      if (storedData) {
-        myData = JSON.parse(storedData);
+      myData = await loadState(storedKey)
+      if (myData) {
         myAccount = myData.account;
       } else {
         // create new data record if it doesn't exist
@@ -7794,7 +7906,7 @@ class CreateAccountModal {
         // Store updated accounts back in localStorage
         existingAccounts.netids[netid].usernames[username] = { address: myAccount.keys.address };
         localStorage.setItem('accounts', stringify(existingAccounts));
-        saveState();
+        await saveState();
 
         signInModal.open(username);
       } catch (error) {
@@ -9384,7 +9496,7 @@ const bridgeModal = new BridgeModal();
  */
 class LockModal {
   constructor() {
-    
+    this.encKey = null;
   }
 
   load() {
@@ -9476,7 +9588,9 @@ class LockModal {
     // if new password is empty, remove the password from localStorage
     // once we are here we know the old password is correct
     if (newPassword.length === 0) {
+      await encryptAllAccounts(oldPassword, newPassword)
       delete localStorage.lock;
+      this.encKey = null;
       // remove the loading toast
       if (waitingToastId) hideToast(waitingToastId);
       showToast('Password removed', 2000, 'success');
@@ -9499,13 +9613,16 @@ class LockModal {
         return;
       }
 
-      // remove the loading toast
-      if (waitingToastId) hideToast(waitingToastId);
 
-      showToast('Password updated', 2000, 'success');
       
       // Save the key in localStorage with a key of "lock"
       localStorage.lock = key;
+      this.encKey = await passwordToKey(newPassword+"liberdusData")
+      await encryptAllAccounts(oldPassword, newPassword)
+
+      // remove the loading toast
+      if (waitingToastId) hideToast(waitingToastId);
+      showToast('Password updated', 2000, 'success');
 
       // clear the inputs
       this.clearInputs();
@@ -9647,6 +9764,7 @@ class UnlockModal {
       // remove the loading toast
       if (waitingToastId) hideToast(waitingToastId);
       showToast('Unlock successful', 2000, 'success');
+      lockModal.encKey = await passwordToKey(password+"liberdusData")
       this.unlock();
       this.close();
       if (this.openButtonElementUsed === welcomeScreen.createAccountButton) {
