@@ -628,6 +628,7 @@ class WelcomeScreen {
     
     this.signInButton.addEventListener('click', () => {
       if (localStorage.lock && unlockModal.isLocked()) {
+        unlockModal.openButtonElementUsed = this.signInButton;
         unlockModal.open();
       } else {
         signInModal.open();
@@ -635,6 +636,7 @@ class WelcomeScreen {
     });
     this.createAccountButton.addEventListener('click', () => {
       if (localStorage.lock && unlockModal.isLocked()) {
+        unlockModal.openButtonElementUsed = this.createAccountButton;
         unlockModal.open();
       } else {
         createAccountModal.openWithReset();
@@ -9411,10 +9413,16 @@ class LockModal {
     if (localStorage?.lock) {
       this.oldPasswordInput.style.display = 'block';
       this.oldPasswordLabel.style.display = 'block';
+      this.newPasswordInput.placeholder = 'Leave blank to remove password';
     } else {
       this.oldPasswordInput.style.display = 'none';
       this.oldPasswordLabel.style.display = 'none';
+      this.newPasswordInput.placeholder = '';
+      this.lockButton.textContent = 'Save Password';
     }
+
+    // disable the button
+    this.lockButton.disabled = true;
 
     this.clearInputs();
 
@@ -9427,6 +9435,12 @@ class LockModal {
   }
 
   async handleSubmit(event) {
+    // disable the button
+    this.lockButton.disabled = true;
+
+    // loading toast
+    let waitingToastId = showToast('Updating password...', 0, 'loading');
+    
     event.preventDefault();
     
     const newPassword = this.newPasswordInput.value;
@@ -9444,15 +9458,30 @@ class LockModal {
       // decrypt the old password
       const key = await passwordToKey(oldPassword);
       if (!key) {
+        // remove the loading toast
+        if (waitingToastId) hideToast(waitingToastId);
         showToast('Invalid password. Please try again.', 0, 'error');
         return;
       }
       if (key !== localStorage.lock) {
+        // remove the loading toast
+        if (waitingToastId) hideToast(waitingToastId);
         // clear the old password input
         this.oldPasswordInput.value = '';
         showToast('Invalid password. Please try again.', 0, 'error');
         return;
       }
+    }
+
+    // if new password is empty, remove the password from localStorage
+    // once we are here we know the old password is correct
+    if (newPassword.length === 0) {
+      delete localStorage.lock;
+      // remove the loading toast
+      if (waitingToastId) hideToast(waitingToastId);
+      showToast('Password removed', 2000, 'success');
+      this.close();
+      return;
     }
 
     if (newPassword !== confirmNewPassword) {
@@ -9464,9 +9493,14 @@ class LockModal {
       // encryptData will handle the password hashing internally
       const key = await passwordToKey(newPassword);
       if (!key) {
+        // remove the loading toast
+        if (waitingToastId) hideToast(waitingToastId);
         showToast('Invalid password. Please try again.', 0, 'error');
         return;
       }
+
+      // remove the loading toast
+      if (waitingToastId) hideToast(waitingToastId);
 
       showToast('Password updated', 2000, 'success');
       
@@ -9481,38 +9515,64 @@ class LockModal {
     } catch (error) {
       console.error('Encryption failed:', error);
       showToast('Failed to encrypt password. Please try again.', 0, 'error');
+      // remove the loading toast
+      if (waitingToastId) hideToast(waitingToastId);
     }
   }
 
-  updateButtonState() {
+  async updateButtonState() {
     const newPassword = this.newPasswordInput.value;
     const confirmPassword = this.confirmNewPasswordInput.value;
     const oldPassword = this.oldPasswordInput.value;
     
-    let isValid = newPassword.length > 0 && confirmPassword.length > 0;
+    // Check if old password is filled and new password is empty - "Clear password" mode
+    const isOldPasswordVisible = this.oldPasswordInput.style.display !== 'none';
+    const isClearPasswordMode = isOldPasswordVisible && oldPassword.length > 0 && newPassword.length === 0;
     
-    // If old password field is visible, it must be filled
-    if (this.oldPasswordInput.style.display !== 'none') {
-      isValid = isValid && oldPassword.length > 0;
+    let isValid = false;
+    
+    if (isClearPasswordMode) {
+      // In clear password mode, only old password needs to be filled
+      isValid = true;
+      this.lockButton.textContent = 'Remove Password';
+      
+      // Set placeholder based on confirm password state
+      if (confirmPassword.length > 0) {
+        this.newPasswordInput.placeholder = '';
+      } else {
+        this.newPasswordInput.placeholder = 'Leave blank to remove password';
+      }
+    } else {
+      // Regular password set/update mode
+      isValid = newPassword.length > 0 && confirmPassword.length > 0;
+      
+      // If old password field is visible, it must be filled
+      if (isOldPasswordVisible) {
+        isValid = isValid && oldPassword.length > 0;
+      }
+      this.lockButton.textContent = 'Save Password';
+      this.newPasswordInput.placeholder = '';
     }
     
     // Validate password requirements and set appropriate warnings
     let warningMessage = '';
     
-    // Check if password is at least 4 characters
-    if (newPassword.length > 0 && newPassword.length < 4) {
-      isValid = false;
-      warningMessage = 'Password must be at least 4 characters.';
-    }
-    // Check if passwords match
-    else if (newPassword && confirmPassword && newPassword !== confirmPassword) {
-      isValid = false;
-      warningMessage = 'Password confirmation does not match.';
-    }
-    // Check if new password is same as old password
-    else if (newPassword && oldPassword && newPassword === oldPassword) {
-      isValid = false;
-      warningMessage = 'New password cannot be the same as the old password.';
+    if (!isClearPasswordMode) {
+      // Check if password is at least 4 characters
+      if (newPassword.length > 0 && newPassword.length < 4) {
+        isValid = false;
+        warningMessage = 'Password must be at least 4 characters.';
+      }
+      // Check if passwords match
+      else if (newPassword && confirmPassword && newPassword !== confirmPassword) {
+        isValid = false;
+        warningMessage = 'Password confirmation does not match.';
+      }
+      // Check if new password is same as old password
+      else if (newPassword && oldPassword && newPassword === oldPassword) {
+        isValid = false;
+        warningMessage = 'New password cannot be the same as the old password.';
+      }
     }
     
     // Update button state and warnings
@@ -9542,6 +9602,8 @@ const lockModal = new LockModal();
 class UnlockModal {
   constructor() {
     this.locked = true;
+    // keep track of what button was pressed to open the unlock modal
+    this.openButtonElementUsed = null;
   }
 
   load() {
@@ -9566,21 +9628,39 @@ class UnlockModal {
   }
 
   async handleSubmit(event) {
+    // disable the button
+    this.unlockButton.disabled = true;
+
+    // loading toast
+    let waitingToastId = showToast('Checking password...', 0, 'loading');
+
     event.preventDefault();
     const password = this.passwordInput.value;
     const key = await passwordToKey(password);
     if (!key) {
+      // remove the loading toast
+      if (waitingToastId) hideToast(waitingToastId);
       showToast('Invalid password. Please try again.', 0, 'error');
       return;
     }
     if (key === localStorage.lock) {
+      // remove the loading toast
+      if (waitingToastId) hideToast(waitingToastId);
       showToast('Unlock successful', 2000, 'success');
       this.unlock();
       this.close();
-      signInModal.open();
+      if (this.openButtonElementUsed === welcomeScreen.createAccountButton) {
+        createAccountModal.openWithReset();
+      } else {
+        signInModal.open();
+      }
     } else {
+      if (waitingToastId) hideToast(waitingToastId);
       showToast('Invalid password. Please try again.', 0, 'error');
     }
+
+    // remove the loading toast
+    if (waitingToastId) hideToast(waitingToastId);
   }
 
   updateButtonState() {
