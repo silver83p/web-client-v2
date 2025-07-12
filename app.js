@@ -515,6 +515,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bridge Modal
   bridgeModal.load();
 
+  // Migrate Accounts Modal
+  migrateAccountsModal.load();
+
   // Lock Modal
   lockModal.load();
 
@@ -7765,6 +7768,7 @@ class CreateAccountModal {
     this.privateKeyError = document.getElementById('newPrivateKeyError');
     this.togglePrivateKeyVisibility = document.getElementById('togglePrivateKeyVisibility');
     this.migrateAccountsSection = document.getElementById('migrateAccountsSection');
+    this.migrateAccountsButton = document.getElementById('migrateAccountsButton');
 
     // Setup event listeners
     this.form.addEventListener('submit', (e) => this.handleSubmit(e));
@@ -7780,6 +7784,8 @@ class CreateAccountModal {
       // Toggle the visual state class on the button
       this.togglePrivateKeyVisibility.classList.toggle('toggled-visible');
     });
+
+    this.migrateAccountsButton.addEventListener('click', async () => await migrateAccountsModal.open());
   }
 
   open() {
@@ -9643,6 +9649,125 @@ class BridgeModal {
 }
 
 const bridgeModal = new BridgeModal();
+
+/**
+ * Migrate Accounts Modal
+ * @class
+ * @description A modal for migrating accounts from different networks
+ */
+class MigrateAccountsModal {
+  constructor() { }
+
+  load() {
+    this.modal = document.getElementById('migrateAccountsModal');
+    this.closeButton = document.getElementById('closeMigrateAccountsModal');
+    this.form = document.getElementById('migrateAccountsForm');
+    this.accountList = document.getElementById('migrateAccountList');
+    this.submitButton = this.form.querySelector('button[type="submit"]');
+
+    this.closeButton.addEventListener('click', () => this.close());
+    this.form.addEventListener('submit', (event) => this.handleSubmit(event));
+  }
+
+  async open() {
+    console.log('open migrate accounts modal');
+    await this.populateAccounts();
+    this.modal.classList.add('active');
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+    this.clearForm();
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
+  /**
+   * Populate the account select with checkboxes for each account in accounts.netids[mismatchedNetid].usernames
+   * @returns {void}
+   */
+  async populateAccounts() {
+    console.log('populate accounts');
+    // an array of objects with { username, netid }
+    const mismatchedAccounts = await this.migratableAccounts();
+
+    // Clear existing options
+    this.accountList.innerHTML = '';
+
+    if (mismatchedAccounts.length === 0) {
+      this.accountList.innerHTML = '<p>No accounts need migration</p>';
+      return;
+    }
+
+    // For each in the array, create a checkbox and label with username_netid
+    mismatchedAccounts.forEach(account => {
+      console.log('account', account);
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      checkbox.value = account.username;
+      checkbox.id = account.username;
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(account.username + '_' + account.netid.slice(0, 6)));
+      this.accountList.appendChild(label);
+    });
+  }
+
+  /**
+   * Returns an array of migratable accounts from localStorage.
+   * Each object has { username, netid } for accounts that can be migrated to the current network.
+   * Rules:
+   *  - Only accounts from netids different from the current network (parameters.networkId or network.netid)
+   *  - If the username+address is already present on this network, skip
+   *  - If the username is not available to us on this network (checkUsernameAvailability !== 'mine'), skip
+   */
+  async migratableAccounts() {
+    // Get all accounts from localStorage
+    const accountsObj = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+    // Determine the current network id (prefer parameters.networkId, fallback to network.netid)
+    const currentNetId = parameters?.networkId;
+    if (!accountsObj.netids || !currentNetId) return [];
+
+    const migratable = [];
+    const currentNetUsernames = (accountsObj.netids[currentNetId] && accountsObj.netids[currentNetId].usernames) || {};
+
+    // Loop through all netids except the current one
+    for (const netid in accountsObj.netids) {
+      if (netid === currentNetId) continue;
+      const usernamesObj = accountsObj.netids[netid]?.usernames;
+      if (!usernamesObj) continue;
+      for (const username in usernamesObj) {
+        const address = usernamesObj[username].address;
+        // If username+address is already present on this network, skip
+        if (
+          currentNetUsernames[username] &&
+          normalizeAddress(currentNetUsernames[username].address) === normalizeAddress(address)
+        ) {
+          continue;
+        }
+        // Check if the username is available to us on this network
+        // (If not, skip)
+        // Note: checkUsernameAvailability returns 'mine' if available to us
+        // We must await this as it may be async
+        const result = await checkUsernameAvailability(username, address);
+        if (result !== 'mine') continue;
+        migratable.push({ username, netid });
+      }
+    }
+    return migratable;
+  }
+
+  clearForm() {
+    const checkboxes = this.accountList.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(checkbox => checkbox.checked = false);
+    this.submitButton.disabled = true;
+  }
+}
+
+const migrateAccountsModal = new MigrateAccountsModal();
 
 /**
  * Lock Modal
