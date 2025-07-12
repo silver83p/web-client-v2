@@ -5125,7 +5125,12 @@ class RestoreAccountModal {
     } catch { /* Ignore file/parse errors */ }
   }
 
-  // perform the string substitution
+  /**
+   * Performs a string substitution on the given file content.
+   * @param {string} fileContent - The file content to perform the substitution on.
+   * @param {Object} substitution - The substitution object to perform.
+   * @returns {string} - The modified file content.
+   */
   performStringSubstitution(fileContent, substitution) {
     if (!substitution) return fileContent;
 
@@ -7789,11 +7794,16 @@ class CreateAccountModal {
   }
 
   open() {
-    // if localStorage.account has accounts for netids which are different than the netid in params.networkid then show the `migrateAccountsSection`
     const accounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
-    const networkId = parameters.networkid;
-    // if none empty account field in localstorage and has accounts of netid different from networkId and the accounts.netids[mismatchedNetid] object is not empty then display the migrateAccountsSection
-    const mismatchedNetids = Object.keys(accounts.netids).filter(netid => netid !== networkId && Object.keys(accounts.netids[netid].usernames).length > 0);
+    const networkId = parameters.networkId; // Use consistent casing
+
+    // Add safety check for usernames existence
+    const mismatchedNetids = Object.keys(accounts.netids).filter(netid => 
+      netid !== networkId && 
+      accounts.netids[netid].usernames && 
+      Object.keys(accounts.netids[netid].usernames).length > 0
+    );
+
     if (mismatchedNetids.length > 0) {
       this.migrateAccountsSection.style.display = 'block';
     } else {
@@ -9667,6 +9677,11 @@ class MigrateAccountsModal {
 
     this.closeButton.addEventListener('click', () => this.close());
     this.form.addEventListener('submit', (event) => this.handleSubmit(event));
+
+    // if no check boxes are checked, disable the submit button
+    this.form.addEventListener('change', () => {
+      this.submitButton.disabled = this.form.querySelectorAll('input[type="checkbox"]:checked').length === 0;
+    });
   }
 
   async open() {
@@ -9709,7 +9724,7 @@ class MigrateAccountsModal {
       checkbox.type = 'checkbox';
       checkbox.checked = true;
       checkbox.value = account.username;
-      checkbox.id = account.username;
+      checkbox.netid = account.netid;
       label.appendChild(checkbox);
       label.appendChild(document.createTextNode(account.username + '_' + account.netid.slice(0, 6)));
       this.accountList.appendChild(label);
@@ -9758,6 +9773,75 @@ class MigrateAccountsModal {
       }
     }
     return migratable;
+  }
+
+  async handleSubmit(event) {
+    event.preventDefault();
+    console.log('handleSubmit');
+    const selectedAccounts = this.accountList.querySelectorAll('input[type="checkbox"]:checked');
+    console.log('selectedAccounts', selectedAccounts);
+    // remove from accounts.netids[netid].usernames[username]
+    selectedAccounts.forEach(account => {
+      const netid = account.netid;
+      const username = account.value;
+
+      // update the accounts registry
+      this.updateAccountsRegistry(username, netid, parameters.networkId);
+      // then perform netid substitution in all files in the app
+      // get the file content
+      const fileContent = localStorage.getItem(username + '_' + netid);
+      if (fileContent) {
+        // perform netid substitution in the file content
+        const substitutionResult = restoreAccountModal.performStringSubstitution(fileContent, {
+          oldString: netid,
+          newString: parameters.networkId
+        });
+        console.log('substitutionResult', substitutionResult);
+        // save the file content to localStorage
+        localStorage.setItem(username + '_' + parameters.networkId, substitutionResult);
+        // remove the file from localStorage
+        localStorage.removeItem(username + '_' + netid);
+      }
+    });
+
+    this.close();
+    // open create account modal again so it gets refreshed
+    createAccountModal.close();
+    createAccountModal.open();
+  }
+
+  /**
+ * Updates the accounts registry with the given username and netid.
+ * @param {Object} accountsObj - The accounts object to update.
+ * @param {string} newNetid - The new netid to add the username to.
+ * @param {string} username - The username to add to the accounts registry.
+ * @param {string} oldNetid - The old netid to remove the username from.
+ */
+  updateAccountsRegistry(username, oldNetid, newNetid) {
+    const accountsObj = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+    // Remove from old network registry first
+    if (accountsObj.netids[oldNetid] && accountsObj.netids[oldNetid].usernames) {
+      delete accountsObj.netids[oldNetid].usernames[username];
+    }
+
+    // Ensure new netid exists in registry
+    if (!accountsObj.netids[newNetid]) {
+      accountsObj.netids[newNetid] = { usernames: {} };
+    }
+
+    // Add username to the new netid (read from OLD account data location)
+    const accountKey = `${username}_${oldNetid}`;
+    const accountData = parse(localStorage.getItem(accountKey));
+
+    if (accountData && accountData.account && accountData.account.keys) {
+      accountsObj.netids[newNetid].usernames[username] = {
+        address: accountData.account.keys.address
+      };
+    }
+
+    // Save updated accounts registry
+    localStorage.setItem('accounts', stringify(accountsObj));
+    console.log(`Updated accounts registry for ${username}: removed from ${oldNetid}, added to ${newNetid}`);
   }
 
   clearForm() {
