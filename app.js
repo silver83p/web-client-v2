@@ -3992,6 +3992,15 @@ function markConnectivityDependentElements() {
 
     // submitFeedback button
     '#submitFeedback',
+
+    // stakeModal
+    '#submitStake',
+
+    // tollModal
+    '#saveNewTollButton',
+
+    //inviteModal
+    '#inviteForm button[type="submit"]',
   ];
 
   // Add data attribute to all network-dependent elements
