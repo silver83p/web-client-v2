@@ -184,17 +184,6 @@ let parameters = {
   },
 };
 
-async function checkOnlineStatus() {
-  try {
-    const url = new URL(window.location.origin);
-    url.searchParams.set('rand', Math.random());
-    const response = await fetch(url.toString(), { method: 'HEAD' });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Check if a username is available or taken
  * @param {*} username 
@@ -1452,7 +1441,7 @@ class WalletScreen {
       console.error('No wallet data available');
       return;
     } else if (!isOnline) {
-      console.error('Not online. Not updating wallet balances');
+      console.warn('Not online. Not updating wallet balances');
       return;
     }
     await updateAssetPricesIfNeeded();
@@ -2794,7 +2783,7 @@ async function updateAssetPricesIfNeeded() {
 
 async function queryNetwork(url) {
   //console.log('queryNetwork', url)
-  if (!(await checkOnlineStatus())) {
+  if (!isOnline) {
     //TODO: show user we are not online
     console.warn('not online');
     //alert('not online')
@@ -10473,6 +10462,11 @@ async function getNetworkParams() {
 getNetworkParams.timestamp = 0;
 
 async function getSystemNotice() {
+  if (!isOnline) {
+    console.log('getSystemNotice skipped: Not online');
+    return;
+  }
+
   try {
     // First, do a HEAD request to check if the file exists and get its timestamp
     const headResponse = await fetch(`./notice.html?${Math.random()}`, { method: 'HEAD' });
@@ -10548,6 +10542,11 @@ function cleanSenderInfo(si) {
 }
 
 function longPoll() {
+  if (!isOnline) {
+    console.log('Poll skipped: Not online');
+    return;
+  }
+
   const myAccount = myData?.account;
   // Skip if no valid account
   if (!myAccount?.keys?.address) {
@@ -10558,7 +10557,7 @@ function longPoll() {
   try {
     longPoll.start = getCorrectedTimestamp();
     const timestamp = myAccount.chatTimestamp || 0;
-    const random = Math.floor(Math.random()*1000000);
+
     // call this with a promise that'll resolve with callback longPollResult function with the data
     const longPollPromise = queryNetwork(`/collector/api/poll?account=${longAddress(myAccount.keys.address)}&chatTimestamp=${timestamp}`);
     console.log(`longPoll started with account=${longAddress(myAccount.keys.address)} chatTimestamp=${timestamp}`);
