@@ -4340,6 +4340,10 @@ class BackupAccountModal {
   load() {
     // called when the DOM is loaded; can setup event handlers here
     this.modal = document.getElementById('exportModal');
+    this.passwordInput = document.getElementById('exportPassword');
+    this.passwordWarning = document.getElementById('exportPasswordWarning');
+    this.submitButton = document.getElementById('exportForm').querySelector('button[type="submit"]');
+    
     document.getElementById('closeExportForm').addEventListener('click', () => this.close());
     document.getElementById('exportForm').addEventListener('submit', (event) => {
       if (myData) {
@@ -4348,16 +4352,23 @@ class BackupAccountModal {
         this.handleSubmitAll(event);
       }
     });
+    
+    // Add password validation on input with debounce
+    this.debouncedUpdateButtonState = debounce(() => this.updateButtonState(), 250);
+    this.passwordInput.addEventListener('input', this.debouncedUpdateButtonState);
   }
 
   open() {
     // called when the modal needs to be opened
     this.modal.classList.add('active');
+    this.updateButtonState();
   }
 
   close() {
     // called when the modal needs to be closed
     this.modal.classList.remove('active');
+    // Clear password for security
+    this.passwordInput.value = '';
   }
 
   /**
@@ -4389,6 +4400,9 @@ class BackupAccountModal {
   async handleSubmitOne(event) {
     event.preventDefault();
 
+    // Disable button to prevent multiple submissions
+    this.submitButton.disabled = true;
+
     const password = document.getElementById('exportPassword').value;
     const jsonData = stringify(myData, null, 2);
 
@@ -4412,6 +4426,8 @@ class BackupAccountModal {
     } catch (error) {
       console.error('Encryption failed:', error);
       showToast('Failed to encrypt data. Please try again.', 0, 'error');
+      // Re-enable button so user can try again
+      this.updateButtonState();
     }
   }
 
@@ -4421,6 +4437,9 @@ class BackupAccountModal {
    */
   async handleSubmitAll(event) {
     event.preventDefault();
+
+    // Disable button to prevent multiple submissions
+    this.submitButton.disabled = true;
 
     const password = document.getElementById('exportPassword').value;
     const myLocalStore = this.copyLocalStorageToObject();
@@ -4447,6 +4466,8 @@ class BackupAccountModal {
     } catch (error) {
       console.error('Encryption failed:', error);
       showToast('Failed to encrypt data. Please try again.', 0, 'error');
+      // Re-enable button so user can try again
+      this.updateButtonState();
     }
   }
 
@@ -4457,7 +4478,30 @@ class BackupAccountModal {
       myLocalStore[key] = localStorage.getItem(key);
     }
     return myLocalStore;
-  }  
+  }
+
+  updateButtonState() {
+    const password = this.passwordInput.value;
+    
+    // Password is optional, but if provided, it must be at least 4 characters
+    let isValid = true;
+    let warningMessage = '';
+    
+    if (password.length > 0 && password.length < 4) {
+      isValid = false;
+      warningMessage = 'Password must be at least 4 characters.';
+    }
+    
+    // Update button state and warnings
+    this.submitButton.disabled = !isValid;
+    
+    if (warningMessage) {
+      this.passwordWarning.textContent = warningMessage;
+      this.passwordWarning.style.display = 'block';
+    } else {
+      this.passwordWarning.style.display = 'none';
+    }
+  }
 }
 const backupAccountModal = new BackupAccountModal();
 
