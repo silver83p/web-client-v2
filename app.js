@@ -683,7 +683,15 @@ class WelcomeScreen {
         createAccountModal.openWithReset();
       }
     });
-    this.importAccountButton.addEventListener('click', () => restoreAccountModal.open());
+
+    this.importAccountButton.addEventListener('click', () => {
+      if (localStorage.lock && unlockModal.isLocked()) {
+        unlockModal.openButtonElementUsed = this.importAccountButton;
+        unlockModal.open();
+      } else {
+        restoreAccountModal.open();
+      }
+    });
 
     this.orderButtons();
   }
@@ -9610,6 +9618,8 @@ class UnlockModal {
       this.close();
       if (this.openButtonElementUsed === welcomeScreen.createAccountButton) {
         createAccountModal.openWithReset();
+      } else if (this.openButtonElementUsed === welcomeScreen.importAccountButton) {
+        restoreAccountModal.open();
       } else {
         signInModal.open();
       }
