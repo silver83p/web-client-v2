@@ -4698,8 +4698,11 @@ class RestoreAccountModal {
         };
         localStorage.setItem('accounts', stringify(existingAccounts));
 
+        // if lock enckey exist we need to encrypt the myData
+        const updatedMyData = lockModal?.encKey ? encryptData(stringify(myData), lockModal?.encKey, true) : stringify(myData);
+
         // Store the localStore entry for username_netid
-        localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, stringify(myData));
+        localStorage.setItem(`${myAccount.username}_${myAccount.netid}`, updatedMyData);
       }
 
       // Show success message using toast
