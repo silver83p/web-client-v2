@@ -9466,10 +9466,11 @@ class LockModal {
     this.openButton.addEventListener('click', () => this.open());
     this.headerCloseButton.addEventListener('click', () => this.close());
     this.lockForm.addEventListener('submit', (event) => this.handleSubmit(event));
-    // dynamic button state
-    this.newPasswordInput.addEventListener('input', () => debounce(this.updateButtonState(), 250));
-    this.confirmNewPasswordInput.addEventListener('input', () => debounce(this.updateButtonState(), 250));
-    this.oldPasswordInput.addEventListener('input', () => debounce(this.updateButtonState(), 250));
+    // dynamic button state with debounce
+    this.debouncedUpdateButtonState = debounce(() => this.updateButtonState(), 250);
+    this.newPasswordInput.addEventListener('input', this.debouncedUpdateButtonState);
+    this.confirmNewPasswordInput.addEventListener('input', this.debouncedUpdateButtonState);
+    this.oldPasswordInput.addEventListener('input', this.debouncedUpdateButtonState);
     this.passwordWarning = this.modal.querySelector('#passwordWarning');
   }
 
@@ -9631,17 +9632,17 @@ class LockModal {
       // Check if password is at least 4 characters
       if (newPassword.length > 0 && newPassword.length < 4) {
         isValid = false;
-        warningMessage = 'Password must be at least 4 characters.';
+        warningMessage = 'too short';
       }
       // Check if passwords match
       else if (newPassword && confirmPassword && newPassword !== confirmPassword) {
         isValid = false;
-        warningMessage = 'Password confirmation does not match.';
+        warningMessage = 'does not match';
       }
       // Check if new password is same as old password
       else if (newPassword && oldPassword && newPassword === oldPassword) {
         isValid = false;
-        warningMessage = 'New password cannot be the same as the old password.';
+        warningMessage = 'same as current';
       }
     }
     
@@ -9650,7 +9651,7 @@ class LockModal {
     
     if (warningMessage) {
       this.passwordWarning.textContent = warningMessage;
-      this.passwordWarning.style.display = 'block';
+      this.passwordWarning.style.display = 'inline';
     } else {
       this.passwordWarning.style.display = 'none';
     }
