@@ -4485,22 +4485,16 @@ class BackupAccountModal {
     
     // Password is optional, but if provided, it must be at least 4 characters
     let isValid = true;
-    let warningMessage = '';
     
     if (password.length > 0 && password.length < 4) {
       isValid = false;
-      warningMessage = 'Password must be at least 4 characters.';
-    }
-    
-    // Update button state and warnings
-    this.submitButton.disabled = !isValid;
-    
-    if (warningMessage) {
-      this.passwordWarning.textContent = warningMessage;
-      this.passwordWarning.style.display = 'block';
+      this.passwordWarning.style.display = 'inline';
     } else {
       this.passwordWarning.style.display = 'none';
     }
+    
+    // Update button state
+    this.submitButton.disabled = !isValid;
   }
 }
 const backupAccountModal = new BackupAccountModal();

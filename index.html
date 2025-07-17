@@ -922,8 +922,10 @@
           </p>
           <form id="exportForm">
             <div class="form-group">
-              <label for="exportPassword">Password</label>
-              <small id="exportPasswordWarning" style="display: none;"></small>
+              <label for="exportPassword">
+                Password
+                <span id="exportPasswordWarning" style="color: #dc3545; display: none">too short</span>
+              </label>
               <input
                 type="password"
                 id="exportPassword"
