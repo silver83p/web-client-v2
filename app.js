@@ -1820,7 +1820,7 @@ async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   if (balanceWarning) balanceWarning.style.display = 'none';
   // not checking for 0 since we allow 0 amount for messages when toll is not required
   if (amount < 0n) {
-    if (balanceWarning) balanceWarning.style.display = 'block';
+    if (balanceWarning) balanceWarning.style.display = 'inline';
     balanceWarning.textContent = 'Amount cannot be negative';
     return false;
   }
@@ -1834,7 +1834,7 @@ async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   if (balanceWarning) {
     if (hasInsufficientBalance) {
       balanceWarning.textContent = `Insufficient balance (including ${big2str(feeInWei, 18).slice(0, -16)} LIB fee)`;
-      balanceWarning.style.display = 'block';
+      balanceWarning.style.display = 'inline';
     } else {
       balanceWarning.style.display = 'none';
     }
@@ -8217,8 +8217,8 @@ class SendAssetFormModal {
           `toll > amount  ${big2str(tollInLIB, 8)} > ${big2str(amountInLIB, 8)} : ${tollInLIB > amountInLIB}`
         );
         if (tollInLIB > amountInLIB) {
-          this.balanceWarning.textContent = 'Amount is less than toll for memo.';
-          this.balanceWarning.style.display = 'block';
+          this.balanceWarning.textContent = 'less than toll for memo';
+          this.balanceWarning.style.display = 'inline';
           return false;
         }
       }
