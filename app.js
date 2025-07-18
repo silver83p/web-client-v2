@@ -7641,6 +7641,9 @@ class CreateAccountModal {
           checkPendingTransactionsIntervalId = null;
         }
 
+        myAccount = null;
+        myData = null;
+
         // Note: `checkPendingTransactions` will also remove the item from `myData.pending` if it's rejected by the service.
         return;
       }
@@ -7657,6 +7660,9 @@ class CreateAccountModal {
         clearInterval(getSystemNoticeIntervalId);
         getSystemNoticeIntervalId = null;
       }
+
+      myAccount = null;
+      myData = null;
 
       // no toast here since injectTx will show it
       this.reEnableControls();
@@ -9418,6 +9424,9 @@ class MigrateAccountsModal {
       }
       hideToast(loadingToastId);
     }
+
+    // clearing myData, not being used anymore
+    myData = null;
 
     // loop through the results array and check the status of the pending txid which is in results[username].txid
     // See checkPendingTransactions function for how to check the status of a pending txid
