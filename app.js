@@ -6046,6 +6046,9 @@ class ChatModal {
     this.toll = null;
     this.tollUnit = null;
     this.address = null;
+
+    // file attachments
+    this.fileAttachments = [];
   }
 
   /**
@@ -6067,6 +6070,8 @@ class ChatModal {
     this.messageByteCounter = document.querySelector('.message-byte-counter');
     this.messagesContainer = document.querySelector('.messages-container');
     this.addFriendButtonChat = document.getElementById('addFriendButtonChat');
+    this.addAttachmentButton = document.getElementById('addAttachmentButton');
+    this.chatFileInput = document.getElementById('chatFileInput');
 
     // Add message click-to-copy handler
     this.messagesList.addEventListener('click', this.handleClickToCopy.bind(this));
@@ -6116,6 +6121,18 @@ class ChatModal {
       if (!friendModal.getCurrentContactAddress()) return;
       friendModal.open();
     });
+
+    if (this.addAttachmentButton) {
+      this.addAttachmentButton.addEventListener('click', () => {
+        this.triggerFileSelection();
+      });
+    }
+
+    if (this.chatFileInput) {
+      this.chatFileInput.addEventListener('change', (e) => {
+        this.handleFileAttachment(e);
+      });
+    }
   }
 
   /**
@@ -6196,6 +6213,10 @@ class ChatModal {
       chatsScreen.updateChatList();
     }
 
+    // clear file attachments
+    this.fileAttachments = [];
+    this.showAttachmentPreview(); // Hide preview
+
     // Setup state for appendChatModal and perform initial render
     this.address = address;
     this.appendChatModal(false); // Call appendChatModal to render messages, ensure highlight=false
@@ -6225,6 +6246,10 @@ class ChatModal {
 
     // Save any unsaved draft before closing
     this.debouncedSaveDraft(this.messageInput.value);
+
+    // clear file attachments
+    this.fileAttachments = [];
+    this.showAttachmentPreview(); // clear listeners
 
     this.modal.classList.remove('active');
     if (chatsScreen.isActive()) {
@@ -6979,6 +7004,134 @@ console.warn('in send message', txid)
     } else {
       this.messageByteCounter.style.display = 'none';
       this.sendButton.disabled = false;
+    }
+  }
+
+  /**
+   * Handles file selection for chat attachments
+   * @param {Event} event - The file input change event
+   * @returns {Promise<void>}
+   */
+  async handleFileAttachment(event) {
+    const file = event.target.files[0];
+    if (!file) {
+      return; // No file selected
+    }
+
+    // File size limit (e.g., 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      showToast('File size too large. Maximum size is 10MB.', 3000, 'error');
+      event.target.value = ''; // Reset file input
+      return;
+    }
+
+    // Optional: File type validation
+    // add video file types
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf', 'text/plain', 'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'video/mp4', 'video/quicktime', 'video/webm', 'video/ogg', 'video/mov', 'video/avi', 'video/wmv', 'video/flv', 'video/mkv'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      showToast('File type not supported.', 3000, 'error');
+      event.target.value = ''; // Reset file input
+      return;
+    }
+
+    try {
+      // Add file to attachments array
+      this.fileAttachments.push({
+        file: file,
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
+
+      // Show file attachment indicator in UI
+      this.showAttachmentPreview(file);
+      
+      showToast(`File "${file.name}" attached successfully`, 2000, 'success');
+      
+    } catch (error) {
+      console.error('Error handling file attachment:', error);
+      showToast('Error processing file attachment', 3000, 'error');
+    } finally {
+      event.target.value = ''; // Reset the file input value
+    }
+  }
+
+  /**
+   * Shows a preview of the attached file just above the textarea
+   * @returns {void}
+   */
+  showAttachmentPreview() {
+    const preview = document.getElementById('attachmentPreview');
+    
+    if (!this.fileAttachments || this.fileAttachments.length === 0) {
+      preview.innerHTML = '';
+      preview.style.display = 'none';
+      return;
+    }
+  
+    const attachmentItems = this.fileAttachments.map((attachment, index) => `
+      <div class="attachment-item">
+        <span class="attachment-icon">📎</span>
+        <span class="attachment-name">${attachment.name}</span>
+        <button class="remove-attachment" data-index="${index}">×</button>
+      </div>
+    `).join('');
+  
+    preview.innerHTML = attachmentItems;
+    
+    // Add event listeners to remove buttons
+    const removeButtons = preview.querySelectorAll('.remove-attachment');
+    removeButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const index = parseInt(e.target.dataset.index);
+        this.removeAttachment(index);
+      });
+    });
+
+    preview.style.display = 'block';
+    
+    // Check if user was at the bottom before showing preview
+    const messageContainer = this.messagesContainer;
+    const wasAtBottom = messageContainer ? 
+      messageContainer.scrollHeight - messageContainer.scrollTop - messageContainer.clientHeight <= 50 : false;
+    
+    // Only auto-scroll if user was already at the bottom
+    if (wasAtBottom) {
+      setTimeout(() => {
+        if (messageContainer) {
+          messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
+      }, 100); // Small delay to ensure the DOM has updated
+    }
+  }
+
+  /**
+   * Removes a specific attached file
+   * @param {number} index - Index of file to remove
+   * @returns {void}
+   */
+  removeAttachment(index) {
+    if (this.fileAttachments && index >= 0 && index < this.fileAttachments.length) {
+      const removedFile = this.fileAttachments.splice(index, 1)[0];
+      this.showAttachmentPreview(); // Refresh the preview
+      showToast(`"${removedFile.name}" removed`, 2000, 'info');
+    }
+  }
+
+  /**
+   * Triggers file selection using the existing hidden input
+   * @returns {void}
+   */
+  triggerFileSelection() {
+    if (this.chatFileInput) {
+      this.chatFileInput.click();
     }
   }
 }
