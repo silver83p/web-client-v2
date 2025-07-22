@@ -1916,7 +1916,14 @@ async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
 
   if (balanceWarning) {
     if (hasInsufficientBalance) {
-      balanceWarning.textContent = `Insufficient balance (including ${big2str(feeInWei, 18).slice(0, -16)} LIB fee)`;
+      // Check if the fee makes the difference
+      const insufficientForAmount = BigInt(asset.balance) < amount;
+      
+      if (insufficientForAmount) {
+        balanceWarning.textContent = 'Insufficient balance';
+      } else {
+        balanceWarning.textContent = 'Insufficient balance (including fee)';
+      }
       balanceWarning.style.display = 'inline';
     } else {
       balanceWarning.style.display = 'none';
@@ -5875,6 +5882,8 @@ class StakeValidatorModal {
     this.backButton = document.getElementById('closeStakeModal');
     this.nodeAddressGroup = document.getElementById('stakeNodeAddressGroup');
     this.balanceDisplay = document.getElementById('stakeAvailableBalanceDisplay');
+    this.balanceAmount = document.getElementById('stakeBalanceAmount');
+    this.transactionFee = document.getElementById('stakeTransactionFee');
     this.amountWarning = document.getElementById('stakeAmountWarning');
     this.nodeAddressWarning = document.getElementById('stakeNodeAddressWarning');
     this.scanStakeQRButton = document.getElementById('scanStakeQRButton');
@@ -5904,14 +5913,8 @@ class StakeValidatorModal {
     // Set the correct fill function for the staking context
     scanQRModal.fillFunction = this.fillFromQR.bind(this);
 
-    // Display Available Balance
-    const libAsset = myData.wallet.assets.find((asset) => asset.symbol === 'LIB');
-    if (this.balanceDisplay && libAsset) {
-      const formattedBalance = big2str(BigInt(libAsset.balance), 18).slice(0, -12);
-      this.balanceDisplay.textContent = `Available: ${formattedBalance} ${libAsset.symbol}`;
-    } else if (this.balanceDisplay) {
-      this.balanceDisplay.textContent = 'Available: 0.000000 LIB';
-    }
+    // Display Available Balance and Fee
+    this.updateStakeBalanceDisplay();
 
     // Check for nominee address from validator modal
     const nominee = document.getElementById('validator-nominee')?.textContent?.trim();
@@ -6007,6 +6010,25 @@ class StakeValidatorModal {
     const txid = await signObj(stakeTx, keys);
     const response = await injectTx(stakeTx, txid);
     return response;
+  }
+
+  async updateStakeBalanceDisplay() {
+    const libAsset = myData.wallet.assets.find((asset) => asset.symbol === 'LIB');
+    
+    if (!libAsset) {
+      this.balanceAmount.textContent = '0.000000 LIB';
+      this.transactionFee.textContent = '0.00 LIB';
+      return;
+    }
+
+    await getNetworkParams();
+    const txFeeInLIB = parameters.current.transactionFee || 1n * wei;
+    
+    const balanceInLIB = big2str(BigInt(libAsset.balance), 18).slice(0, -12);
+    const feeInLIB = big2str(txFeeInLIB, 18).slice(0, -16);
+
+    this.balanceAmount.textContent = balanceInLIB + ' LIB';
+    this.transactionFee.textContent = feeInLIB + ' LIB';
   }
 
   async validateStakeInputs() {
