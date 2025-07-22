@@ -6029,8 +6029,8 @@ class StakeValidatorModal {
     // Check 1.5: Node Address Format (64 hex chars)
     const addressRegex = /^[0-9a-fA-F]{64}$/;
     if (!addressRegex.test(nodeAddress)) {
-      this.nodeAddressWarning.textContent = 'Invalid node address format (must be 64 hex characters).';
-      this.nodeAddressWarning.style.display = 'block';
+      this.nodeAddressWarning.textContent = 'Invalid (need 64 hex chars)';
+      this.nodeAddressWarning.style.display = 'inline';
       this.amountWarning.style.display = 'none';
       this.amountWarning.textContent = '';
       return;
@@ -6084,8 +6084,8 @@ class StakeValidatorModal {
     // Check 2: Minimum Stake Amount
     if (amountWei < minStakeWei) {
       const minStakeFormatted = big2str(minStakeWei, 18).slice(0, -16);
-      this.amountWarning.textContent = `Amount must be at least ${minStakeFormatted} LIB.`;
-      this.amountWarning.style.display = 'block';
+      this.amountWarning.textContent = `must be at least ${minStakeFormatted} LIB`;
+      this.amountWarning.style.display = 'inline';
       return;
     }
 

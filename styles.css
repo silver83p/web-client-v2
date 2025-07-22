@@ -1850,19 +1850,12 @@ input[type='file'].form-control {
   color: var(--secondary-text-color);
 }
 
-.balance-warning {
-  font-size: 0.8em;
-  color: var(--danger-color);
-  display: none;
-}
-
+.balance-warning,
 #stakeAmountWarning,
 #stakeNodeAddressWarning {
-  /* Added new ID */
   font-size: 0.8em;
   color: var(--danger-color);
   display: none;
-  margin-top: 0.25rem;
 }
 
 #sendToAddressError {
