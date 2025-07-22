@@ -1310,7 +1310,12 @@
               <label for="stakeAmount">
                 Stake Amount <span id="stakeAmountWarning" class="validation-warning" style="display: none"></span>
               </label>
-              <div id="stakeAvailableBalanceDisplay" class="available-balance-display"></div>
+              <div id="stakeAvailableBalanceDisplay" class="available-balance-display">
+                <div class="balance-info">
+                  <span>Available: <span id="stakeBalanceAmount">0.00 LIB</span></span>
+                  <span class="fee-info">Fee: <span id="stakeTransactionFee">0.00 LIB</span></span>
+                </div>
+              </div>
               <input
                 type="text"
                 id="stakeAmount"
