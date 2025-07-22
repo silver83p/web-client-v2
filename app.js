@@ -6430,7 +6430,7 @@ class ChatModal {
       this.messageInput.focus(); // Add focus back to keep keyboard open
 
       const message = this.messageInput.value.trim();
-      if (!message) {
+      if (!message && !this.fileAttachments?.length) {
         this.sendButton.disabled = false;
         return;
       }
@@ -6495,6 +6495,22 @@ class ChatModal {
       const {dhkey, cipherText} = dhkeyCombined(keys.secret, recipientPubKey, pqRecPubKey)
       const selfKey = encryptData(bin2hex(dhkey), keys.secret+keys.pqSeed, true)  // used to decrypt our own message
 
+      // encrypt the file attachments
+      let encXattach = null;
+      let attachmentData = null;
+      if (this.fileAttachments && this.fileAttachments.length > 0) {
+        // Extract only URL, name, and size from fileAttachments
+        attachmentData = this.fileAttachments.map(attachment => ({
+          url: attachment.url,
+          name: attachment.name,
+          size: attachment.size,
+          type: attachment.type
+        }));
+        
+        // Encrypt attachment data similar to memo encryption
+        encXattach = encryptChacha(dhkey, stringify(attachmentData));
+      }
+
       // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
       // Encrypt message using shared secret
       const encMessage = encryptChacha(dhkey, message);
@@ -6507,6 +6523,7 @@ class ChatModal {
         pqEncSharedKey: bin2base64(cipherText),
         selfKey: selfKey,
         sent_timestamp: getCorrectedTimestamp(),
+        ...(encXattach && { xattach: encXattach }), // Only include if there are attachments
       };
 
       // Always include username, but only include other info if recipient is a friend
@@ -6536,7 +6553,7 @@ class ChatModal {
         myData.contacts[currentAddress].tollRequiredToSend == 0 ? 0n : this.toll
 
       const chatMessageObj = await this.createChatMessage(currentAddress, payload, tollInLib, keys);
-      const txid1 = await signObj(chatMessageObj, keys);
+      await signObj(chatMessageObj, keys);
       const txid = getTxid(chatMessageObj)
 console.warn('in send message', txid)
 
@@ -6558,8 +6575,16 @@ console.warn('in send message', txid)
         my: true,
         txid: txid,
         status: 'sent',
+        ...(attachmentData && { xattach: attachmentData }), // Only include if there are attachments
       };
       insertSorted(chatsData.contacts[currentAddress].messages, newMessage, 'timestamp');
+
+      // clear file attachments and remove preview
+      if (attachmentData) {
+        attachmentData = null;
+        this.fileAttachments = [];
+        this.showAttachmentPreview();
+      }
 
       // Update or add to chats list, maintaining chronological order
       const chatUpdate = {
