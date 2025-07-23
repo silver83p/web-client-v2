@@ -7444,14 +7444,32 @@ console.warn('in send message', txid)
       // 4. Blob + download
       const blob    = new Blob([clearBin], { type: linkEl.dataset.type || 'application/octet-stream' });
       const blobUrl = URL.createObjectURL(blob);
+      const filename = decodeURIComponent(linkEl.dataset.name || 'download');
 
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = decodeURIComponent(linkEl.dataset.name || 'download');
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
+      if (window.ReactNativeWebView?.postMessage) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type: "DOWNLOAD_ATTACHMENT",
+              filename: filename,
+              mime: blob.type,
+              dataUrl: reader.result,
+            })
+          );
+        };
+        reader.readAsDataURL(blob);
+      } else {
+        // Fallback for web browsers
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+      }
+
     } catch (err) {
       console.error('Attachment decrypt failed:', err);
       showToast(`Decryption failed.`, 3000, 'error');
