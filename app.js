@@ -10572,6 +10572,8 @@ class LaunchModal {
 
   open() {
     this.modal.classList.add('active');
+    this.urlInput.value = window.location.href.split('?')[0];
+    this.updateButtonState();
   }
 
   close() {
