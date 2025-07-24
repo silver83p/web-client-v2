@@ -358,7 +358,7 @@ async function handleNativeAppSubscription() {
       const selectedGateway = getGatewayForRequest();
       if (!selectedGateway) {
         console.error('No gateway available for subscription request');
-        showToast('No gateway available', 3000, 'error');
+        showToast('No gateway available', 0, 'error');
         return;
       }
       
@@ -997,7 +997,7 @@ class Footer {
         }
   
         // Display error toast to user
-        showToast(`Failed to switch to ${view} view`, 3000, 'error');
+        showToast(`Failed to switch to ${view} view`, 0, 'error');
       }
     }
   }
@@ -1814,7 +1814,7 @@ class ScanQRModal {
       this.stopCamera(); // Ensure we clean up any partial setup
 
       // Show user-friendly error message
-      showToast(error.message || 'Failed to access camera. Please check your permissions and try again.', 5000, 'error');
+      showToast(error.message || 'Failed to access camera. Please check your permissions and try again.', 0, 'error');
 
       // Re-throw the error if you need to handle it further up
       throw error;
@@ -4219,7 +4219,7 @@ function updateUIForConnectivity() {
 function preventOfflineSubmit(event) {
   if (!isOnline) {
     event.preventDefault();
-    showToast('This action requires an internet connection', 3000, 'error');
+    showToast('This action requires an internet connection', 0, 'error');
   }
 }
 
@@ -4932,7 +4932,7 @@ class RestoreAccountModal {
       // Check if data is encrypted and decrypt if necessary
       if (!isNotEncryptedData) {
         if (!this.passwordInput.value.trim()) {
-          showToast('Password required for encrypted data', 3000, 'error');
+          showToast('Password required for encrypted data', 0, 'error');
           return;
         }
         fileContent = decryptData(fileContent, this.passwordInput.value.trim());
@@ -5009,7 +5009,7 @@ class RestoreAccountModal {
         this.clearForm();
       }, 2000);
     } catch (error) {
-      showToast(error.message || 'Import failed. Please check file and password.', 3000, 'error');
+      showToast(error.message || 'Import failed. Please check file and password.', 0, 'error');
     }
   }
 
@@ -5386,7 +5386,7 @@ class InviteModal {
     const phone = this.invitePhoneInput.value.trim();
 
     if (!email && !phone) {
-      showToast('Please enter either an email or phone number', 3000, 'error');
+      showToast('Please enter either an email or phone number', 0, 'error');
       // Ensure button is disabled again if somehow submitted while empty
       this.submitButton.disabled = true;
       return;
@@ -5411,10 +5411,10 @@ class InviteModal {
         showToast('Invitation sent successfully!', 3000, 'success');
         this.close();
       } else {
-        showToast(data.error || 'Failed to send invitation', 3000, 'error');
+        showToast(data.error || 'Failed to send invitation', 0, 'error');
       }
     } catch (error) {
-      showToast('Failed to send invitation. Please try again.', 3000, 'error');
+      showToast('Failed to send invitation. Please try again.', 0, 'error');
     }
   }
 }
@@ -5865,7 +5865,7 @@ class ValidatorStakingModal {
     // Check if we successfully retrieved a nominee address from the DOM
     if (!nominee || nominee.length < 10) {
       // Add a basic sanity check for length
-      showToast('Could not find nominated validator.', 4000, 'error');
+      showToast('Could not find nominated validator.', 0, 'error');
       console.warn('ValidatorStakingModal: Nominee not found or invalid in DOM element #validator-nominee.');
       return;
     }
@@ -5873,11 +5873,11 @@ class ValidatorStakingModal {
     // Check if the validator is active
     const activityCheck = await this.checkValidatorActivity(nominee);
     if (activityCheck.isActive) {
-      showToast('Cannot unstake from an active validator.', 5000, 'error');
+      showToast('Cannot unstake from an active validator.', 0, 'error');
       console.warn(`ValidatorStakingModal: Validator ${nominee} is active.`);
       return;
     } else if (activityCheck.error) {
-      showToast(`Error checking validator status: ${activityCheck.error}`, 5000, 'error');
+      showToast(`Error checking validator status: ${activityCheck.error}`, 0, 'error');
       return;
     }
 
@@ -5919,7 +5919,7 @@ class ValidatorStakingModal {
     } catch (error) {
       console.error('Error submitting unstake transaction:', error);
       // Provide a user-friendly error message
-      showToast('Unstake transaction failed. Network or server error.', 5000, 'error');
+      showToast('Unstake transaction failed. Network or server error.', 0, 'error');
     } finally {
       this.unstakeButton.disabled = false;
       this.backButton.disabled = false;
@@ -6062,7 +6062,7 @@ class StakeValidatorModal {
 
     // Basic Validation
     if (!nodeAddress || !amountStr) {
-      showToast('Please fill in all fields.', 3000, 'error');
+      showToast('Please fill in all fields.', 0, 'error');
       this.submitButton.disabled = false;
       return;
     }
@@ -6071,7 +6071,7 @@ class StakeValidatorModal {
     try {
       amount_in_wei = bigxnum2big(wei, amountStr);
     } catch (error) {
-      showToast('Invalid amount entered.', 3000, 'error');
+      showToast('Invalid amount entered.', 0, 'error');
       this.submitButton.disabled = false;
       return;
     }
@@ -6103,7 +6103,7 @@ class StakeValidatorModal {
       }
     } catch (error) {
       console.error('Stake transaction error:', error);
-      showToast('Stake transaction failed. See console for details.', 5000, 'error');
+      showToast('Stake transaction failed. See console for details.', 0, 'error');
     } finally {
       this.submitButton.disabled = false;
       this.backButton.disabled = false;
@@ -6250,7 +6250,7 @@ class StakeValidatorModal {
       this.nodeAddressInput.dispatchEvent(new Event('input'));
     } else {
       console.error('Stake node address input field not found!');
-      showToast('Could not find stake address field.', 3000, 'error');
+      showToast('Could not find stake address field.', 0, 'error');
     }
   }
 
@@ -7271,7 +7271,7 @@ console.warn('in send message', txid)
 
     // limit to 5 files
     if (this.fileAttachments.length >= 5) {
-      showToast('You can only attach up to 5 files.', 3000, 'error');
+      showToast('You can only attach up to 5 files.', 0, 'error');
       event.target.value = ''; // Reset file input
       return;
     }
@@ -7279,7 +7279,7 @@ console.warn('in send message', txid)
     // File size limit (e.g., 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB in bytes
     if (file.size > maxSize) {
-      showToast('File size too large. Maximum size is 10MB.', 3000, 'error');
+      showToast('File size too large. Maximum size is 10MB.', 0, 'error');
       event.target.value = ''; // Reset file input
       return;
     }
@@ -7293,7 +7293,7 @@ console.warn('in send message', txid)
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // DOCX
     ];
     if (!(allowedTypePrefixes.some(prefix => file.type.startsWith(prefix)) || allowedExplicitTypes.includes(file.type))) {
-      showToast('File type not supported.', 3000, 'error');
+      showToast('File type not supported.', 0, 'error');
       event.target.value = ''; // Reset file input
       return;
     }
@@ -7311,7 +7311,7 @@ console.warn('in send message', txid)
         this.isEncrypting = false;
         if (e.data.error) {
           hideToast(loadingToastId);
-          showToast(e.data.error, 3000, 'error');
+          showToast(e.data.error, 0, 'error');
           this.sendButton.disabled = false; // Re-enable send button
         } else {
           // Encryption successful
@@ -7353,7 +7353,7 @@ console.warn('in send message', txid)
 
       worker.onerror = (err) => {
         hideToast(loadingToastId);
-        showToast(`File encryption failed: ${err.message}`, 3000, 'error');
+        showToast(`File encryption failed: ${err.message}`, 0, 'error');
         this.isEncrypting = false;
         this.submitButton.disabled = false; // Re-enable send button
         worker.terminate();
@@ -7368,7 +7368,7 @@ console.warn('in send message', txid)
       
     } catch (error) {
       console.error('Error handling file attachment:', error);
-      showToast('Error processing file attachment', 3000, 'error');
+      showToast('Error processing file attachment', 0, 'error');
     } finally {
       event.target.value = ''; // Reset the file input value
     }
@@ -7631,7 +7631,7 @@ console.warn('in send message', txid)
 
     } catch (err) {
       console.error('Attachment decrypt failed:', err);
-      showToast(`Decryption failed.`, 3000, 'error');
+      showToast(`Decryption failed.`, 0, 'error');
     }
   }
 
@@ -7760,7 +7760,7 @@ console.warn('in send message', txid)
       showToast(`${contentType} copied to clipboard`, 2000, 'success');
     } catch (err) {
       console.error('Failed to copy:', err);
-      showToast(`Failed to copy ${contentType.toLowerCase()}`, 2000, 'error');
+      showToast(`Failed to copy ${contentType.toLowerCase()}`, 0, 'error');
     }
   }
 
@@ -7824,7 +7824,7 @@ console.warn('in send message', txid)
       }, 300);
     } catch (error) {
       console.error('Error deleting message:', error);
-      showToast('Failed to delete message', 2000, 'error');
+      showToast('Failed to delete message', 0, 'error');
     }
   }
 }
@@ -9170,7 +9170,7 @@ class SendAssetFormModal {
         const context = canvas.getContext('2d');
         if (!context) {
           console.error('Could not get 2d context from canvas');
-          showToast('Error processing image', 3000, 'error');
+          showToast('Error processing image', 0, 'error');
           event.target.value = ''; // Reset file input
           return;
         }
@@ -9193,20 +9193,20 @@ class SendAssetFormModal {
             } else {
               console.error('No valid fill function provided for QR file select');
               // Fallback or default behavior if needed, e.g., show generic error
-              showToast('Internal error handling QR data', 3000, 'error');
+              showToast('Internal error handling QR data', 0, 'error');
             }
           } else {
             // qr.decodeQR might throw an error instead of returning null/undefined
             // This else block might not be reached if errors are always thrown
             console.error('No QR code found in image (qr.js)');
-            showToast('No QR code found in image', 3000, 'error');
+            showToast('No QR code found in image', 0, 'error');
             // Clear the form fields in case of failure to find QR code
             targetModal.resetForm();
           }
         } catch (error) {
           console.error('Error processing QR code image with qr.js:', error);
           // Assume error means no QR code found or decoding failed
-          showToast('Could not read QR code from image', 3000, 'error');
+          showToast('Could not read QR code from image', 0, 'error');
           // Clear the form fields in case of error
           targetModal.resetForm();
 
@@ -9216,7 +9216,7 @@ class SendAssetFormModal {
       };
       img.onerror = function () {
         console.error('Error loading image');
-        showToast('Error loading image file', 3000, 'error');
+        showToast('Error loading image file', 0, 'error');
         event.target.value = ''; // Reset the file input value
         // Clear the form fields in case of image loading error
         targetModal.resetForm();
@@ -9226,7 +9226,7 @@ class SendAssetFormModal {
 
     reader.onerror = function () {
       console.error('Error reading file');
-      showToast('Error reading file', 3000, 'error');
+      showToast('Error reading file', 0, 'error');
       event.target.value = ''; // Reset the file input value
     };
 
@@ -9244,7 +9244,7 @@ class SendAssetFormModal {
     // Explicitly check for the required prefix
     if (!data || !data.startsWith('liberdus://')) {
       console.error("Invalid payment QR code format. Missing 'liberdus://' prefix.", data);
-      showToast('Invalid payment QR code format.', 3000, 'error');
+      showToast('Invalid payment QR code format.', 0, 'error');
       // Optionally clear fields or leave them as they were
       this.usernameInput.value = '';
       this.amountInput.value = '';
@@ -9280,7 +9280,7 @@ class SendAssetFormModal {
       this.amountInput.dispatchEvent(new Event('input'));
     } catch (error) {
       console.error('Error parsing payment QR data:', error, data);
-      showToast('Failed to parse payment QR data.', 3000, 'error');
+      showToast('Failed to parse payment QR data.', 0, 'error');
       // Clear fields on error
       this.usernameInput.value = '';
       this.amountInput.value = '';
@@ -9353,7 +9353,7 @@ class SendAssetConfirmModal {
     // if it's your own username disable the send button
     if (username == myAccount.username) {
       confirmButton.disabled = true;
-      showToast('You cannot send assets to yourself', 3000, 'error');
+      showToast('You cannot send assets to yourself', 0, 'error');
       return;
     }
 
