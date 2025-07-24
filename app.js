@@ -5079,7 +5079,7 @@ class TollModal {
     this.tollCurrencySymbol.textContent = this.currentCurrency;
     this.newTollAmountInputElement.value = ''; // Clear input field
     this.warningMessageElement.textContent = '';
-    this.warningMessageElement.style.display = 'none';
+    this.warningMessageElement.classList.remove('show');
     this.saveButton.disabled = true;
 
     // Update min toll display under input
@@ -5324,10 +5324,10 @@ class TollModal {
     // Update warning message
     if (warningMessage) {
       this.warningMessageElement.textContent = warningMessage;
-      this.warningMessageElement.style.display = 'block';
+      this.warningMessageElement.classList.add('show');
     } else {
       this.warningMessageElement.textContent = '';
-      this.warningMessageElement.style.display = 'none';
+      this.warningMessageElement.classList.remove('show');
     }
   }
 }
