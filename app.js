@@ -4126,6 +4126,10 @@ async function handleConnectivityChange() {
     showToast("You're back online!", 3000, 'online');
     // Force update data with reconnection handling
     if (myAccount && myAccount.keys) {
+      // restart long polling
+      if (useLongPolling) {
+        setTimeout(longPoll, 10);
+      }
       try {
         // Update chats with reconnection handling
         const gotChats = await chatsScreen.updateChatData();
