@@ -326,6 +326,12 @@ function newDataRecord(myAccount) {
  * @returns {Promise<void>}
  */
 async function handleNativeAppSubscribe() {
+  // Check if we're online before proceeding
+  if (!isOnline) {
+    console.log('handleNativeAppSubscribe: Device is offline, skipping subscription');
+    return;
+  }
+  
   const urlParams = new URLSearchParams(window.location.search);
   const deviceToken = urlParams.get('device_token');
   const pushToken = urlParams.get('push_token');
@@ -395,6 +401,12 @@ async function handleNativeAppSubscribe() {
  * If this is the last account, it fully unsubscribes the device.
  */
 async function handleNativeAppUnsubscribe() {
+  // Check if we're online before proceeding
+  if (!isOnline) {
+    console.log('handleNativeAppUnsubscribe: Device is offline, skipping unsubscribe');
+    return;
+  }
+  
   const urlParams = new URLSearchParams(window.location.search);
   const deviceToken = urlParams.get('device_token');
   const pushToken = urlParams.get('push_token');
