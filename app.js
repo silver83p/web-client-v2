@@ -4128,7 +4128,7 @@ async function handleConnectivityChange() {
     if (myAccount && myAccount.keys) {
       // restart long polling
       if (useLongPolling) {
-        setTimeout(longPoll, 1000);
+        setTimeout(longPoll, 10);
       }
       try {
         // Update chats with reconnection handling
