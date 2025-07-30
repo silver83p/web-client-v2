@@ -1406,7 +1406,10 @@ class MenuModal {
 
     // Close all modals
     menuModal.close();
-    myProfileModal.close();
+    settingsModal.close(); // may be triggered from settings modal, calls openFullscreen() again
+
+    // this seems to be unnecessary but also benign
+    // myProfileModal.close();
 
     // Hide header and footer
     header.close();
@@ -1441,9 +1444,11 @@ class MenuModal {
 //    window.location.reload();
     await checkVersion();
 
-    const newUrl = window.location.href.split('?')[0];
-    window.location.replace(newUrl);
-
+    // checkVersion() may update online status
+    if (isOnline) {
+      const newUrl = window.location.href.split('?')[0];
+      window.location.replace(newUrl);
+    }
   }
 }
 
