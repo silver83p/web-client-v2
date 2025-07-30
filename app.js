@@ -1433,7 +1433,7 @@ class MenuModal {
 
 
     // Add offline fallback
-    if (!navigator.onLine) {
+    if (!isOnline) {
       // Just reset the UI state without clearing storage
       return;
     }
