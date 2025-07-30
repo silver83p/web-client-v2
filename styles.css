@@ -2965,7 +2965,7 @@ mark {
   -webkit-perspective: 1000;
   perspective: 1000;
   will-change: transform, opacity;
-  word-break: break-all;
+  word-break: break-word;
 }
 
 /* Toast type styles */
