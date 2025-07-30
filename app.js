@@ -4567,7 +4567,7 @@ class RemoveAccountModal {
     localStorage.removeItem(`${username}_${netid}`);
 
     // Reload the page to redirect to welcome screen
-    clearMyData();
+    clearMyData(); // need to delete this so that the reload does not save the data into localStore again
     window.location.reload();
   }
 
