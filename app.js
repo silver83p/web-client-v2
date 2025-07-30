@@ -318,6 +318,15 @@ function newDataRecord(myAccount) {
 }
 
 /**
+ * Clear myData and myAccount variables
+ * This function centralizes the clearing of user data to ensure consistency
+ */
+function clearMyData() {
+  myData = null;
+  myAccount = null;
+}
+
+/**
  * Handle native app subscription tokens and handle subscription
  * This is used to subscribe to push notifications for the native app
  * @returns {Promise<void>}
@@ -1406,7 +1415,10 @@ class MenuModal {
 
     // Close all modals
     menuModal.close();
-    myProfileModal.close();
+    settingsModal.close(); // may be triggered from settings modal, calls openFullscreen() again
+
+    // this seems to be unnecessary but also benign
+    // myProfileModal.close();
 
     // Hide header and footer
     header.close();
@@ -1428,10 +1440,11 @@ class MenuModal {
     // Save myData to localStorage if it exists
     saveState();
 
+    // clear storage
+    clearMyData();
 
     // Add offline fallback
-    if (!navigator.onLine) {
-      // Just reset the UI state without clearing storage
+    if (!isOnline) {
       return;
     }
 
@@ -1441,9 +1454,11 @@ class MenuModal {
 //    window.location.reload();
     await checkVersion();
 
-    const newUrl = window.location.href.split('?')[0];
-    window.location.replace(newUrl);
-
+    // checkVersion() may update online status
+    if (isOnline) {
+      const newUrl = window.location.href.split('?')[0];
+      window.location.replace(newUrl);
+    }
   }
 }
 
@@ -4552,7 +4567,7 @@ class RemoveAccountModal {
     localStorage.removeItem(`${username}_${netid}`);
 
     // Reload the page to redirect to welcome screen
-    myData = null; // need to delete this so that the reload does not save the data into localStore again
+    clearMyData(); // need to delete this so that the reload does not save the data into localStore again
     window.location.reload();
   }
 
@@ -5041,7 +5056,7 @@ class RestoreAccountModal {
       // Reset form and close modal after delay
       setTimeout(() => {
         this.close();
-        myData = null // since we already saved to localStore, we want to make sure beforeunload calling saveState does not also save
+        clearMyData(); // since we already saved to localStore, we want to make sure beforeunload calling saveState does not also save
         window.location.reload(); // need to go through Sign In to make sure imported account exists on network
         this.clearForm();
       }, 2000);
@@ -8705,8 +8720,7 @@ class CreateAccountModal {
           checkPendingTransactionsIntervalId = null;
         }
 
-        myAccount = null;
-        myData = null;
+        clearMyData();
 
         // Note: `checkPendingTransactions` will also remove the item from `myData.pending` if it's rejected by the service.
         return;
@@ -8725,8 +8739,7 @@ class CreateAccountModal {
         getSystemNoticeIntervalId = null;
       }
 
-      myAccount = null;
-      myData = null;
+      clearMyData();
 
       // no toast here since injectTx will show it
       this.reEnableControls();
@@ -10494,7 +10507,7 @@ class MigrateAccountsModal {
     }
 
     // clearing myData, not being used anymore
-    myData = null;
+    clearMyData();
 
     // loop through the results array and check the status of the pending txid which is in results[username].txid
     // See checkPendingTransactions function for how to check the status of a pending txid
