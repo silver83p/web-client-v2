@@ -10311,21 +10311,86 @@ class FailedTransactionModal {
 const failedTransactionModal = new FailedTransactionModal();
 
 class BridgeModal {
-  constructor() {}
+  constructor() {
+    this.direction = 'in'; // 'out' = from Liberdus to external, 'in' = from external to Liberdus
+    this.selectedNetwork = null;
+  }
 
   load() {
     this.modal = document.getElementById('bridgeModal');
     this.closeButton = document.getElementById('closeBridgeModal');
-    this.bridgeToPolygonButton = document.getElementById('bridgeToPolygon');
-    this.bridgeFromPolygonButton = document.getElementById('bridgeFromPolygon');
-
+    this.form = document.getElementById('bridgeForm');
+    this.networkSelect = document.getElementById('bridgeNetwork');
+    this.networkSelectGroup = document.querySelector('#bridgeNetwork').closest('.form-group');
+    this.directionSelect = document.getElementById('bridgeDirection');
+    
+    // Add event listeners
     this.closeButton.addEventListener('click', () => this.close());
-    this.bridgeFromPolygonButton.addEventListener('click', () => {window.open('./bridge', '_blank');});
-    this.bridgeToPolygonButton.addEventListener('click', () => this.openSendAssetModalToBridge());
+    this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+    this.networkSelect.addEventListener('change', () => this.updateSelectedNetwork());
+    this.directionSelect.addEventListener('change', () => this.handleDirectionChange());
+    
+    // Load bridge networks from network.js
+    this.populateBridgeNetworks();
+  }
+  
+  populateBridgeNetworks() {
+    // Clear existing options
+    this.networkSelect.innerHTML = '';
+    
+    // Check if network.bridges exists
+    if (network && network.bridges && Array.isArray(network.bridges)) {
+      // Add each bridge network as an option
+      network.bridges.forEach((bridge, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = bridge.name;
+        this.networkSelect.appendChild(option);
+      });
+      
+      // Set default selected network
+      if (network.bridges.length > 0) {
+        this.selectedNetwork = network.bridges[0];
+      }
+    } 
+  }
+  
+  updateSelectedNetwork() {
+    const index = parseInt(this.networkSelect.value);
+    if (network && network.bridges && network.bridges[index]) {
+      this.selectedNetwork = network.bridges[index];
+    }
+  }
+  
+  handleDirectionChange() {
+    this.direction = this.directionSelect.value;
+
+    // Show network dropdown only for 'out' direction (Liberdus to external network)
+    if (this.direction === 'out') {
+      this.networkSelectGroup.style.display = 'block';
+    } else {
+      // Hide network dropdown for 'in' direction (external network to Liberdus)
+      this.networkSelectGroup.style.display = 'none';
+    }
   }
 
   open() {
     this.modal.classList.add('active');
+    
+    // Reset defaults
+    this.direction = 'in';
+    if (this.directionSelect) {
+      this.directionSelect.value = 'in';
+    }
+    
+    // Ensure networks are populated
+    this.populateBridgeNetworks();
+    
+    // Update selected network
+    this.updateSelectedNetwork();
+    
+    // Set initial visibility of network dropdown
+    this.handleDirectionChange();
   }
 
   close() {
@@ -10335,15 +10400,33 @@ class BridgeModal {
   isActive() {
     return this.modal.classList.contains('active');
   }
+  
+  handleSubmit(event) {
+    event.preventDefault();
+    this.direction = this.directionSelect.value;
 
-  openSendAssetModalToBridge() {
-    this.close();
-    sendAssetFormModal.open();
-    sendAssetFormModal.usernameInput.value = BRIDGE_USERNAME;
-    sendAssetFormModal.usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    if (this.direction === 'out') {
+      // From Liberdus to external network
+      this.openSendAssetModalToBridge();
+    } else {
+      // From external network to Liberdus
+      this.openBridgePage();
+    }
   }
 
+  openSendAssetModalToBridge() {
+    if (!this.selectedNetwork) return;
+    
+    this.close();
+    sendAssetFormModal.open();
+    sendAssetFormModal.usernameInput.value = this.selectedNetwork.username;
+    sendAssetFormModal.usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   
+  openBridgePage() {
+    const bridgeUrl = network && network.bridgeUrl ? network.bridgeUrl : './bridge';
+    window.open(bridgeUrl, '_blank');
+  }
 }
 
 const bridgeModal = new BridgeModal();
