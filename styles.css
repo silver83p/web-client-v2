@@ -2424,6 +2424,14 @@ pre.log-message {
   font-size: var(--font-size-sm);
 }
 
+/* Logs Textarea Styles */
+#logsTextarea {
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  font-size: 0.9em;
+}
+
 #refreshLogs.secondary-button,
 #clearLogs.secondary-button {
   background-color: var(--primary-color);
