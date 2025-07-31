@@ -436,7 +436,8 @@ body {
 }
 
 #contactsScreen,
-#chatsScreen {
+#chatsScreen,
+#walletScreen {
   padding-bottom: 80px;
 }
 
