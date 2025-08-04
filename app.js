@@ -337,10 +337,20 @@ async function handleNativeAppSubscribe() {
     console.log('handleNativeAppSubscribe: Device is offline, skipping subscription');
     return;
   }
-  
-  const urlParams = new URLSearchParams(window.location.search);
-  const deviceToken = urlParams.get('device_token');
-  const pushToken = urlParams.get('push_token');
+
+  let deviceToken = null;
+  let pushToken = null;
+
+  // if params in URL, get the device token and push token
+  if (window.location.search && window.location.search.includes('device_token') && window.location.search.includes('push_token')) {
+    const urlParams = new URLSearchParams(window.location.search);
+    deviceToken = urlParams.get('device_token');
+    pushToken = urlParams.get('push_token');
+  } else {
+    // if params not in URL, get the device token and push token from window
+    deviceToken = window.deviceToken || null;
+    pushToken = window.expoPushToken || null;
+  }
   
   if (deviceToken && pushToken) {
     console.log('Native app subscription tokens detected:', { deviceToken, pushToken });
@@ -413,9 +423,19 @@ async function handleNativeAppUnsubscribe() {
     return;
   }
   
-  const urlParams = new URLSearchParams(window.location.search);
-  const deviceToken = urlParams.get('device_token');
-  const pushToken = urlParams.get('push_token');
+  let deviceToken = null;
+  let pushToken = null;
+
+  // if params in URL, get the device token and push token
+  if (window.location.search && window.location.search.includes('device_token') && window.location.search.includes('push_token')) {
+    const urlParams = new URLSearchParams(window.location.search);
+    deviceToken = urlParams.get('device_token');
+    pushToken = urlParams.get('push_token');
+  } else {
+    // if params not in URL, get the device token and push token from window
+    deviceToken = window.deviceToken || null;
+    pushToken = window.expoPushToken || null;
+  }
 
   // cannot unsubscribe if no device token is provided
   if (!deviceToken) return;
@@ -11206,6 +11226,26 @@ class ReactNativeApp {
 
           if (data.type === 'KEYBOARD_SHOWN') {
             this.detectKeyboardOverlap(data.keyboardHeight);
+          }
+
+          if (data.type === 'INITIAL_APP_PARAMS') {
+            console.log('📱 Received initial app parameters:', data.data);
+            // Handle app version
+            if (data.data.appVersion) {
+              console.log('📱 App version:', data.data.appVersion);
+              // TODO: display the app version
+            }
+            // Handle device tokens
+            if (data.data.deviceToken) {
+              console.log('📱 Device token received');
+              // Store device token for push notifications
+              window.deviceToken = data.data.deviceToken;
+            }
+            if (data.data.expoPushToken) {
+              console.log('📱 Expo push token received');
+              // Store expo push token for push notifications
+              window.expoPushToken = data.data.expoPushToken;
+            }
           }
         } catch (error) {
           console.error('Error parsing message from React Native:', error);
