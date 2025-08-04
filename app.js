@@ -326,182 +326,6 @@ function clearMyData() {
   myAccount = null;
 }
 
-/**
- * Handle native app subscription tokens and handle subscription
- * This is used to subscribe to push notifications for the native app
- * @returns {Promise<void>}
- */
-async function handleNativeAppSubscribe() {
-  // Check if we're online before proceeding
-  if (!isOnline) {
-    console.log('handleNativeAppSubscribe: Device is offline, skipping subscription');
-    return;
-  }
-
-  let deviceToken = null;
-  let pushToken = null;
-
-  // if params in URL, get the device token and push token
-  if (window.location.search && window.location.search.includes('device_token') && window.location.search.includes('push_token')) {
-    const urlParams = new URLSearchParams(window.location.search);
-    deviceToken = urlParams.get('device_token');
-    pushToken = urlParams.get('push_token');
-  } else {
-    // if params not in URL, get the device token and push token from window
-    deviceToken = window.deviceToken || null;
-    pushToken = window.expoPushToken || null;
-  }
-  
-  if (deviceToken && pushToken) {
-    console.log('Native app subscription tokens detected:', { deviceToken, pushToken });
-    
-    try {
-      // Get the user's address from localStorage if available
-      const { netid } = network;
-      const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
-      const netidAccounts = existingAccounts.netids[netid];
-      
-      let addresses = [];
-      if (netidAccounts?.usernames) {
-        // Get addresses from all stored accounts and convert to long format
-        addresses = Object.values(netidAccounts.usernames).map(account => longAddress(account.address));
-      }
-
-      if (addresses.length < 1) return;
-      
-      const payload = {
-        deviceToken,
-        expoPushToken: pushToken,
-        addresses: addresses
-      };
-      
-      // Get the appropriate gateway for this request
-      const selectedGateway = getGatewayForRequest();
-      if (!selectedGateway) {
-        console.error('No gateway available for subscription request');
-        showToast('No gateway available', 0, 'error');
-        return;
-      }
-      
-      const SUBSCRIPTION_API = `${selectedGateway.web}/notifier/subscribe`;
-
-      console.log('payload', payload);
-      console.log('SUBSCRIPTION_API', SUBSCRIPTION_API);
-      
-      const response = await fetch(SUBSCRIPTION_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Subscription successful:', result);
-        /* showToast('Push notifications enabled', 3000, 'success'); */
-      } else {
-        console.error('Subscription failed:', response.status, response.statusText);
-        /* showToast('Failed to enable push notifications', 3000, 'error'); */
-      }
-    } catch (error) {
-      console.error('Error subscribing to push notifications:', error);
-      /* showToast('Error enabling push notifications', 3000, 'error'); */
-    }
-  }
-}
-
-/**
- * Unsubscribe the native app from push notifications for the current account.
- * If other accounts are on the device, it updates the subscription to only include them.
- * If this is the last account, it fully unsubscribes the device.
- */
-async function handleNativeAppUnsubscribe() {
-  // Check if we're online before proceeding
-  if (!isOnline) {
-    console.log('handleNativeAppUnsubscribe: Device is offline, skipping unsubscribe');
-    return;
-  }
-  
-  let deviceToken = null;
-  let pushToken = null;
-
-  // if params in URL, get the device token and push token
-  if (window.location.search && window.location.search.includes('device_token') && window.location.search.includes('push_token')) {
-    const urlParams = new URLSearchParams(window.location.search);
-    deviceToken = urlParams.get('device_token');
-    pushToken = urlParams.get('push_token');
-  } else {
-    // if params not in URL, get the device token and push token from window
-    deviceToken = window.deviceToken || null;
-    pushToken = window.expoPushToken || null;
-  }
-
-  // cannot unsubscribe if no device token is provided
-  if (!deviceToken) return;
-
-  if (!myAccount || !myAccount.keys || !myAccount.keys.address) {
-    console.warn('handleNativeAppUnsubscribe called without an active account. Aborting.');
-    return;
-  }
-
-  const currentUserAddress = longAddress(myAccount.keys.address);
-
-  // Get all other stored addresses on this device for the current network.
-  const { netid } = network;
-  const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
-  const netidAccounts = existingAccounts.netids[netid];
-  let allStoredAddresses = [];
-  if (netidAccounts?.usernames) {
-    allStoredAddresses = Object.values(netidAccounts.usernames).map(account => longAddress(account.address));
-  }
-
-  // Create a list of addresses to keep subscribed, excluding the current user.
-  const remainingAddresses = allStoredAddresses.filter(addr => addr !== currentUserAddress);
-
-  let payload;
-
-  if (remainingAddresses.length === 0) {
-    // This is the only account. Unsubscribe the device completely.
-    payload = {
-      deviceToken,
-      addresses: [],
-    };
-  } else {
-    // Other accounts remain. Update the subscription to only include them.
-    if (!pushToken) {
-      console.warn('Cannot update subscription for remaining accounts without a pushToken.');
-      return;
-    }
-    payload = {
-      deviceToken,
-      expoPushToken: pushToken,
-      addresses: remainingAddresses,
-    };
-  }
-
-  const selectedGateway = getGatewayForRequest();
-  if (!selectedGateway) {
-    console.error('No gateway available for unsubscribe request');
-    return;
-  }
-  const SUBSCRIPTION_API = `${selectedGateway.web}/notifier/subscribe`;
-
-  try {
-    const res = await fetch(SUBSCRIPTION_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      console.error('Unsubscribe failed:', res.status, res.statusText);
-    }
-  } catch (err) {
-    console.error('Error during unsubscribe:', err);
-  }
-}
-
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
   await checkVersion(); // version needs to be checked before anything else happens
@@ -513,7 +337,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // adjustForKeyboard();
 
   // Check for native app subscription tokens and handle subscription
-  handleNativeAppSubscribe();
+  reactNativeApp.handleNativeAppSubscribe();
 
   // Unlock Modal
   unlockModal.load();
@@ -669,7 +493,7 @@ function handleUnload() {
 
 // Add unload handler to save myData
 function handleBeforeUnload(e) {
-  handleNativeAppSubscribe();
+  reactNativeApp.handleNativeAppSubscribe();
   if (menuModal.isSignoutExit){
     return;
   }
@@ -687,7 +511,7 @@ function handleVisibilityChange() {
   }
 
   if (document.visibilityState === 'hidden') {
-    handleNativeAppSubscribe();
+    reactNativeApp.handleNativeAppSubscribe();
     // if chatModal was opened, save the last message count
     if (chatModal.isActive() && chatModal.address) {
       const contact = myData.contacts[chatModal.address];
@@ -696,7 +520,7 @@ function handleVisibilityChange() {
     // save state when app is put into background
     saveState();
   } else if (document.visibilityState === 'visible') {
-    handleNativeAppUnsubscribe();
+    reactNativeApp.handleNativeAppUnsubscribe();
     // if chatModal was opened, check if message count changed while hidden
     if (chatModal.isActive() && chatModal.address) {
       const contact = myData.contacts[chatModal.address];
@@ -1468,7 +1292,7 @@ class MenuModal {
       return;
     }
 
-    await handleNativeAppSubscribe();
+    await reactNativeApp.handleNativeAppSubscribe();
 
     // Only reload if online
 //    window.location.reload();
@@ -2125,7 +1949,7 @@ class SignInModal {
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange); // Keep as document
 
-    handleNativeAppUnsubscribe();
+    reactNativeApp.handleNativeAppUnsubscribe();
 
     // Close modal and proceed to app
     this.close();
@@ -11269,7 +11093,7 @@ class ReactNativeApp {
           const data = JSON.parse(event.data);
 
           if (data.type === 'background') {
-            handleNativeAppSubscribe();
+            this.handleNativeAppSubscribe();
             // if chatModal was opened, save the last message count
             if (chatModal.isActive() && chatModal.address) {
               const contact = myData.contacts[chatModal.address];
@@ -11280,7 +11104,7 @@ class ReactNativeApp {
 
           if (data.type === 'foreground') {
             if (myData || myAccount) {
-              handleNativeAppUnsubscribe();
+              this.handleNativeAppUnsubscribe();
             }
           }
 
@@ -11439,6 +11263,182 @@ class ReactNativeApp {
   clearNotificationAddress() {
     localStorage.removeItem('lastNotificationAddress');
     console.log('🧹 Cleared notification address');
+  }
+
+  /**
+   * Handle native app subscription tokens and handle subscription
+   * This is used to subscribe to push notifications for the native app
+   * @returns {Promise<void>}
+   */
+  async handleNativeAppSubscribe() {
+    // Check if we're online before proceeding
+    if (!isOnline) {
+      console.log('handleNativeAppSubscribe: Device is offline, skipping subscription');
+      return;
+    }
+
+    let deviceToken = null;
+    let pushToken = null;
+
+    // if params in URL, get the device token and push token
+    if (window.location.search && window.location.search.includes('device_token') && window.location.search.includes('push_token')) {
+      const urlParams = new URLSearchParams(window.location.search);
+      deviceToken = urlParams.get('device_token');
+      pushToken = urlParams.get('push_token');
+    } else {
+      // if params not in URL, get the device token and push token from window
+      deviceToken = window.deviceToken || null;
+      pushToken = window.expoPushToken || null;
+    }
+    
+    if (deviceToken && pushToken) {
+      console.log('Native app subscription tokens detected:', { deviceToken, pushToken });
+      
+      try {
+        // Get the user's address from localStorage if available
+        const { netid } = network;
+        const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+        const netidAccounts = existingAccounts.netids[netid];
+        
+        let addresses = [];
+        if (netidAccounts?.usernames) {
+          // Get addresses from all stored accounts and convert to long format
+          addresses = Object.values(netidAccounts.usernames).map(account => longAddress(account.address));
+        }
+
+        if (addresses.length < 1) return;
+        
+        const payload = {
+          deviceToken,
+          expoPushToken: pushToken,
+          addresses: addresses
+        };
+        
+        // Get the appropriate gateway for this request
+        const selectedGateway = getGatewayForRequest();
+        if (!selectedGateway) {
+          console.error('No gateway available for subscription request');
+          showToast('No gateway available', 0, 'error');
+          return;
+        }
+        
+        const SUBSCRIPTION_API = `${selectedGateway.web}/notifier/subscribe`;
+
+        console.log('payload', payload);
+        console.log('SUBSCRIPTION_API', SUBSCRIPTION_API);
+        
+        const response = await fetch(SUBSCRIPTION_API, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Subscription successful:', result);
+          /* showToast('Push notifications enabled', 3000, 'success'); */
+        } else {
+          console.error('Subscription failed:', response.status, response.statusText);
+          /* showToast('Failed to enable push notifications', 3000, 'error'); */
+        }
+      } catch (error) {
+        console.error('Error subscribing to push notifications:', error);
+        /* showToast('Error enabling push notifications', 3000, 'error'); */
+      }
+    }
+  }
+
+  /**
+   * Unsubscribe the native app from push notifications for the current account.
+   * If other accounts are on the device, it updates the subscription to only include them.
+   * If this is the last account, it fully unsubscribes the device.
+   */
+  async handleNativeAppUnsubscribe() {
+    // Check if we're online before proceeding
+    if (!isOnline) {
+      console.log('handleNativeAppUnsubscribe: Device is offline, skipping unsubscribe');
+      return;
+    }
+
+    let deviceToken = null;
+    let pushToken = null;
+
+    // if params in URL, get the device token and push token
+    if (window.location.search && window.location.search.includes('device_token') && window.location.search.includes('push_token')) {
+      const urlParams = new URLSearchParams(window.location.search);
+      deviceToken = urlParams.get('device_token');
+      pushToken = urlParams.get('push_token');
+    } else {
+      // if params not in URL, get the device token and push token from window
+      deviceToken = window.deviceToken || null;
+      pushToken = window.expoPushToken || null;
+    }
+
+    // cannot unsubscribe if no device token is provided
+    if (!deviceToken) return;
+
+    if (!myAccount || !myAccount.keys || !myAccount.keys.address) {
+      console.warn('handleNativeAppUnsubscribe called without an active account. Aborting.');
+      return;
+    }
+
+    const currentUserAddress = longAddress(myAccount.keys.address);
+
+    // Get all other stored addresses on this device for the current network.
+    const { netid } = network;
+    const existingAccounts = parse(localStorage.getItem('accounts') || '{"netids":{}}');
+    const netidAccounts = existingAccounts.netids[netid];
+    let allStoredAddresses = [];
+    if (netidAccounts?.usernames) {
+      allStoredAddresses = Object.values(netidAccounts.usernames).map(account => longAddress(account.address));
+    }
+
+    // Create a list of addresses to keep subscribed, excluding the current user.
+    const remainingAddresses = allStoredAddresses.filter(addr => addr !== currentUserAddress);
+
+    let payload;
+
+    if (remainingAddresses.length === 0) {
+      // This is the only account. Unsubscribe the device completely.
+      payload = {
+        deviceToken,
+        addresses: [],
+      };
+    } else {
+      // Other accounts remain. Update the subscription to only include them.
+      if (!pushToken) {
+        console.warn('Cannot update subscription for remaining accounts without a pushToken.');
+        return;
+      }
+      payload = {
+        deviceToken,
+        expoPushToken: pushToken,
+        addresses: remainingAddresses,
+      };
+    }
+
+    const selectedGateway = getGatewayForRequest();
+    if (!selectedGateway) {
+      console.error('No gateway available for unsubscribe request');
+      return;
+    }
+    const SUBSCRIPTION_API = `${selectedGateway.web}/notifier/subscribe`;
+
+    try {
+      const res = await fetch(SUBSCRIPTION_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        console.error('Unsubscribe failed:', res.status, res.statusText);
+      }
+    } catch (err) {
+      console.error('Error during unsubscribe:', err);
+    }
   }
 }
 
