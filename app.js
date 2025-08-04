@@ -4669,7 +4669,7 @@ class BackupAccountModal {
         reader.onloadend = () => {
           const base64DataUrl = reader.result;
           window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'BACKUP_DATA',
+            type: 'EXPORT_BACKUP',
             filename,
             dataUrl: base64DataUrl,
           }));
