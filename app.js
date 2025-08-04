@@ -1992,10 +1992,26 @@ class SignInModal {
       return;
     }
 
-    // Populate select with usernames
+    // Get the notified address and sort usernames to prioritize it
+    const notifiedAddress = localStorage.getItem('lastNotificationAddress');
+    let sortedUsernames = [...usernames];
+    
+    if (notifiedAddress) {
+      // Find which username owns the notified address
+      for (const [username, accountData] of Object.entries(netidAccounts.usernames)) {
+        if (accountData.address === notifiedAddress) {
+          // Move this username to the front
+          sortedUsernames = sortedUsernames.filter(u => u !== username);
+          sortedUsernames.unshift(username);
+          break;
+        }
+      }
+    }
+
+    // Populate select with sorted usernames
     this.usernameSelect.innerHTML = `
       <option value="" disabled selected hidden>Select an account</option>
-      ${usernames.map((username) => `<option value="${username}">${username}</option>`).join('')}
+      ${sortedUsernames.map((username) => `<option value="${username}">${username}</option>`).join('')}
     `;
 
     // If a username should be auto-selected (either preselect or only one account), do it
@@ -2114,6 +2130,12 @@ class SignInModal {
     // Close modal and proceed to app
     this.close();
     welcomeScreen.close();
+    
+    // Clear any notification address since user has signed in
+    if (reactNativeApp) {
+      reactNativeApp.clearNotificationAddress();
+    }
+    
     await footer.switchView('chats'); // Default view
   }
 
@@ -11279,6 +11301,47 @@ class ReactNativeApp {
               window.expoPushToken = data.data.expoPushToken;
             }
           }
+
+          if (data.type === 'NOTIFICATION_TAPPED') {
+            console.log('🔔 Notification tapped, opening chat with:', data.to);
+
+            // normalize the address
+            const normalizedToAddress = normalizeAddress(data.to);
+            
+            // Check if user is signed in
+            if (!myData || !myAccount) {
+              // User is not signed in - save the notification address and open sign-in modal
+              console.log('🔔 User not signed in, saving notification address for priority');
+              this.saveNotificationAddress(normalizedToAddress);
+              return;
+            }
+            
+            // User is signed in - check if it's the right account
+            const isCurrentAccount = this.isCurrentAccount(normalizedToAddress);
+            /* showToast('isCurrentAccount: ' + isCurrentAccount, 10000, 'success');
+            showToast('data.to: ' + normalizedToAddress, 10000, 'success');
+            showToast('myData.account.keys.address: ' + myData.account.keys.address, 10000, 'success'); */
+            if (isCurrentAccount) {
+              // We're signed in to the account that received the notification
+              console.log('🔔 You are signed in to the account that received the message');
+              // TODO: Open chat modal when z-index issue is resolved
+              // chatModal.open(data.from);
+              /* showToast('You are signed in to the account that received the message', 5000, 'success'); */
+            } else {
+              // We're signed in to a different account, ask user what to do
+              const shouldSignOut = confirm('You received a message for a different account. Would you like to sign out to switch to that account?');
+              
+              if (shouldSignOut) {
+                // Sign out and save the notification address for priority
+                this.saveNotificationAddress(normalizedToAddress);
+                menuModal.handleSignOut();
+              } else {
+                // User chose to stay signed in, just save the address for next time
+                this.saveNotificationAddress(normalizedToAddress);
+                console.log('User chose to stay signed in - notified account will appear first next time');
+              }
+            }
+          }
         } catch (error) {
           console.error('Error parsing message from React Native:', error);
         }
@@ -11353,6 +11416,23 @@ class ReactNativeApp {
     } catch (error) {
       console.warn('Error in keyboard detection:', error);
     }
+  }
+
+  isCurrentAccount(recipientAddress) {
+    if (!myData || !myAccount) return false;
+    
+    // Check if the current user's address matches the recipient address
+    return myData.account.keys.address === recipientAddress;
+  }
+
+  saveNotificationAddress(contactAddress) {
+    localStorage.setItem('lastNotificationAddress', contactAddress);
+    console.log(` Saved notification address: ${contactAddress}`);
+  }
+
+  clearNotificationAddress() {
+    localStorage.removeItem('lastNotificationAddress');
+    console.log('🧹 Cleared notification address');
   }
 }
 
@@ -11982,7 +12062,7 @@ class LocalStorageMonitor {
         localStorage.setItem(testKey, verifyData);
         localStorage.removeItem(testKey);
       } catch (e) {
-        // If verification fails, reduce by small amount and retry
+        // If verification fails, reduce by small amount
         maxCharacters = Math.max(0, maxCharacters - 1024);
       }
     }
