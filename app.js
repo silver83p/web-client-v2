@@ -529,6 +529,10 @@ function handleVisibilityChange() {
         chatModal.appendChatModal(true);
       }
     }
+    // send message `GetAllPanelNotifications` to React Native when app is brought back to foreground
+    if (window?.ReactNativeWebView) {
+      reactNativeApp.fetchAllPanelNotifications();
+    }
   }
 }
 
@@ -1835,14 +1839,15 @@ class SignInModal {
       return;
     }
 
-    // Get the notified address and sort usernames to prioritize it
-    const notifiedAddress = localStorage.getItem('lastNotificationAddress');
+    // Get the notified addresses and sort usernames to prioritize them
+    const notifiedAddresses = reactNativeApp ? reactNativeApp.getNotificationAddresses() : [];
     let sortedUsernames = [...usernames];
     
-    if (notifiedAddress) {
-      // Find which username owns the notified address
+    // if there are notified addresses, sort the usernames to prioritize them
+    if (notifiedAddresses.length > 0) {
+      // Find which usernames own the notified addresses
       for (const [username, accountData] of Object.entries(netidAccounts.usernames)) {
-        if (accountData.address === notifiedAddress) {
+        if (notifiedAddresses.includes(accountData.address)) {
           // Move this username to the front
           sortedUsernames = sortedUsernames.filter(u => u !== username);
           sortedUsernames.unshift(username);
@@ -1851,12 +1856,12 @@ class SignInModal {
       }
     }
 
-    // Populate select with sorted usernames
+    // Populate select with sorted usernames and add an emoji to the username if it owns a notified address
     this.usernameSelect.innerHTML = `
       <option value="" disabled selected hidden>Select an account</option>
       ${sortedUsernames.map((username) => {
         // Check if this username owns the notified address
-        const isNotifiedAccount = notifiedAddress && netidAccounts.usernames[username]?.address === notifiedAddress;
+        const isNotifiedAccount = notifiedAddresses.includes(netidAccounts.usernames[username]?.address);
         const dotIndicator = isNotifiedAccount ? ' 🔔' : '';
         return `<option value="${username}">${username}${dotIndicator}</option>`;
       }).join('')}
@@ -1980,10 +1985,15 @@ class SignInModal {
     this.close();
     welcomeScreen.close();
     
-    // Clear notification address only if signing into account that owns the notification address
-    const notifiedAccount = localStorage?.getItem('lastNotificationAddress');
-    if (reactNativeApp && notifiedAccount && reactNativeApp?.isCurrentAccount(normalizeAddress(notifiedAccount))) {
-      reactNativeApp.clearNotificationAddress();
+    // Clear notification address only if signing into account that owns the notification address and only remove that account from the array 
+    if (reactNativeApp) {
+      logsModal.log('About to clear', myAccount.keys.address);
+      const notifiedAddresses = reactNativeApp.getNotificationAddresses();
+      if (notifiedAddresses.length > 0) {
+        logsModal.log('Clearing notification address for', myAccount.keys.address);
+        // remove address if it's in the array
+        reactNativeApp.clearNotificationAddress(myAccount.keys.address);
+      }
     }
     
     await footer.switchView('chats'); // Default view
@@ -11313,6 +11323,7 @@ class ReactNativeApp {
       window.addEventListener('message', (event) => {
         try {
           const data = JSON.parse(event.data);
+          logsModal.log('📱 Received message type from React Native:', data.type);
 
           if (data.type === 'background') {
             this.handleNativeAppSubscribe();
@@ -11401,12 +11412,43 @@ class ReactNativeApp {
               }
             }
           }
+
+          if (data.type === 'ALL_NOTIFICATIONS_IN_PANEL') {
+            logsModal.log('📋 Received all panel notifications:', JSON.stringify(data.notifications));
+            
+            if (data.notifications && Array.isArray(data.notifications) && data.notifications.length > 0) {
+              let processedCount = 0;
+              data.notifications.forEach((notification, index) => {
+                try {
+                  // Extract address from notification body text
+                  if (notification?.body && typeof notification.body === 'string') {
+                    // Look for pattern "to 0x..." in the body
+                    // expecting to just return one address
+                    const addressMatch = notification.body.match(/to\s+(\S+)/);
+                    if (addressMatch && addressMatch[1]) {
+                      const normalizedToAddress = normalizeAddress(addressMatch[1]);
+                      this.saveNotificationAddress(normalizedToAddress);
+                      processedCount++;
+                      logsModal.log(`📋 Extracted address from notification ${index}: ${normalizedToAddress}`);
+                    }
+                  }
+                } catch (error) {
+                  console.warn(`📋 Error processing notification ${index}:`, error);
+                }
+              });
+              logsModal.log(`📋 Processed ${processedCount}/${data.notifications.length} notifications`);
+            } else {
+              logsModal.log('📋 No valid notifications received');
+            }
+          }
         } catch (error) {
           logsModal.error('Error parsing message from React Native:', error);
         }
       });
       
       this.fetchAppParams();
+      // send message `GetAllPanelNotifications` to React Native when app is opened during DOMContentLoaded
+      this.fetchAllPanelNotifications();
     }
   }
 
@@ -11430,6 +11472,14 @@ class ReactNativeApp {
   fetchAppParams() {
     this.postMessage({
       type: 'APP_PARAMS'
+    });
+  }
+
+  // fetch all panel notifications
+  fetchAllPanelNotifications() {
+    logsModal.log('Sending message `GetAllPanelNotifications` to React Native');
+    this.postMessage({
+      type: 'GetAllPanelNotifications',
     });
   }
 
@@ -11493,14 +11543,43 @@ class ReactNativeApp {
     return myData.account.keys.address === recipientAddress;
   }
 
+  /**
+   * Save the notification address to localStorage array of addresses
+   * @param {string} contactAddress - The address of the contact to save
+   */
   saveNotificationAddress(contactAddress) {
-    localStorage.setItem('lastNotificationAddress', contactAddress);
-    console.log(` Saved notification address: ${contactAddress}`);
+    if (!contactAddress || typeof contactAddress !== 'string') return;
+    
+    try {
+      const addresses = this.getNotificationAddresses();
+      if (!addresses.includes(contactAddress)) {
+        addresses.push(contactAddress);
+        localStorage.setItem('lastNotificationAddresses', JSON.stringify(addresses));
+        console.log(`✅ Saved notification address: ${contactAddress}`);
+      }
+    } catch (error) {
+      console.error('❌ Error saving notification address:', error);
+    }
   }
 
-  clearNotificationAddress() {
-    localStorage.removeItem('lastNotificationAddress');
-    console.log('🧹 Cleared notification address');
+  /**
+   * Clear only selected address from the array
+   * @param {string} address - The address to clear
+   */
+  clearNotificationAddress(address) {
+    if (!address || typeof address !== 'string') return;
+    
+    try {
+      const addresses = this.getNotificationAddresses();
+      const index = addresses.indexOf(address);
+      if (index !== -1) {
+        addresses.splice(index, 1);
+        localStorage.setItem('lastNotificationAddresses', JSON.stringify(addresses));
+        console.log(`✅ Cleared notification address: ${address}`);
+      }
+    } catch (error) {
+      console.error('❌ Error clearing notification address:', error);
+    }
   }
 
   // Send navigation bar visibility
@@ -11516,6 +11595,23 @@ class ReactNativeApp {
     this.postMessage({
       type: 'CLEAR_NOTI'
     });
+  }
+
+  /**
+   * Safely retrieve notification addresses from localStorage
+   * @returns {Array} Array of notification addresses, empty array if none or error
+   */
+  getNotificationAddresses() {
+    try {
+      const stored = localStorage.getItem('lastNotificationAddresses');
+      if (!stored) return [];
+      
+      const parsed = parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.warn('⚠️ Failed to parse notification addresses:', error);
+      return [];
+    }
   }
 
   /**
