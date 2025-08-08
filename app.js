@@ -2057,7 +2057,12 @@ class SignInModal {
   }
 
   async handleRemoveAccount() {
-    removeAccountModal.removeAccount();
+    const username = this.usernameSelect.value;
+    if (!username) {
+      showToast('Please select an account to remove', 2000, 'warning');
+      return;
+    }
+    removeAccountModal.removeAccount(username);
   }
 
   isActive() {
@@ -4362,7 +4367,17 @@ class RemoveAccountModal {
     window.location.reload();
   }
 
-  removeAccount(username = myAccount.username) {
+  removeAccount(username = null) {
+    // Username must be provided explicitly - when called from sign-in modal, myAccount is not yet available
+    if (!username) {
+      // if myAccount is available and removeAccountModal is open, use myAccount.username
+      if(myAccount && this.isActive()) {
+        username = myAccount.username;
+      } else {
+        showToast('No account selected for removal', 0, 'error');
+        return;
+      }
+    }
     const confirmed = confirm(`Are you sure you want to remove the account "${username}" from this device?`);
     if (!confirmed) return;
     
@@ -4400,6 +4415,10 @@ class RemoveAccountModal {
     // Reload the page to redirect to welcome screen
     clearMyData();
     window.location.reload();
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
   }
 
   signout() {
