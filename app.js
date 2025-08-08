@@ -5809,40 +5809,23 @@ class ValidatorStakingModal {
       const userStakedBaseUnits = userAccountData?.account?.operatorAccountInfo?.stake; // BigInt object
 
       const stakeRequiredUsd = networkAccountData?.account?.current?.stakeRequiredUsd; // BigInt object
-      const stabilityScaleMul = networkAccountData?.account?.current?.stabilityScaleMul; // number
-      const stabilityScaleDiv = networkAccountData?.account?.current?.stabilityScaleDiv; // number
 
       const marketPrice = await getMarketPrice(); // number or null
+      const stabilityFactor = getStabilityFactor(); // number
 
-      // Calculate Derived Values
-      let stabilityFactor = null;
-      if (stabilityScaleMul != null && stabilityScaleDiv != null && Number(stabilityScaleDiv) !== 0) {
-        stabilityFactor = Number(stabilityScaleMul) / Number(stabilityScaleDiv);
-      }
 
       let stakeAmountLibBaseUnits = null; // This will be a BigInt object or null
       if (
         stakeRequiredUsd != null &&
         typeof stakeRequiredUsd === 'bigint' &&
-        stabilityScaleMul != null &&
-        typeof stabilityScaleMul === 'number' &&
-        stabilityScaleDiv != null &&
-        typeof stabilityScaleDiv === 'number' &&
-        stabilityScaleDiv !== 0
+        stabilityFactor > 0
       ) {
         try {
-          // No need to parse stakeRequiredUsd from string, it's already a BigInt
-          const scaleMulBigInt = BigInt(stabilityScaleMul);
-          const scaleDivBigInt = BigInt(stabilityScaleDiv);
-          if (scaleMulBigInt !== 0n) {
-            stakeAmountLibBaseUnits = (stakeRequiredUsd * scaleDivBigInt) / scaleMulBigInt;
-          } else {
-            console.warn('Stability scale multiplier is zero, cannot calculate LIB stake amount.');
-          }
+          stakeAmountLibBaseUnits = bigxnum2big(stakeRequiredUsd, (1 / stabilityFactor).toString());
         } catch (e) {
           console.error('Error calculating stakeAmountLibBaseUnits with BigInt:', e, {
-            stabilityScaleMul,
-            stabilityScaleDiv,
+            stabilityFactor,
+            stakeRequiredUsd: stakeRequiredUsd.toString()
           });
         }
       }
@@ -7966,9 +7949,7 @@ console.warn('in send message', txid)
     const mainIsUSD = tollUnit === 'USD';
     const mainValue = parseFloat(big2str(toll, decimals));
     // Conversion factor (USD/LIB)
-    const scaleMul = parameters.current.stabilityScaleMul || 1;
-    const scaleDiv = parameters.current.stabilityScaleDiv || 1;
-    const factor = scaleDiv !== 0 ? scaleMul / scaleDiv : 1;
+    const factor = getStabilityFactor();
     let mainString, otherString;
     if (mainIsUSD) {
       toll = bigxnum2big(toll, (1.0 / factor).toString());
@@ -9083,9 +9064,7 @@ class SendAssetFormModal {
     const mainIsUSD = tollUnit === 'USD';
     const mainValue = parseFloat(big2str(toll, decimals));
     // Conversion factor (USD/LIB)
-    const scaleMul = parameters.current.stabilityScaleMul || 1;
-    const scaleDiv = parameters.current.stabilityScaleDiv || 1;
-    const factor = scaleDiv !== 0 ? scaleMul / scaleDiv : 1;
+    const factor = getStabilityFactor();
     let mainString, otherString;
     if (mainIsUSD) {
       toll = bigxnum2big(toll, (1.0 / factor).toString());
@@ -9329,9 +9308,7 @@ class SendAssetFormModal {
     if (this.tollInfo.required == 1) {
       if (this.memoInput.value.trim() != '') {
         console.log('checking if toll > amount');
-        const scaleMul = parameters.current.stabilityScaleMul || 1;
-        const scaleDiv = parameters.current.stabilityScaleDiv || 1;
-        const factor = scaleDiv !== 0 ? scaleMul / scaleDiv : 1;
+        const factor = getStabilityFactor();
         let amountInLIB = amount;
         let tollInLIB = this.tollInfo.toll;
         if (this.tollInfo.tollUnit !== 'LIB') {
