@@ -5088,6 +5088,10 @@ class TollModal {
     this.modal.classList.remove('active');
   }
 
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
   /**
    * Handle the toggle of the toll currency
    * @param {Event} event - The event object
@@ -12289,6 +12293,9 @@ async function checkPendingTransactions() {
 
         if (type === 'toll') {
           console.log(`Toll transaction successfully processed!`);
+          if (tollModal.isActive()) {
+            showToast(`Toll change successful!`, 3000, 'success');
+          }
         }
 
         if (type === 'update_toll_required') {
