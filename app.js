@@ -13600,7 +13600,7 @@ class ReactNativeApp {
       };
     } else {
       // Other accounts remain. Update the subscription to only include them.
-      if (!pushToken) {
+      if (!expoPushToken) {
         console.warn('Cannot update subscription for remaining accounts without a pushToken.');
         return;
       }
