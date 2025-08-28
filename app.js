@@ -6852,7 +6852,7 @@ class StakeValidatorModal {
    * @param {string} data - The QR data to fill the stake address input field
    * @returns {void}
    * */
-  fillFromQR(data) {
+  async fillFromQR(data) {
     console.log('Filling stake address from QR data:', data);
 
     // Directly set the value of the stakeNodeAddress input field
@@ -11230,7 +11230,9 @@ class SendAssetFormModal {
    * @returns {void}
    */
   async handleToggleBalance(e) {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     this.balanceSymbol.textContent = this.balanceSymbol.textContent === 'LIB' ? 'USD' : 'LIB';
 
     // check the context value of the button to determine if it's LIB or USD
@@ -11410,7 +11412,7 @@ class SendAssetFormModal {
    * @param {string} data - The QR code data to fill the form with
    * @returns {void}
    * */
-  fillFromQR(data) {
+  async fillFromQR(data) {
     console.log('Attempting to fill payment form from QR:', data);
 
     // Explicitly check for the required prefix
@@ -11439,6 +11441,20 @@ class SendAssetFormModal {
 
       if (paymentData.u) {
         this.usernameInput.value = paymentData.u;
+      }
+      if (paymentData.d) {
+        try {
+          const symbol = String(paymentData.d).toUpperCase();
+          const current = String(this.balanceSymbol.textContent || 'LIB').toUpperCase();
+          if (symbol === 'USD' && current !== 'USD') {
+            // call the existing toggle handler to reuse conversion logic
+            await this.handleToggleBalance();
+          } else if (symbol === 'LIB' && current !== 'LIB') {
+            await this.handleToggleBalance();
+          }
+        } catch (err) {
+          console.error('Error toggling balance from QR display unit field', err);
+        }
       }
       if (paymentData.a) {
         this.amountInput.value = paymentData.a;
@@ -11824,6 +11840,8 @@ class ReceiveModal {
     this.qrcodeContainer = document.getElementById('qrcode');
     this.previewElement = document.getElementById('qrDataPreview');
     this.copyButton = document.getElementById('copyAddress');
+    this.toggleReceiveBalanceButton = document.getElementById('toggleReceiveBalance');
+    this.receiveBalanceSymbol = document.getElementById('receiveBalanceSymbol');
 
     // Create debounced function
     this.debouncedUpdateQRCode = debounce(() => this.updateQRCode(), 300);
@@ -11839,6 +11857,7 @@ class ReceiveModal {
     this.amountInput.addEventListener('input', () => this.amountInput.value = normalizeUnsignedFloat(this.amountInput.value));
     this.amountInput.addEventListener('input', this.debouncedUpdateQRCode);
     this.memoInput.addEventListener('input', this.debouncedUpdateQRCode);
+    this.toggleReceiveBalanceButton.addEventListener('click', this.handleToggleBalance.bind(this));
   }
 
   open() {
@@ -11873,6 +11892,9 @@ class ReceiveModal {
     // Clear input fields
     this.amountInput.value = '';
     this.memoInput.value = '';
+
+    this.receiveBalanceSymbol.textContent = 'LIB';
+
 
     // Initial update for addresses based on the first asset
     this.updateReceiveAddresses();
@@ -11943,6 +11965,7 @@ class ReceiveModal {
       u: myAccount.username, // username
       i: assetId, // assetId
       s: symbol, // symbol
+      d: String(this.receiveBalanceSymbol.textContent || 'LIB').toUpperCase() //display unit
     };
 
     // Add optional fields if they have values
@@ -12029,6 +12052,37 @@ class ReceiveModal {
         console.error('Error generating fallback QR code:', fallbackError);
         this.qrcodeContainer.innerHTML = '<p style="color: red; text-align: center;">Failed to generate QR code.</p>';
       }
+    }
+  }
+
+  /**
+   * Toggle LIB/USD display for the receive amount and update the QR accordingly
+   */
+  async handleToggleBalance() {
+    try {
+      this.receiveBalanceSymbol.textContent = this.receiveBalanceSymbol.textContent === 'LIB' ? 'USD' : 'LIB';
+
+      const isLib = this.receiveBalanceSymbol.textContent === 'LIB';
+
+      await getNetworkParams();
+      const scalabilityFactor = getStabilityFactor();
+
+      if (this.amountInput && this.amountInput.value.trim() !== '') {
+        const currentValue = parseFloat(this.amountInput.value);
+        if (!isNaN(currentValue)) {
+          if (!isLib) {
+            // now showing USD, convert LIB -> USD
+            this.amountInput.value = (currentValue * scalabilityFactor).toString();
+          } else {
+            // now showing LIB, convert USD -> LIB
+            this.amountInput.value = (currentValue / scalabilityFactor).toString();
+          }
+        }
+      }
+
+      this.updateQRCode();
+    } catch (err) {
+      console.error('Error toggling receive balance:', err);
     }
   }
 
