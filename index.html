@@ -1370,6 +1370,22 @@
         <a class="last-item" href="#"> </a>
       </div>
 
+      <!-- Remove Accounts Modal (multi select) -->
+      <div class="modal fixed-header" id="removeAccountsModal">
+        <div class="modal-header">
+          <button class="back-button" id="closeRemoveAccountsModal"></button>
+          <div class="modal-title">Remove Accounts</div>
+        </div>
+        <div class="modal-content">
+          <div class="form-container">
+            <p class="modal-summary">Select accounts to remove from this device.</p>
+            <div id="removeAccountsList" class="account-list"></div>
+            <button type="button" id="submitRemoveAccounts" class="btn btn--primary btn--pill btn--full" disabled>Remove Selected</button>
+          </div>
+        </div>
+        <a class="last-item" href="#"> </a>
+      </div>
+
       <!-- Backup Modal -->
       <div class="modal fixed-header" id="backupModal">
         <div class="modal-header">
