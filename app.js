@@ -4728,21 +4728,34 @@ class RemoveAccountsModal {
       }
     }
 
-    // Find any orphaned account files not in accounts object (username_netid)
+    // Find any orphaned account files not in accounts object
     for (let i = 0; i < localStorage.length; i++) {
       const storageKey = localStorage.key(i);
       if (!storageKey) continue;
-      const parts = storageKey.split('_');
-      if (parts.length !== 2) continue;
-      const [username, netid] = parts;
-      if (netid.length !== 64) continue;
+      
+      // Use regex to extract username and netid from storage key
+      const match = storageKey.match(/(.+)_(.+)$/);
+      if (!match) continue;
+      
+      const [, username, netid] = match;
+      
+      // Validate username and netid
+      if (!username || !netid) continue;
+      
+      // Check if this account is already in our result list
       const already = result.find(r => r.username === username && r.netid === netid);
       if (already) continue;
+      
+      // Check if this account is registered in the accounts object
+      const isRegistered = accountsObj.netids[netid]?.usernames?.[username];
+      if (isRegistered) continue;
+      
       const state = loadState(storageKey);
       let contactsCount = 0; let messagesCount = 0;
       if (state) {
         try {
           contactsCount = Object.keys(state.contacts || {}).length;
+          // Sum messages arrays lengths per contact
           if (state.contacts) {
             for (const addr in state.contacts) {
               messagesCount += (state.contacts[addr].messages?.length || 0);
@@ -13190,17 +13203,16 @@ console.log('    result is',result)
       // Skip the 'accounts' key itself
       if (key === 'accounts') return false;
       
-      const parts = key.split('_');
-      if (parts.length !== 2) return false;
-      
-      const netid = parts[1];
-      if (netid.length != 64) return false;
+      const match = key.match(/(.+)_(.+)$/);
+      if (!match) return false;
       
       return true;
     });
     
     for (const key of accountFileKeys) {
-      const [username, netid] = key.split('_');
+      const match = key.match(/(.+)_(.+)$/);
+      if (!match) continue;
+      const [, username, netid] = match;
       
       const isRegistered = accountsObj.netids[netid]?.usernames?.[username];
       
