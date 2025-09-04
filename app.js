@@ -2770,6 +2770,43 @@ class HistoryModal {
           `;
         }
         
+        // Handle stake transactions differently
+        if (tx.type === 'deposit_stake' || tx.type === 'withdraw_stake') {
+          const isStake = tx.type === 'deposit_stake';
+          const isUnstake = tx.type === 'withdraw_stake';
+          const stakeType = isStake ? 'stake' : 'unstake';
+          
+          // Determine unstake color based on amount (positive = blue, negative = red)
+          let unstakeTypeClass = '';
+          if (isUnstake) {
+            const amount = Number(tx.amount);
+            unstakeTypeClass = amount >= 0 ? 'unstake-positive' : 'unstake-negative';
+          }
+          
+          // Add data attribute for negative unstake transactions to help with CSS styling
+          const amountNegativeAttr = (isUnstake && Number(tx.amount) < 0) ? 'data-amount-negative="true"' : '';
+          
+          return `
+            <div class="transaction-item" data-memo="${stakeType}" ${txidAttr} ${statusAttr} ${amountNegativeAttr}>
+              <div class="transaction-info">
+                <div class="transaction-type ${isStake ? 'stake' : unstakeTypeClass}">
+                  ${isStake ? '↑ Staked' : '↓ Unstaked'}
+                </div>
+                <div class="transaction-amount">
+                  ${isStake ? '-' : (Number(tx.amount) >= 0 ? '+' : '-')} ${Math.abs(Number(tx.amount) / Number(wei)).toFixed(6)} ${asset.symbol}
+                </div>
+              </div>
+              <div class="transaction-details">
+                <div class="transaction-address">
+                  ${isStake ? 'To:' : 'From:'} ${tx.nominee || 'Unknown Validator'}
+                </div>
+                <div class="transaction-time">${formatTime(tx.timestamp)}</div>
+              </div>
+              <div class="transaction-memo">${stakeType}</div>
+            </div>
+          `;
+        }
+        
         // Render normal transaction
         const contactName = getContactDisplayName(contacts[tx.address]);
         
@@ -6654,7 +6691,7 @@ class ValidatorStakingModal {
         myData.wallet.history.unshift({
           nominee: nodeAddress,
           amount: bigxnum2big(wei, '0'),
-          memo: 'unstake',
+          type: 'withdraw_stake',
           sign: 1,
           status: 'sent',
           timestamp: getCorrectedTimestamp(),
@@ -6995,7 +7032,7 @@ class StakeValidatorModal {
         myData.wallet.history.unshift({
           nominee: nodeAddress,
           amount: amount_in_wei,
-          memo: 'stake',
+          type: 'deposit_stake',
           sign: -1,
           status: 'sent',
           timestamp: getCorrectedTimestamp(),
