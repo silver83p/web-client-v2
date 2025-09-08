@@ -4218,6 +4218,7 @@ function markConnectivityDependentElements() {
 
     // Send asset related
     '#sendAssetForm button[type="submit"]',
+    '#toggleBalance',
 
     // Add friend related
     '#friendForm button[type="submit"]',
@@ -4237,6 +4238,7 @@ function markConnectivityDependentElements() {
 
     // stakeModal
     '#submitStake',
+    '#faucetButton',
 
     // tollModal
     '#saveNewTollButton',
@@ -4251,6 +4253,9 @@ function markConnectivityDependentElements() {
     '#callScheduleNowBtn',
     '#openCallScheduleDateBtn',
     '#confirmCallSchedule',
+
+    // Message context menu (disable all except 'Delete for me' and 'Copy' and 'Join')
+    '.message-context-menu .context-menu-option:not([data-action="delete"]):not([data-action="copy"]):not([data-action="join"])',
   ];
 
   // Add data attribute to all network-dependent elements
