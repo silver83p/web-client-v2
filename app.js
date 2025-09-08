@@ -427,6 +427,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Call Invite Modal
   callInviteModal.load();
 
+  // Call Schedule Modals
+  callScheduleChoiceModal.load();
+  callScheduleDateModal.load();
+
   // Remove Accounts Modal
   removeAccountsModal.load();
 
@@ -3189,6 +3193,8 @@ if (mine) console.warn('txid in processChats is', txidHex)
                 } else if (parsedMessage.type === 'call') {
                   payload.message = parsedMessage.url;
                   payload.type = 'call';
+                  // Use callTime when present; default to 0 (immediate)
+                  payload.callTime = Number(parsedMessage.callTime) || 0;
                 } else if (parsedMessage.type === 'vm') {
                   // Voice message format processing
                   payload.message = ''; // Voice messages don't have text
@@ -4240,6 +4246,11 @@ function markConnectivityDependentElements() {
 
     //unstakeModal
     '#submitUnstake',
+
+    // Call schedule modals
+    '#callScheduleNowBtn',
+    '#openCallScheduleDateBtn',
+    '#confirmCallSchedule',
   ];
 
   // Add data attribute to all network-dependent elements
@@ -7370,6 +7381,19 @@ class ChatModal {
     
     // Add event delegation for message clicks (since messages are created dynamically)
     this.messagesList.addEventListener('click', this.handleMessageClick.bind(this));
+    // Intercept clicks on call icon to gate future calls
+    this.messagesList.addEventListener('click', (e) => {
+      const phoneAnchor = e.target.closest('.call-message-phone-button');
+      if (!phoneAnchor) return;
+      const messageEl = phoneAnchor.closest('.message');
+      if (!messageEl) return;
+      if (this.gateScheduledCall(messageEl)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      return true;
+    });
     
     // Add context menu option listeners
     this.contextMenu.addEventListener('click', (e) => {
@@ -8181,14 +8205,19 @@ console.warn('in send message', txid)
           if (item.message && item.message.trim()) {
             // Check if this is a call message
             if (item.type === 'call') {
+              // Build scheduled label if in the future
+              const callTimeMs = item.callTime || 0;
+              const scheduleHTML = this.buildCallScheduleHTML(callTimeMs);
               // Render call message with a left circular phone icon (clickable) and plain text to the right
-              // Icon is an anchor so only the icon is clickable (like voice play button)
               messageTextHTML = `
                 <div class="call-message">
                   <a href="${item.message}" target="_blank" rel="noopener noreferrer" class="call-message-phone-button" aria-label="Join Video Call">
                     <span class="sr-only">Join Video Call</span>
                   </a>
-                  <div class="call-message-text">Join Video Call</div>
+                  <div>
+                    <div class="call-message-text">Join Video Call</div>
+                    ${scheduleHTML}
+                  </div>
                 </div>`;
             } else {
               // Regular message rendering
@@ -8216,8 +8245,9 @@ console.warn('in send message', txid)
               </div>`;
           }
           
+          const callTimeAttribute = item.type === 'call' && item.callTime ? `data-call-time="${item.callTime}"` : '';
           messageHTML = `
-                      <div class="message ${messageClass}" ${timestampAttribute} ${txidAttribute} ${statusAttribute}>
+                      <div class="message ${messageClass}" ${timestampAttribute} ${txidAttribute} ${statusAttribute} ${callTimeAttribute}>
                           ${attachmentsHTML}
                           ${messageTextHTML}
                           <div class="message-time">${timeString}</div>
@@ -9058,6 +9088,11 @@ console.warn('in send message', txid)
   handleJoinCall(messageEl) {
     const callLink = messageEl.querySelector('.call-message a')?.href;
     if (!callLink) return showToast('Call link not found', 2000, 'error');
+    // Gate future scheduled calls (context menu path)
+    if (this.gateScheduledCall(messageEl)) {
+      this.closeContextMenu();
+      return;
+    }
     window.open(callLink, '_blank');
     this.closeContextMenu();
   }
@@ -9338,6 +9373,32 @@ console.warn('in send message', txid)
   }
 
   /**
+   * Opens a lightweight chooser to select calling now or scheduling for later.
+   * Returns 0 for immediate call or a corrected future timestamp (ms since epoch) using timeSkew.
+   * Returns null if user cancels.
+   * @returns {Promise<number|null>}
+   */
+  async openCallTimeChooser() {
+    return new Promise((resolve) => {
+      const openChoice = () => {
+        callScheduleChoiceModal.open((choice) => {
+          if (choice === null) return resolve(null);
+          if (choice === 'now') return resolve(0);
+          // schedule
+          callScheduleDateModal.open((dateTs) => {
+            if (dateTs === null) {
+              // back to choice
+              return openChoice();
+            }
+            resolve(dateTs);
+          });
+        });
+      };
+      openChoice();
+    });
+  }
+
+  /**
    * Handles the call user action by generating a unique WebRTC Meet URL and sending it as a call message
    * @returns {Promise<void>}
    */
@@ -9360,6 +9421,13 @@ console.warn('in send message', txid)
         return;
       }
 
+      // Choose call time: now or scheduled
+      const chosenCallTime = await this.openCallTimeChooser();
+      if (chosenCallTime === null) {
+        // user cancelled
+        return;
+      }
+
       // Generate a 256-bit random number and convert to base64
       const randomBytes = generateRandomBytes(32); // 32 bytes = 256 bits
       const randomHex = bin2hex(randomBytes).slice(0, 20);
@@ -9367,11 +9435,18 @@ console.warn('in send message', txid)
       // Create the Meet URL
       const meetUrl = `https://meet.liberdus.com/${randomHex}`;
       
-      // Open the URL in a new tab
-      window.open(meetUrl, '_blank');
+      // Open immediately only if call is now
+      if (chosenCallTime === 0) {
+        window.open(meetUrl, '_blank');
+      }
       
-      // Send a call message to the contact
-      await this.sendCallMessage(meetUrl);
+      // Send a call message to the contact with callTime (0 or future timestamp)
+      await this.sendCallMessage(meetUrl, chosenCallTime);
+      
+      if (chosenCallTime && chosenCallTime > 0) {
+        const when = new Date(chosenCallTime - timeSkew); // convert back to local wall-clock for display
+        showToast(`Call scheduled for ${when.toLocaleString()}`, 3000, 'success');
+      }
       
     } catch (error) {
       console.error('Error handling call user:', error);
@@ -9384,7 +9459,7 @@ console.warn('in send message', txid)
    * @param {string} meetUrl - The Meet URL to send
    * @returns {Promise<void>}
    */
-  async sendCallMessage(meetUrl) {
+  async sendCallMessage(meetUrl, callTime = 0) {
     // if user is blocked, don't send message, show toast
     if (myData.contacts[this.address].tollRequiredToSend == 2) {
       showToast('You are blocked by this user', 0, 'error');
@@ -9428,9 +9503,12 @@ console.warn('in send message', txid)
       const selfKey = encryptData(bin2hex(dhkey), keys.secret+keys.pqSeed, true)  // used to decrypt our own message
 
       // Convert call message to new JSON format
+      const normalizedCallTime = Number(callTime) || 0;
       const callObj = {
         type: 'call',
-        url: meetUrl
+        url: meetUrl,
+        // callTime: 0 for immediate, or corrected future timestamp (ms since epoch)
+        callTime: normalizedCallTime
       };
 
       // Encrypt the JSON message using shared secret
@@ -9480,7 +9558,8 @@ console.warn('in send message', txid)
         my: true,
         txid: txid,
         status: 'sent',
-        type: 'call'
+        type: 'call',
+        callTime: normalizedCallTime
       };
       insertSorted(chatsData.contacts[currentAddress].messages, newMessage, 'timestamp');
 
@@ -9812,6 +9891,32 @@ console.warn('in send message', txid)
       buttonElement.disabled = false;
     }
   }
+
+  // ---- Call scheduling helpers ----
+  isFutureCall(ts) {
+    return typeof ts === 'number' && ts > getCorrectedTimestamp();
+  }
+
+  formatLocalDateTime(ts) {
+    return new Date(ts - timeSkew).toLocaleString();
+  }
+
+  gateScheduledCall(messageEl) {
+    if (!messageEl) return false;
+    const callTime = Number(messageEl.dataset?.callTime || 0);
+    if (this.isFutureCall(callTime)) {
+      showToast(`Call scheduled for ${this.formatLocalDateTime(callTime)}`, 2500, 'info');
+      return true;
+    }
+    return false;
+  }
+
+  buildCallScheduleHTML(callTime) {
+    if (this.isFutureCall(callTime)) {
+      return `<div class="call-message-schedule">Scheduled: ${this.formatLocalDateTime(callTime)}</div>`;
+    }
+    return '';
+  }
 }
 
 const chatModal = new ChatModal();
@@ -10056,6 +10161,148 @@ class CallInviteModal {
 }
 
 const callInviteModal = new CallInviteModal();
+
+/**
+ * Call Schedule Choice Modal
+ * Presents: Call Now | Schedule | Cancel
+ */
+class CallScheduleChoiceModal {
+  constructor() {
+    this.modal = null;
+    this.nowBtn = null;
+    this.scheduleBtn = null;
+    this.cancelBtn = null;
+    this.closeBtn = null;
+    this.onSelect = null; // function(choice)
+  }
+
+  load() {
+    this.modal = document.getElementById('callScheduleChoiceModal');
+    if (!this.modal) return;
+    this.nowBtn = document.getElementById('callScheduleNowBtn');
+    this.scheduleBtn = document.getElementById('openCallScheduleDateBtn');
+    this.cancelBtn = document.getElementById('cancelCallScheduleChoice');
+    this.closeBtn = document.getElementById('closeCallScheduleChoiceModal');
+
+    const onNow = () => this._select('now');
+    const onSchedule = () => this._select('schedule');
+    const onCancel = () => this._select(null);
+
+    if (this.nowBtn) this.nowBtn.addEventListener('click', onNow);
+    if (this.scheduleBtn) this.scheduleBtn.addEventListener('click', onSchedule);
+    if (this.cancelBtn) this.cancelBtn.addEventListener('click', onCancel);
+    if (this.closeBtn) this.closeBtn.addEventListener('click', onCancel);
+  }
+
+  open(onSelect) {
+    this.onSelect = onSelect;
+    this.modal?.classList.add('active');
+  }
+
+  _select(value) {
+    if (this.modal) this.modal.classList.remove('active');
+    const cb = this.onSelect;
+    this.onSelect = null;
+    if (cb) cb(value);
+  }
+}
+
+/**
+ * Call Schedule Date Modal
+ * Lets user pick date/time and submit
+ */
+class CallScheduleDateModal {
+  constructor() {
+    this.modal = null;
+    this.form = null;
+    this.input = null;
+    this.submitBtn = null;
+    this.cancelBtn = null;
+    this.closeBtn = null;
+    this.onDone = null; // function(timestamp|null)
+    this._onSubmit = this._onSubmit.bind(this);
+    this._onSubmitBtn = this._onSubmitBtn.bind(this);
+    this._onCancel = this._onCancel.bind(this);
+  }
+
+  load() {
+    this.modal = document.getElementById('callScheduleDateModal');
+    if (!this.modal) return;
+    this.form = document.getElementById('callScheduleDateForm');
+    this.input = document.getElementById('callScheduleInput');
+    this.submitBtn = document.getElementById('confirmCallSchedule');
+    this.cancelBtn = document.getElementById('cancelCallScheduleDate');
+    this.closeBtn = document.getElementById('closeCallScheduleDateModal');
+
+    if (this.form) this.form.addEventListener('submit', this._onSubmit);
+    if (this.submitBtn) this.submitBtn.addEventListener('click', this._onSubmitBtn);
+    if (this.cancelBtn) this.cancelBtn.addEventListener('click', this._onCancel);
+    if (this.closeBtn) this.closeBtn.addEventListener('click', this._onCancel);
+  }
+
+  open(onDone) {
+    this.onDone = onDone;
+    // initialize min/default each time it opens
+    const toLocalInputValue = (ms) => {
+      const d = new Date(ms);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    };
+    const nowMs = Date.now();
+    const minMs = nowMs + 1 * 60 * 1000;
+    const defaultMs = nowMs + 1 * 60 * 1000;
+    if (this.input) {
+      this.input.min = toLocalInputValue(minMs);
+      if (!this.input.value || Date.parse(this.input.value) < minMs) {
+        this.input.value = toLocalInputValue(defaultMs);
+      }
+    }
+    this.modal?.classList.add('active');
+  }
+
+  _onSubmit(e) {
+    if (e) e.preventDefault();
+    this._submitValue();
+  }
+  _onSubmitBtn(e) {
+    if (e) e.preventDefault();
+    this._submitValue();
+  }
+  _onCancel() {
+    this._closeWith(null);
+  }
+
+  _submitValue() {
+    if (!this.input) return;
+    const inputVal = this.input.value;
+    if (!inputVal) {
+      showToast('Please pick a date and time', 2000, 'error');
+      return;
+    }
+    const localMs = Date.parse(inputVal);
+    if (!localMs || Number.isNaN(localMs)) {
+      showToast('Invalid date/time selected', 2000, 'error');
+      return;
+    }
+    const corrected = localMs + timeSkew;
+    const nowCorrected = getCorrectedTimestamp();
+    if (corrected <= nowCorrected) {
+      showToast('Please choose a time in the future', 2000, 'error');
+      return;
+    }
+    this._closeWith(corrected);
+  }
+
+  _closeWith(value) {
+    if (this.modal) this.modal.classList.remove('active');
+    const cb = this.onDone;
+    this.onDone = null;
+    if (cb) cb(value);
+  }
+}
+
+const callScheduleChoiceModal = new CallScheduleChoiceModal();
+const callScheduleDateModal = new CallScheduleDateModal();
 
 /**
  * Failed Message Context Menu Class

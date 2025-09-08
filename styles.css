@@ -3499,10 +3499,7 @@ small {
 
 /* Call Invite Modal Styles */
 .call-invite-modal-container {
-  display: flex;
-  flex-direction: column;
-  height: 55vh;
-  min-height: 420px;
+  min-height: 250px;
 }
 
 .call-invite-contacts-scroll {
@@ -4863,6 +4860,17 @@ small {
 
 .call-message-text {
   color: var(--text-color);
+}
+
+.call-message-schedule {
+  font-size: 0.82rem;
+  color: var(--secondary-text-color);
+  margin-top: 2px;
+}
+
+/* Improve contrast for scheduled label in sent message bubbles */
+.message.sent .call-message-schedule {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .call-message-phone-button {
