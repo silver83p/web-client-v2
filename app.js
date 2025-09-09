@@ -7691,14 +7691,18 @@ class ChatModal {
    * @returns {void}
    */
   close() {
-    const needsToSendReadTx = this.needsToSend();
-    console.log(`[close] needsToSendReadTx: ${needsToSendReadTx}`);
-    // if newestRecevied message does not have an amount property and user has not responded, then send a read transaction
-    if (needsToSendReadTx) {
-      this.sendReadTransaction(this.address);
+    if (isOnline) {
+      const needsToSendReadTx = this.needsToSend();
+      console.log(`[close] needsToSendReadTx: ${needsToSendReadTx}`);
+      // if newestRecevied message does not have an amount property and user has not responded, then send a read transaction
+      if (needsToSendReadTx) {
+        this.sendReadTransaction(this.address);
+      }
+      
+      this.sendReclaimTollTransaction(this.address);
+    } else {
+      showToast('Offline: toll not processed', 0, 'error');
     }
-
-    this.sendReclaimTollTransaction(this.address);
 
     // Save any unsaved draft before closing
     this.debouncedSaveDraft(this.messageInput.value);
