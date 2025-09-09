@@ -10354,9 +10354,8 @@ class CallInviteModal {
     const addresses = selectedBoxes.map(cb => cb.value).slice(0,10);
     // get call link from original message
     const msgCallLink = this.messageEl.querySelector('.call-message a')?.href;
-    const msgCallTime = Number(this.messageEl.getAttribute('data-call-time')) || 0;
     if (!msgCallLink) return showToast('Call link not found', 2000, 'error');
-
+    let msgCallTime = Number(this.messageEl.getAttribute('data-call-time')) || 0;
     this.inviteSendButton.disabled = true;
     this.inviteSendButton.textContent = 'Sending...';
 
@@ -10416,8 +10415,8 @@ class CallInviteModal {
         }
 
         const messageObj = await chatModal.createChatMessage(addr, messagePayload, toll, keys);
-        // set callType to true if callTime is 0 so recipient phone rings
-        if (payload?.callTime === 0) {
+        // set callType to true if callTime is within 5 minutes of now or after callTime
+        if (payload?.callTime <= getCorrectedTimestamp() + 5 * 60 * 1000) {
           messageObj.callType = true
         }
         await signObj(messageObj, keys);
