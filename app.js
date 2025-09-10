@@ -10882,6 +10882,16 @@ class FailedMessageMenu {
     event.stopPropagation();
     this.currentMessageEl = messageEl;
 
+    // Check if this is a video call message and hide retry option
+    const isVideoCall = !!messageEl.querySelector('.call-message');
+    const retryOption = this.menu.querySelector('[data-action="retry"]');
+    
+    if (isVideoCall) {
+      retryOption.style.display = 'none';
+    } else {
+      retryOption.style.display = 'flex';
+    }
+
     // Use shared positioning utility
     chatModal.positionContextMenu(this.menu, messageEl);
     this.menu.style.display = 'block';
