@@ -10983,6 +10983,8 @@ class VoiceRecordingModal {
     this.recordingStopTime = null;
     this.actualDuration = null;
     this.recordingInterval = null;
+    this.currentAudio = null;
+    this.playbackStartTime = null;
   }
 
   load() {
@@ -10994,11 +10996,14 @@ class VoiceRecordingModal {
     this.cancelVoiceMessageButton = document.getElementById('cancelVoiceMessageButton');
     this.listenVoiceMessageButton = document.getElementById('listenVoiceMessageButton');
     this.sendVoiceMessageButton = document.getElementById('sendVoiceMessageButton');
+    this.pauseResumeButton = document.getElementById('pauseResumeButton');
+    this.stopListeningButton = document.getElementById('stopListeningButton');
     this.recordingIndicator = document.getElementById('recordingIndicator');
     this.recordingTimer = document.getElementById('recordingTimer');
     this.initialControls = document.getElementById('initialControls');
     this.recordingControls = document.getElementById('recordingControls');
     this.recordedControls = document.getElementById('recordedControls');
+    this.listeningControls = document.getElementById('listeningControls');
 
     this.startRecordingButton.addEventListener('click', () => {
       this.startVoiceRecording();
@@ -11015,15 +11020,30 @@ class VoiceRecordingModal {
     this.listenVoiceMessageButton.addEventListener('click', () => {
       this.listenVoiceMessage();
     });
+    this.pauseResumeButton.addEventListener('click', () => {
+      this.togglePauseResume();
+    });
+    this.stopListeningButton.addEventListener('click', () => {
+      this.stopListening();
+    });
     this.sendVoiceMessageButton.addEventListener('click', () => {
       this.sendVoiceMessage();
     });
-    // Close voice recording modal when clicking outside
+    // Close voice recording modal when clicking outside (only in initial state)
     this.modal.addEventListener('click', (e) => {
-      if (e.target === this.modal) {
+      if (e.target === this.modal && this.canCloseModal()) {
         this.close();
       }
     });
+  }
+
+  /**
+   * Check if the modal can be safely closed
+   * Only allow closing when in initial state
+   * @returns {boolean}
+   */
+  canCloseModal() {
+    return this.initialControls.style.display !== 'none';
   }
 
   /**
@@ -11053,6 +11073,7 @@ class VoiceRecordingModal {
     this.initialControls.style.display = 'flex';
     this.recordingControls.style.display = 'none';
     this.recordedControls.style.display = 'none';
+    this.listeningControls.style.display = 'none';
     this.recordingTimer.textContent = '00:00';
     this.recordingIndicator.classList.remove('recording');
   }
@@ -11146,11 +11167,7 @@ class VoiceRecordingModal {
     this.recordingInterval = setInterval(() => {
       const elapsed = Date.now() - this.recordingStartTime;
       const seconds = Math.floor(elapsed / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const remainingSeconds = seconds % 60;
-      
-      this.recordingTimer.textContent = 
-        `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+      this.recordingTimer.textContent = this.formatDuration(seconds);
       
       // Stop recording after 5 minutes
       if (elapsed >= 5 * 60 * 1000) {
@@ -11209,24 +11226,108 @@ class VoiceRecordingModal {
    */
   listenVoiceMessage() {
     if (this.recordedBlob) {
+      
+      // Show listening controls and hide recorded controls
+      this.recordedControls.style.display = 'none';
+      this.listeningControls.style.display = 'flex';
+      
+      // Set initial button text and enable buttons
+      this.pauseResumeButton.textContent = 'Pause';
+      this.pauseResumeButton.disabled = false;
+      this.stopListeningButton.disabled = false;
+      
+      // Start playback timer
+      this.playbackStartTime = Date.now();
+      this.recordingTimer.textContent = '00:00'; // Reset to 0:00 when starting
+      this.startPlaybackTimer();
+      
       const audioUrl = URL.createObjectURL(this.recordedBlob);
       const audio = new Audio(audioUrl);
+      this.currentAudio = audio;
       
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
+        // Disable buttons and show completion message briefly
+        this.pauseResumeButton.disabled = true;
+        this.stopListeningButton.disabled = true;
+        this.pauseResumeButton.textContent = 'Done';
+        
+        // Add a small delay to prevent accidental button clicks
+        setTimeout(() => {
+          this.stopListening();
+        }, 1000);
       };
       
       audio.onerror = (error) => {
         console.error('Error playing voice message:', error);
         showToast('Error playing voice message', 3000, 'error');
         URL.revokeObjectURL(audioUrl);
+        this.stopListening();
       };
       
       audio.play().catch(error => {
         console.error('Error playing voice message:', error);
         showToast('Error playing voice message', 3000, 'error');
+        this.stopListening();
       });
     }
+  }
+
+  /**
+   * Start the playback timer (reuses recordingInterval)
+   * @returns {void}
+   */
+  startPlaybackTimer() {
+    this.recordingInterval = setInterval(() => {
+      const elapsed = Date.now() - this.playbackStartTime;
+      const seconds = Math.floor(elapsed / 1000);
+      
+      this.recordingTimer.textContent = this.formatDuration(seconds);
+    }, 1000);
+  }
+
+  /**
+   * Toggle pause/resume of voice message playback
+   * @returns {void}
+   */
+  togglePauseResume() {
+    if (!this.currentAudio) return;
+    
+    if (this.currentAudio.paused) {
+      // Resume playback
+      this.currentAudio.play();
+      this.pauseResumeButton.textContent = 'Pause';
+      // Resume timer
+      this.playbackStartTime = Date.now() - (this.currentAudio.currentTime * 1000);
+      this.startPlaybackTimer();
+    } else {
+      // Pause playback
+      this.currentAudio.pause();
+      this.pauseResumeButton.textContent = 'Resume';
+      // Stop timer
+      this.stopRecordingTimer();
+    }
+  }
+
+  /**
+   * Stop listening to voice message
+   * @returns {void}
+   */
+  stopListening() {
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio = null;
+    }
+    
+    // Stop playback timer first (reuses recordingInterval)
+    this.stopRecordingTimer();
+    
+    // Reset timer to show duration immediately
+    this.recordingTimer.textContent = this.formatDuration(this.actualDuration || 0);
+    
+    // Hide listening controls and show recorded controls
+    this.listeningControls.style.display = 'none';
+    this.recordedControls.style.display = 'flex';
   }
 
   /**
@@ -11313,6 +11414,17 @@ class VoiceRecordingModal {
   }
 
   /**
+   * Format duration from seconds to mm:ss
+   * @param {number} seconds - Duration in seconds
+   * @returns {string} Formatted duration
+   */
+  formatDuration(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
    * Get recording duration in seconds
    * @returns {number} Duration in seconds
    */
@@ -11333,6 +11445,12 @@ class VoiceRecordingModal {
       if (this.mediaRecorder.stream) {
         this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
       }
+    }
+    
+    // Stop any current audio playback
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio = null;
     }
     
     // Clear timers
