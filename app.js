@@ -6678,9 +6678,9 @@ class ValidatorStakingModal {
         // For now, we'll proceed, but nominee/user stake will be unavailable.
       }
 
-      const [userAccountData, networkAccountData] = await Promise.all([
+      const [userAccountData] = await Promise.all([
         userAddress ? queryNetwork(`/account/${longAddress(userAddress)}`) : Promise.resolve(null), // Fetch User Data if available
-        queryNetwork('/account/0000000000000000000000000000000000000000000000000000000000000000'), // Fetch Network Data
+        getNetworkParams(), // Refresh Network params
         walletScreen.updateWalletBalances(),
       ]);
 
@@ -6688,7 +6688,7 @@ class ValidatorStakingModal {
       nominee = userAccountData?.account?.operatorAccountInfo?.nominee; // string
       const userStakedBaseUnits = userAccountData?.account?.operatorAccountInfo?.stake; // BigInt object
 
-      const stakeRequiredUsd = networkAccountData?.account?.current?.stakeRequiredUsd; // BigInt object
+      const stakeRequiredUsd = EthNum.toWei(parameters.current?.stakeRequiredUsdStr); // BigInt object
 
       const marketPrice = await getMarketPrice(); // number or null
       const stabilityFactor = getStabilityFactor(); // number
@@ -6797,8 +6797,8 @@ class ValidatorStakingModal {
           this.earnMessageElement.style.display = 'none';
         }
 
-        const nodeRewardAmountUsd = networkAccountData.account.current.nodeRewardAmountUsd;
-        const nodeRewardInterval = networkAccountData?.account?.current?.nodeRewardInterval; 
+        const nodeRewardAmountUsd = EthNum.toWei(parameters.current.nodeRewardAmountUsdStr);
+        const nodeRewardInterval = parameters.current.nodeRewardInterval;
 
         // Calculate and display estimated rewards based on node's start time
         try {
@@ -7339,7 +7339,7 @@ class StakeValidatorModal {
     }
 
     await getNetworkParams();
-    const txFeeInLIB = parameters.current.transactionFee || 1n * wei;
+    const txFeeInLIB = getTransactionFeeWei();
     
     const balanceInLIB = big2str(BigInt(libAsset.balance), 18).slice(0, -12);
     const feeInLIB = big2str(txFeeInLIB, 18).slice(0, -16);
