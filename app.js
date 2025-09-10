@@ -10965,6 +10965,8 @@ class VoiceRecordingModal {
     this.mediaRecorder = null;
     this.recordedBlob = null;
     this.recordingStartTime = null;
+    this.recordingStopTime = null;
+    this.actualDuration = null;
     this.recordingInterval = null;
   }
 
@@ -11111,6 +11113,11 @@ class VoiceRecordingModal {
   stopVoiceRecording() {
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.stop();
+      this.recordingStopTime = Date.now();
+      // Calculate actual recording duration (excluding processing time)
+      if (this.recordingStartTime) {
+        this.actualDuration = Math.floor((this.recordingStopTime - this.recordingStartTime) / 1000);
+      }
       this.stopRecordingTimer();
       this.recordingIndicator.classList.remove('recording');
     }
@@ -11295,8 +11302,9 @@ class VoiceRecordingModal {
    * @returns {number} Duration in seconds
    */
   getRecordingDuration() {
-    if (!this.recordingStartTime) return 0;
-    return Math.floor((Date.now() - this.recordingStartTime) / 1000);
+    // Use the actual duration calculated when recording stopped
+    // This excludes processing time between stop and send
+    return this.actualDuration || 0;
   }
 
   /**
@@ -11319,6 +11327,8 @@ class VoiceRecordingModal {
     this.mediaRecorder = null;
     this.recordedBlob = null;
     this.recordingStartTime = null;
+    this.recordingStopTime = null;
+    this.actualDuration = null;
   }
 }
 
