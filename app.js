@@ -7859,6 +7859,13 @@ class ChatModal {
     if (tollContainer) {
       tollContainer.style.cursor = 'pointer';
       tollContainer.addEventListener('click', () => {
+        // Check if there's already a toll info toast visible and close it
+        const existingTollToast = document.querySelector('.toast.toll');
+        if (existingTollToast && existingTollToast.id) {
+          hideToast(existingTollToast.id);
+          return; // Don't show a new one immediately after closing
+        }
+        
         const message = '<strong>What is a Toll?</strong><br><br>A toll is a small amount of LIB that recipients require with your message to prevent spam.<br><br><strong>How it works:</strong><br>• You must send the toll amount to send a message<br>• The toll is typically returned when they respond<br>• Tolls can change based on friend status<br>• Higher tolls = stronger spam protection';
         showToast(message, 0, 'toll', true);
       });
