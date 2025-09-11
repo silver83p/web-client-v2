@@ -7664,6 +7664,18 @@ class ChatModal {
   }
 
   /**
+   * Gets toll info message from HTML template
+   * @returns {string} The toll info message HTML
+   */
+  getTollInfoMessage() {
+    if (this.tollTemplate) {
+      return this.tollTemplate.innerHTML;
+    }
+    // Fallback message if template not found
+    return '<strong>What is a Toll?</strong><br><br>A toll is a payment in LIB that recipients can require with messages to prevent spam.';
+  }
+
+  /**
    * Cancels all ongoing file operations and creates a new abort controller
    * @returns {void}
    */
@@ -7691,6 +7703,7 @@ class ChatModal {
     this.messageInput = document.querySelector('.message-input');
     this.chatSendMoneyButton = document.getElementById('chatSendMoneyButton');
     this.messageByteCounter = document.querySelector('.message-byte-counter');
+    this.tollTemplate = document.getElementById('tollInfoMessageTemplate');
     this.messagesContainer = document.querySelector('.messages-container');
     this.addFriendButtonChat = document.getElementById('addFriendButtonChat');
     this.addAttachmentButton = document.getElementById('addAttachmentButton');
@@ -7866,7 +7879,7 @@ class ChatModal {
           return; // Don't show a new one immediately after closing
         }
         
-        const message = '<strong>What is a Toll?</strong><br><br>A toll is a small amount of LIB that recipients require with your message to prevent spam.<br><br><strong>How it works:</strong><br>• You must send the toll amount to send a message<br>• The toll is typically returned when they respond<br>• Tolls can change based on friend status<br>• Higher tolls = stronger spam protection';
+        const message = this.getTollInfoMessage();
         showToast(message, 0, 'toll', true);
       });
     }
