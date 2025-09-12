@@ -11465,10 +11465,9 @@ class VoiceRecordingModal {
       
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
-        // Disable buttons and show completion message briefly
+        // Disable buttons before returning
         this.pauseResumeButton.disabled = true;
         this.stopListeningButton.disabled = true;
-        this.pauseResumeButton.textContent = 'Done';
         
         // Add a small delay to prevent accidental button clicks
         setTimeout(() => {
