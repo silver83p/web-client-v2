@@ -3647,6 +3647,10 @@ async function processChats(chats, keys) {
                         }
                       }
                     }
+
+                    if (reactNativeApp.isReactNativeWebView && messageToDelete.type === 'call' && Number(messageToDelete.callTime) > 0) {
+                      reactNativeApp.sendUnscheduledCall(contact?.username, Number(messageToDelete.callTime));
+                    }
                     
                     if (chatModal.isActive() && chatModal.address === from) {
                       chatModal.appendChatModal();
@@ -9923,6 +9927,14 @@ console.warn('in send message', txid)
         return showToast('Message already deleted', 2000, 'info');
       }
       
+
+      if (reactNativeApp.isReactNativeWebView && message.type === 'call') {
+        const callTimeNum = Number(message.callTime) || 0;
+        if (callTimeNum > 0) {
+          reactNativeApp.sendUnscheduledCall(contact?.username, callTimeNum);
+        }
+      }
+
       // Mark as deleted and clear payment info if present
       Object.assign(message, {
         deleted: 1,
@@ -15659,6 +15671,14 @@ class ReactNativeApp {
   sendScheduledCall(username, timestamp){
     this.postMessage({
       type: 'SCHEDULE_CALL',
+      username,
+      timestamp
+    });
+  }
+  
+  sendUnscheduledCall(username, timestamp){
+    this.postMessage({
+      type: 'UNSCHEDULE_CALL',
       username,
       timestamp
     });
