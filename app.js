@@ -5539,11 +5539,9 @@ class BackupAccountModal {
     document.getElementById('backupForm').addEventListener('submit', (event) => {
       this.handleSubmit(event);
     });
-    
-    // Add password validation on input with debounce
-    this.debouncedUpdateButtonState = debounce(() => this.updateButtonState(), 250);
-    this.passwordInput.addEventListener('input', this.debouncedUpdateButtonState);
-    this.passwordConfirmInput.addEventListener('input', this.debouncedUpdateButtonState);
+
+    this.passwordInput.addEventListener('input', this.updateButtonState());
+    this.passwordConfirmInput.addEventListener('input', this.updateButtonState());
   }
 
   open() {
@@ -5602,6 +5600,14 @@ class BackupAccountModal {
    */
   async handleSubmit(event) {
     event.preventDefault();
+
+    // Enforce confirmation match when a password is provided
+    const password = this.passwordInput.value || '';
+    const confirmPassword = this.passwordConfirmInput.value || '';
+    if (password.length > 0 && confirmPassword !== password) {
+      this.updateButtonState();
+      return;
+    }
 
     // Determine which backup method to use
     if (myData && !this.backupAllAccountsCheckbox.checked) {
