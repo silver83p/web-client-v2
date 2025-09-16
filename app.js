@@ -1454,6 +1454,11 @@ class MenuModal {
       screen.classList.remove('active');
     });
 
+    // Clear notifications for this account
+    if (reactNativeApp.isReactNativeWebView) {
+      reactNativeApp.clearNotificationAddress(myAccount.keys.address);
+    }
+
     // Show welcome screen
     welcomeScreen.open();
 
@@ -2038,7 +2043,7 @@ class SignInModal {
     welcomeScreen.close();
     
     // Clear notification address only if signing into account that owns the notification address and only remove that account from the array 
-    if (reactNativeApp) {
+    if (reactNativeApp.isReactNativeWebView) {
       const notifiedAddresses = reactNativeApp.getNotificationAddresses();
       if (notifiedAddresses.length > 0) {
         // remove address if it's in the array
