@@ -6665,20 +6665,8 @@ class AboutModal {
   }
 
   openStore() {
-    // This method only runs when user is in React Native app
-    const userAgent = navigator.userAgent.toLowerCase();
-    let storeUrl;
-
-    if (userAgent.includes('android')) {
-      storeUrl = 'https://play.google.com/store/apps/details?id=com.jairaj.liberdus';
-    } else if (userAgent.includes('iphone') || userAgent.includes('ipad') || userAgent.includes('ios')) {
-      storeUrl = 'https://testflight.apple.com/join/zSRCWyxy';
-    } else {
-      storeUrl = 'https://play.google.com/store/apps/details?id=com.jairaj.liberdus';
-    }
-
     // Show update warning modal
-    updateWarningModal.open(storeUrl);
+    updateWarningModal.open();
   }
 }
 const aboutModal = new AboutModal();
@@ -6696,11 +6684,28 @@ class UpdateWarningModal {
     this.closeButton.addEventListener('click', () => this.close());
     this.backupFirstBtn.addEventListener('click', () => backupAccountModal.open());
     this.proceedToStoreBtn.addEventListener('click', () => this.proceedToStore());
+
+    // Event delegation for dynamically created update toast button
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target && (target.id === 'updateToastButton' || target.classList.contains('toast-update-button'))) {
+        event.preventDefault();
+        this.open();
+      }
+    }, { capture: true });
   }
 
-  open(storeUrl) {
-    // Store the URL for later use
-    this.storeUrl = storeUrl;
+  open() {
+    // This method only runs when user is in React Native app
+    const userAgent = navigator.userAgent.toLowerCase();
+
+    if (userAgent.includes('android')) {
+      this.storeUrl = 'https://play.google.com/store/apps/details?id=com.jairaj.liberdus';
+    } else if (userAgent.includes('iphone') || userAgent.includes('ipad') || userAgent.includes('ios')) {
+      this.storeUrl = 'https://testflight.apple.com/join/zSRCWyxy';
+    } else {
+      this.storeUrl = 'https://play.google.com/store/apps/details?id=com.jairaj.liberdus';
+    }
     this.modal.classList.add('active');
   }
 
@@ -15302,7 +15307,9 @@ class ReactNativeApp {
             if (data?.data?.appVersion) {
               this.appVersion = data.data.appVersion || `N/A`
               // Update the welcome screen to display the app version
-              welcomeScreen.updateAppVersionDisplay(this.appVersion); 
+              welcomeScreen.updateAppVersionDisplay(this.appVersion);
+              // Check if app version needs update
+              this.checkAppVersionUpdate();
             }
             // Handle device tokens
             if (data.data.deviceToken) {
@@ -15754,6 +15761,69 @@ class ReactNativeApp {
       username,
       timestamp
     });
+  }
+
+  /**
+   * Check if the current app version needs to be updated
+   * Compares the native app version with the required version from network.js
+   */
+  checkAppVersionUpdate() {
+    if (!this.appVersion || !network?.app_version) {
+      console.warn('❌ Version check skipped – missing data');
+      return;
+    }
+
+    // Determine platform (iOS or Android)
+    const ua = navigator.userAgent.toLowerCase();
+    const platform = /android/.test(ua) ? 'android' : (/iphone|ipad|ios/.test(ua) ? 'ios' : 'android');
+
+    const requiredVersion = network.app_version[platform];
+    if (!requiredVersion) {
+      console.warn('❌ No required version for platform: ' + platform);
+      return;
+    }
+
+    // Compare versions (format: YYYY.MMDD.HHmm)
+    const currentVersion = this.appVersion;
+    const isUpdateNeeded = this.compareVersions(currentVersion, requiredVersion) < 0;
+
+    if (isUpdateNeeded) {
+      // Show toast notification on welcome page
+      this.showUpdateNotification();
+    }
+  }
+
+  /**
+   * Compare two version strings in format YYYY.MMDD.HHmm
+   * @param {string} version1 - Current version
+   * @param {string} version2 - Required version
+   * @returns {number} -1 if version1 is older, 1 if newer, 0 if equal
+   */
+  compareVersions(version1, version2) {
+    // Convert version strings to comparable numbers
+    // Format: YYYY.MMDD.HHmm -> YYYYMMDDHHmm
+    const v1 = parseInt(version1.replace(/\D/g, ''));
+    const v2 = parseInt(version2.replace(/\D/g, ''));
+    
+    if (v1 < v2) return -1;  // version1 is older
+    if (v1 > v2) return 1;   // version1 is newer
+    return 0;                // versions are equal
+  }
+
+  /**
+   * Show update notification toast on the welcome screen
+   */
+  showUpdateNotification() {
+    // Only show notification if we're on the welcome screen
+    if (!welcomeScreen.screen || welcomeScreen.screen.style.display === 'none') {
+      console.warn('❌ Update toast skipped – welcome not visible');
+      return;
+    }
+
+    // Use template from index.html if available; fallback to inline HTML
+    const tpl = document.getElementById('updateToastTemplate');
+    const message = tpl.innerHTML 
+    showToast(message, 0, 'info', true);
   }
 }
 
