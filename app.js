@@ -3866,13 +3866,13 @@ async function processChats(chats, keys) {
             } else if (contact.senderInfo.username) {
               // check if the username given with the message maps to the address of this contact
               const usernameAddress = await getUsernameAddress(contact.senderInfo.username);
-                if (usernameAddress && normalizeAddress(usernameAddress) === normalizeAddress(tx.from)) {
-                  contact.username = contact.senderInfo.username;
-                } else {
-                  // username doesn't match address so skipping this message
-                  console.error(`Username: ${contact.senderInfo.username} does not match address ${tx.from}`);
-                  continue;
-                }
+              if (usernameAddress && normalizeAddress(usernameAddress) === normalizeAddress(tx.from)) {
+                contact.username = contact.senderInfo.username;
+              } else {
+                // username doesn't match address so skipping this message
+                console.error(`Username: ${contact.senderInfo.username} does not match address ${tx.from}`);
+                continue;
+              }
             } else {
               console.error(`Username not provided in senderInfo.`)
               continue
@@ -3981,13 +3981,13 @@ async function processChats(chats, keys) {
             } else if (contact.senderInfo.username) {
               // check if the username given with the message maps to the address of this contact
               const usernameAddress = await getUsernameAddress(contact.senderInfo.username);
-                if (usernameAddress && normalizeAddress(usernameAddress) === normalizeAddress(tx.from)) {
-                  contact.username = contact.senderInfo.username;
-                } else {
-                  // username doesn't match address so skipping this message
-                  console.error(`Username: ${contact.senderInfo.username} does not match address ${tx.from}`);
-                  continue;
-                }
+              if (usernameAddress && normalizeAddress(usernameAddress) === normalizeAddress(tx.from)) {
+                contact.username = contact.senderInfo.username;
+              } else {
+                // username doesn't match address so skipping this message
+                console.error(`Username: ${contact.senderInfo.username} does not match address ${tx.from}`);
+                continue;
+              }
             } else {
               console.error(`Username not provided in senderInfo.`)
               continue
