@@ -4384,7 +4384,10 @@ console.warn('tx is', txo)
 }
 
 class SearchMessagesModal {
-  constructor() {}
+  constructor() {
+    // memoized debounced search function
+    this._debouncedSearch = null;
+  }
 
   load() {
     this.modal = document.getElementById('searchModal');
@@ -4422,6 +4425,7 @@ class SearchMessagesModal {
       if (!contact.messages) return;
 
       contact.messages.forEach((message) => {
+        if (!message.message) return; // some messages like calls have no message field
         if (message.message.toLowerCase().includes(searchLower)) {
           // Highlight matching text
           const messageText = escapeHtml(message.message);
@@ -4447,7 +4451,7 @@ class SearchMessagesModal {
   displayEmptyState(containerId, message = 'No results found') {
     const resultsContainer = document.getElementById(containerId);
     resultsContainer.innerHTML = `
-          <div class="empty-state">
+          <div class="empty-state" style="display: block">
               <div class="empty-state-message">${message}</div>
           </div>
       `;
@@ -4532,27 +4536,36 @@ class SearchMessagesModal {
   }
 
   handleMessageSearchInput(e) {
-    // debounced search
-    const debouncedSearch = debounce(
-      (searchText) => {
-        const trimmedText = searchText.trim();
+    // Create the debounced function once and reuse it so earlier keypress timers are cleared
+    if (!this._debouncedSearch) {
+      this._debouncedSearch = debounce(
+        (searchText) => {
+          const trimmedText = (searchText || '').trim();
 
-        if (!trimmedText) {
-          this.searchResults.innerHTML = '';
-          return;
-        }
+          // If input is empty, clear results
+          if (!trimmedText) {
+            this.searchResults.innerHTML = '';
+            return;
+          }
 
-        const results = this.searchMessages(trimmedText);
-        if (results.length === 0) {
-          this.displayEmptyState('searchResults', 'No messages found');
-        } else {
-          this.displaySearchResults(results);
-        }
-      },
-      (searchText) => (searchText.length === 1 ? 600 : 300)
-    );
+          // Guard against stale callbacks after further typing or modal close
+          const currentText = (this.searchInput?.value || '').trim();
+          if (!this.isActive() || currentText !== trimmedText) {
+            return;
+          }
 
-    debouncedSearch(e.target.value);
+          const results = this.searchMessages(trimmedText);
+          if (results.length === 0) {
+            this.displayEmptyState('searchResults', 'No messages found');
+          } else {
+            this.displaySearchResults(results);
+          }
+        },
+        (searchText) => ((searchText || '').length === 1 ? 600 : 300)
+      );
+    }
+
+    this._debouncedSearch(e.target.value);
   }
 }
 
