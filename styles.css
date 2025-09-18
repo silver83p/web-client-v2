@@ -1590,7 +1590,6 @@ input[type='file'].form-control::file-selector-button {
 
 .message-input-row {
   display: flex;
-  gap: 8px;
   align-items: center;
   width: 100%;
 }
@@ -3313,12 +3312,13 @@ mark {
 
 /* Add attachment button */
 .icon-button.add-attachment-button {
-  width: 20px;
+  width: 44px;
   height: 48px;
   padding: 0;
   flex-shrink: 0;
   pointer-events: auto;
   opacity: 0.7;
+  min-width: 44px; /* iOS recommended minimum touch target */
 }
 
 /* Cancel edit button - appears to the left of message input when editing */
@@ -5012,7 +5012,7 @@ small {
 
 /* Voice record button */
 .icon-button.voice-record-button {
-  width: 20px;
+  width: 32px;
   height: 48px;
   padding: 0;
   flex-shrink: 0;
