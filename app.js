@@ -5605,8 +5605,8 @@ class BackupAccountModal {
       this.handleSubmit(event);
     });
 
-    this.passwordInput.addEventListener('input', this.updateButtonState());
-    this.passwordConfirmInput.addEventListener('input', this.updateButtonState());
+    this.passwordInput.addEventListener('input', () => this.updateButtonState());
+    this.passwordConfirmInput.addEventListener('input', () => this.updateButtonState());
   }
 
   open() {
