@@ -334,6 +334,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   walletScreen.load();
 
   // About and Contact Modals
+  sourceModal.load();
   aboutModal.load();
   updateWarningModal.load();
   helpModal.load();
@@ -6711,6 +6712,25 @@ class InviteModal {
 }
 const inviteModal = new InviteModal();
 
+class SourceModal {
+  constructor() {}
+
+  load() {
+    this.modal = document.getElementById('sourceModal');
+    this.closeButton = document.getElementById('closeSourceModal');
+    this.closeButton.addEventListener('click', () => this.close());
+  }
+
+  open() {
+    this.modal.classList.add('active');
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+  }
+}
+const sourceModal = new SourceModal();
+
 class AboutModal {
   constructor() {}
 
@@ -6720,9 +6740,14 @@ class AboutModal {
     this.versionDisplay = document.getElementById('versionDisplayAbout');
     this.networkName = document.getElementById('networkNameAbout');
     this.netId = document.getElementById('netIdAbout');
+    this.openSourceLink = document.getElementById('openSourceModal');
 
     // Set up event listeners
     this.closeButton.addEventListener('click', () => this.close());
+    this.openSourceLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      sourceModal.open();
+    });
 
     // Set version and network information once during initialization
     this.versionDisplay.textContent = myVersion + ' ' + version;
