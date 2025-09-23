@@ -3278,7 +3278,7 @@ class CallsModal {
     const callGroup = this.calls[idx];
     if (!callGroup) return;
 
-    groupCallParticipantsModal.open(callGroup, li);
+    groupCallParticipantsModal.open(callGroup);
   }
 
   /**
@@ -3374,33 +3374,17 @@ class CallsModal {
 const callsModal = new CallsModal();
 
 class GroupCallParticipantsModal {
-  constructor() {
-    this.modal = null;
-    this.participantsList = null;
-    this.closeButton = null;
-    this.currentCallGroup = null;
-    this.currentListItem = null;
-    this._onParticipantClick = this._onParticipantClick.bind(this);
-    this._onJoinClick = this._onJoinClick.bind(this);
-    this._onCancel = this._onCancel.bind(this);
-  }
+  constructor() {}
 
   load() {
     this.modal = document.getElementById('groupCallParticipantsModal');
-    if (!this.modal) return;
     this.participantsList = document.getElementById('groupCallParticipantsList');
     this.closeButton = document.getElementById('closeGroupCallParticipantsModal');
-
-    [this.participantsList, this.closeButton]
-      .forEach((el, i) => {
-        if (el) el.addEventListener('click', [this._onParticipantClick, this._onJoinClick, this._onCancel, this._onCancel][i]);
-      });
+    this.participantsList.addEventListener('click', (e) => this.onParticipantClick(e));
+    this.closeButton.addEventListener('click', () => this.close());
   }
 
-  open(callGroup, listItem) {
-    this.currentCallGroup = callGroup;
-    this.currentListItem = listItem;
-    
+  open(callGroup) {
     // Clear existing participants
     if (this.participantsList) {
       this.participantsList.innerHTML = '';
@@ -3428,34 +3412,20 @@ class GroupCallParticipantsModal {
     this.modal?.classList.add('active');
   }
 
-  _onParticipantClick(e) {
+  onParticipantClick(e) {
     const participantItem = e.target.closest('.participant-item');
     if (!participantItem) return;
     
     const address = participantItem.getAttribute('data-address');
     if (address) {
+      this.close();
       // Directly open the chat modal for the selected participant
       chatModal.open(address);
-      this.close();
     }
-  }
-
-  _onJoinClick() {
-    // Directly call the join function from callsModal
-    if (this.currentListItem) {
-      callsModal.handleJoinClick(this.currentListItem);
-    }
-    this.close();
-  }
-
-  _onCancel() {
-    this.close();
   }
 
   close() {
-    this.modal?.classList.remove('active');
-    this.currentCallGroup = null;
-    this.currentListItem = null;
+    this.modal.classList.remove('active');
   }
 }
 
