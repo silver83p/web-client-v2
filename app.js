@@ -6694,6 +6694,8 @@ class AboutModal {
     this.modal = document.getElementById('aboutModal');
     this.closeButton = document.getElementById('closeAboutModal');
     this.versionDisplay = document.getElementById('versionDisplayAbout');
+    this.appVersionDisplay = document.getElementById('appVersionAbout');
+    this.appVersionText = document.getElementById('appVersionTextAbout');
     this.networkName = document.getElementById('networkNameAbout');
     this.netId = document.getElementById('netIdAbout');
     this.openSourceLink = document.getElementById('openSourceModal');
@@ -6709,6 +6711,11 @@ class AboutModal {
     this.versionDisplay.textContent = myVersion + ' ' + version;
     this.networkName.textContent = network.name;
     this.netId.textContent = network.netid;
+
+    // Set up app version display if available
+    if (reactNativeApp?.appVersion) {
+      this.updateAppVersionDisplay(reactNativeApp.appVersion);
+    }
   }
 
   open() {
@@ -6723,6 +6730,13 @@ class AboutModal {
   openStore() {
     // Show update warning modal
     updateWarningModal.open();
+  }
+
+  updateAppVersionDisplay(appVersion) {
+    if (appVersion) {
+      this.appVersionText.textContent = appVersion;
+      this.appVersionDisplay.style.display = 'block';
+    }
   }
 }
 const aboutModal = new AboutModal();
@@ -15598,6 +15612,8 @@ class ReactNativeApp {
               this.appVersion = data.data.appVersion || `N/A`
               // Update the welcome screen to display the app version
               welcomeScreen.updateAppVersionDisplay(this.appVersion);
+              // Update the about modal to display the app version
+              aboutModal.updateAppVersionDisplay(this.appVersion);
               // Check if app version needs update
               this.checkAppVersionUpdate();
             }
