@@ -16972,7 +16972,10 @@ function enterFullscreen() {
   if (isMobile()) {
   console.log('in enterFullscreen');
     if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen();
+      // on android 15 using chrome without delay caused issues with input field on ChatModal to be positioned below visual viewport
+      setTimeout(() => {
+        document.documentElement.requestFullscreen();
+      }, 100);
     } 
   }
 }
