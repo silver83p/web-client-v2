@@ -19,7 +19,6 @@ async function checkVersion() {
     if (!navigator.onLine || error instanceof TypeError) {
       isOnline = false;
       updateUIForConnectivity();
-      markConnectivityDependentElements();
       console.log(`DEBUG: about to invoke showToast in checkVersion`);
     }
     newVersion = myVersion; // Allow continuing with the old version
@@ -300,6 +299,7 @@ function clearMyData() {
 
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
+  markConnectivityDependentElements();
   await checkVersion(); // version needs to be checked before anything else happens
   timeDifference(); // Calculate and log time difference early
 
