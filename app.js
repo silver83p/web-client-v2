@@ -5057,9 +5057,6 @@ function markConnectivityDependentElements() {
     '#createAccountForm button[type="submit"]',
     '#importForm button[type="submit"]',
 
-    // submitFeedback button
-    '#submitFeedback',
-
     // stakeModal
     '#submitStake',
     '#faucetButton',
@@ -5067,8 +5064,15 @@ function markConnectivityDependentElements() {
     // tollModal
     '#saveNewTollButton',
 
-    //unstakeModal
+    //inviteModal
+    '#inviteForm button[type="submit"]',
+
+    //validatorModal
+    '#validator-learn-more',
     '#submitUnstake',
+
+    //farmModal
+    '#continueToFarm',
 
     // Call schedule modals
     '#callScheduleNowBtn',
@@ -5077,6 +5081,19 @@ function markConnectivityDependentElements() {
 
     // Message context menu (disable all except 'Delete for me' and 'Copy' and 'Join')
     '.message-context-menu .context-menu-option:not([data-action="delete"]):not([data-action="copy"]):not([data-action="join"])',
+
+    // bridgeModal
+    '#bridgeForm button[type="submit"]',
+
+    // helpModal
+    '#joinDiscord',
+    '#submitFeedback',
+
+    // updateWarningModal
+    '#proceedToStoreBtn',
+
+    // launchModal
+    '#launchForm button[type="submit"]',    
   ];
 
   // Add data attribute to all network-dependent elements
