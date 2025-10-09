@@ -11287,26 +11287,22 @@ console.warn('in send message', txid)
       }
       const seekEl = voiceMessageElement.querySelector('.voice-message-seek');
       const timeDisplayElement = voiceMessageElement.querySelector('.voice-message-time-display');
-      const totalDurationSeconds = message.duration || Math.floor(audio.duration) || 0;
-      if (seekEl) {
-        // Ensure max reflects known duration; fall back to audio.metadata once loaded
-        seekEl.max = totalDurationSeconds;
-      }
-      // If user set a seek position before playback, honor it after metadata loads
+      // Use stored duration from message object
+      const totalDurationSeconds = (Number.isFinite(message.duration) && message.duration > 0)
+        ? Math.floor(message.duration)
+        : 0;
+      
+      // Set max immediately so slider is seekable before playback
+      if (seekEl) seekEl.max = totalDurationSeconds || 0;
+      
+      // Handle pending seeks (if user moved slider before clicking play)
       audio.addEventListener('loadedmetadata', () => {
-        const metaDuration = Math.floor(audio.duration) || totalDurationSeconds;
-        if (seekEl) {
-          seekEl.max = metaDuration;
-          const preVal = Number(seekEl.value || 0);
-          if (preVal > 0 && preVal < metaDuration) {
-            try { audio.currentTime = preVal; } catch (e) { /* ignore */ }
-          } else if (voiceMessageElement.pendingSeekTime !== undefined) {
-            const pst = voiceMessageElement.pendingSeekTime;
-            if (pst >= 0 && pst < metaDuration) {
-              try { audio.currentTime = pst; } catch (e) { /* ignore */ }
-            }
-            delete voiceMessageElement.pendingSeekTime;
+        if (voiceMessageElement.pendingSeekTime !== undefined) {
+          const pst = voiceMessageElement.pendingSeekTime;
+          if (pst >= 0 && pst < totalDurationSeconds) {
+            try { audio.currentTime = pst; } catch (e) { /* ignore */ }
           }
+          delete voiceMessageElement.pendingSeekTime;
         }
       }, { once: true });
       
@@ -11337,6 +11333,7 @@ console.warn('in send message', txid)
         voiceMessageElement.seekSetup = true;
         const updateFromSeekValue = (commit) => {
           const newTime = Number(seekEl.value || 0);
+          // Always update time display when slider changes
           if (timeDisplayElement) {
             const currentTime = this.formatDuration(newTime);
             const totalTime = this.formatDuration(totalDurationSeconds);
@@ -11404,6 +11401,11 @@ console.warn('in send message', txid)
           delete voiceMessageElement.audioUrl;
         }
       };
+      
+      // Check if user moved slider before playing and apply seek
+      if (seekEl && Number(seekEl.value) > 0) {
+        voiceMessageElement.pendingSeekTime = Number(seekEl.value);
+      }
       
       // Start playing
       await audio.play();
