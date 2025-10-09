@@ -2716,6 +2716,10 @@ class FriendModal {
   getCurrentContactAddress() {
     return this.currentContactAddress || false;
   }
+
+  isActive() {
+    return this.modal?.classList.contains('active') || false;
+  }
 }
 
 const friendModal = new FriendModal();
@@ -5156,6 +5160,39 @@ function updateUIForConnectivity() {
     // Update aria-disabled state
     element.setAttribute('aria-disabled', !isOnline);
   });
+
+  // When coming back online, re-validate buttons that may be disabled for reasons other than connectivity
+  if (isOnline) {
+    revalidateButtonStates();
+  }
+}
+
+/**
+ * Re-validates button states for modals/forms that have buttons disabled for multiple reasons
+ * (not just offline status). This should be called when coming back online to ensure
+ * buttons aren't incorrectly enabled if they should remain disabled for other reasons.
+ */
+function revalidateButtonStates() {
+  // Check if validator modal is open and refresh it to re-validate all button states
+  if (typeof validatorStakingModal !== 'undefined' && validatorStakingModal.isActive()) {
+    validatorStakingModal.close();
+    validatorStakingModal.open();
+  }
+
+  // Check if friend modal is open and re-validate submit button
+  if (typeof friendModal !== 'undefined' && friendModal.isActive()) {
+    friendModal.updateSubmitButtonState();
+  }
+
+  // Check if toll modal is open and re-validate save button
+  if (typeof tollModal !== 'undefined' && tollModal.isActive()) {
+    tollModal.updateSaveButtonState();
+  }
+
+  // Check if send asset form modal is open and re-validate send button
+  if (typeof sendAssetFormModal !== 'undefined' && sendAssetFormModal.isActive()) {
+    sendAssetFormModal.refreshSendButtonDisabledState();
+  }
 }
 
 // Prevent form submissions when offline
@@ -13730,6 +13767,12 @@ class SendAssetFormModal {
    * @returns {Promise<void>}
    */
   async refreshSendButtonDisabledState() {
+    // If offline, keep button disabled
+    if (!isOnline) {
+      this.submitButton.disabled = true;
+      return;
+    }
+
     // Address is valid if its error/status message is visible and set to 'found'.
     const isAddressConsideredValid =
       this.usernameAvailable.style.display === 'inline' && this.usernameAvailable.textContent === 'found';
