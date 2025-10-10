@@ -8588,6 +8588,18 @@ class ChatModal {
       }
     });
 
+    // live updates while dragging the slider thumb
+    this.messagesList.addEventListener('input', (e) => {
+      const seekEl = e.target.closest('.voice-message-seek');
+      if (seekEl) this.updateVmTimeFromSeek(seekEl);
+    });
+
+    // ensures click-to-seek updates on mouse/touch release
+    this.messagesList.addEventListener('change', (e) => {
+      const seekEl = e.target.closest('.voice-message-seek');
+      if (seekEl) this.updateVmTimeFromSeek(seekEl);
+    });
+
 
     // Make toll info clickable: show sticky info toast and refresh toll in background
     const tollContainer = this.modal.querySelector('.toll-container');
@@ -8600,6 +8612,26 @@ class ChatModal {
     }
 
   }
+
+    // Voice message seek slider live time display (works even before playback)
+    updateVmTimeFromSeek (seekEl) {
+      const voiceMessageElement = seekEl.closest('.voice-message');
+      if (!voiceMessageElement) return;
+
+      const timeDisplayElement = voiceMessageElement.querySelector('.voice-message-time-display');
+
+      const newTime = Number(seekEl.value || 0);
+
+      const totalSeconds = Math.floor(Number(seekEl.max) || Number(voiceMessageElement.dataset.duration) || 0);
+      // updates the on-screen "current / total" label
+      if (timeDisplayElement) {
+        const currentTime = this.formatDuration(newTime);
+        const totalTime = this.formatDuration(totalSeconds);
+        timeDisplayElement.textContent = `${currentTime} / ${totalTime}`;
+      }
+      // ensures playback starts at the chosen position when audio is ready
+      voiceMessageElement.pendingSeekTime = newTime;
+    };
 
   /**
    * Opens the chat modal for the given address.
@@ -11333,12 +11365,6 @@ console.warn('in send message', txid)
         voiceMessageElement.seekSetup = true;
         const updateFromSeekValue = (commit) => {
           const newTime = Number(seekEl.value || 0);
-          // Always update time display when slider changes
-          if (timeDisplayElement) {
-            const currentTime = this.formatDuration(newTime);
-            const totalTime = this.formatDuration(totalDurationSeconds);
-            timeDisplayElement.textContent = `${currentTime} / ${totalTime}`;
-          }
           if (audio && !isNaN(newTime)) {
             // If metadata not yet loaded, store pending seek
             if (audio.readyState < 1) { // HAVE_METADATA
@@ -11401,11 +11427,6 @@ console.warn('in send message', txid)
           delete voiceMessageElement.audioUrl;
         }
       };
-      
-      // Check if user moved slider before playing and apply seek
-      if (seekEl && Number(seekEl.value) > 0) {
-        voiceMessageElement.pendingSeekTime = Number(seekEl.value);
-      }
       
       // Start playing
       await audio.play();
