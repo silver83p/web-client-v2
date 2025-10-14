@@ -8347,6 +8347,9 @@ class ChatModal {
     // Track whether we've locked background/modal scroll
     this.scrollLocked = false;
     this._touchMoveBlocker = null; // blocks touch outside messages container
+
+    // Track which voice message element is playing
+    this.playingVoiceMessageElement = null;
   }
 
   /**
@@ -8696,6 +8699,9 @@ class ChatModal {
     if (audio && !audio.paused) {
       audio.pause();
       this.setVoiceMessageButton(voiceMessageElement, false);
+      if (this.playingVoiceMessageElement === voiceMessageElement) {
+        this.playingVoiceMessageElement = null;
+      }
     }
   }
 
@@ -8703,7 +8709,9 @@ class ChatModal {
    * Pause voice messages when clicking any header action button
    */
   pauseVoiceMessages() {
-    this.messagesList?.querySelectorAll('.voice-message').forEach(vm => this.pauseVoiceMessage(vm));
+    if (this.playingVoiceMessageElement) {
+      this.pauseVoiceMessage(this.playingVoiceMessageElement);
+    }
   }
 
   /**
@@ -8714,6 +8722,9 @@ class ChatModal {
     if (voiceMessageElement.audioElement) voiceMessageElement.audioElement.pause();
     this.resetVoiceMessageUI(voiceMessageElement);
     this.cleanupVoiceMessageResources(voiceMessageElement);
+    if (this.playingVoiceMessageElement === voiceMessageElement) {
+      this.playingVoiceMessageElement = null;
+    }
   }
 
   /**
@@ -11311,9 +11322,10 @@ console.warn('in send message', txid)
   async playVoiceMessage(buttonElement) {
     const voiceMessageElement = buttonElement.closest('.voice-message');
     if (!voiceMessageElement) return;
-
-    // Pause all other playing voice messages (keeps audio cached for quick resume)
-    this.pauseVoiceMessages();
+    // Pause only if playing a different voice message
+    if (this.playingVoiceMessageElement !== voiceMessageElement) {
+      this.pauseVoiceMessages();
+    }
 
     // Check if audio is already playing/paused
     const existingAudio = voiceMessageElement.audioElement;
@@ -11330,10 +11342,12 @@ console.warn('in send message', txid)
         }
         existingAudio.play();
         this.setVoiceMessageButton(voiceMessageElement, true);
+        this.playingVoiceMessageElement = voiceMessageElement;
       } else {
         // Pause playback
         existingAudio.pause();
         this.setVoiceMessageButton(voiceMessageElement, false);
+        this.playingVoiceMessageElement = null;
       }
       return;
     }
@@ -11427,6 +11441,9 @@ console.warn('in send message', txid)
       // Update UI to show playing state and enable button for pause functionality
       this.setVoiceMessageButton(voiceMessageElement, true);
       
+      // Track this as the currently playing voice message
+      this.playingVoiceMessageElement = voiceMessageElement;
+      
       // Time & progress tracking
       audio.ontimeupdate = () => {
         if (!voiceMessageElement.isScrubbing) {
@@ -11479,6 +11496,7 @@ console.warn('in send message', txid)
       audio.onended = () => {
         this.resetVoiceMessageUI(voiceMessageElement);
         this.cleanupVoiceMessageResources(voiceMessageElement);
+        this.playingVoiceMessageElement = null;
       };
       
       audio.onerror = (error) => {
@@ -11486,6 +11504,7 @@ console.warn('in send message', txid)
         showToast('Error playing voice message', 0, 'error');
         this.resetVoiceMessageUI(voiceMessageElement);
         this.cleanupVoiceMessageResources(voiceMessageElement);
+        this.playingVoiceMessageElement = null;
       };
       
       // Start playing
