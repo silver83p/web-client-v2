@@ -1287,6 +1287,9 @@ class WalletScreen {
     this.openSendAssetFormModalButton = document.getElementById('openSendAssetFormModal');
     this.openReceiveModalButton = document.getElementById('openReceiveModal');
     this.openHistoryModalButton = document.getElementById('openHistoryModal');
+    this.openBuyButton = document.getElementById('openBuyButton');
+    this.openSellButton = document.getElementById('openSellButton');
+    this.openFaucetBridgeButton = document.getElementById('openFaucetBridgeButton');
 
     this.openSendAssetFormModalButton.addEventListener('click', () => {
       sendAssetFormModal.open();
@@ -1296,6 +1299,55 @@ class WalletScreen {
     });
     this.openHistoryModalButton.addEventListener('click', () => {
       historyModal.open();
+    });
+
+    // dynamic Faucet/Bridge button label and icon based on mainnet status
+    const faucetBridgeLabel = this.openFaucetBridgeButton.querySelector('.action-label');
+    const isMainnet = this.isMainnet();
+
+    if (faucetBridgeLabel) {
+      faucetBridgeLabel.textContent = isMainnet ? 'Bridge' : 'Faucet';
+    }
+    // Update icon: add/remove bridge-mode class
+    if (isMainnet) {
+      this.openFaucetBridgeButton.classList.add('bridge-mode');
+    } else {
+      this.openFaucetBridgeButton.classList.remove('bridge-mode');
+    }
+
+    this.openBuyButton.addEventListener('click', () => {
+      window.open('https://liberdus.com/buy', '_blank');
+    });
+
+    this.openSellButton.addEventListener('click', () => {
+      window.open('https://liberdus.com/sell', '_blank');
+    });
+
+    // Faucet/Bridge button handler
+    this.openFaucetBridgeButton.addEventListener('click', () => {
+      if (this.isMainnet()) {
+        // Mainnet: open bridge modal
+        bridgeModal.open();
+      } else {
+        // Not mainnet: open faucet URL with account address
+        if (myAccount?.keys?.address) {
+          try {
+            const address = longAddress(myAccount.keys.address);
+            const encodedAddress = encodeURIComponent(address);
+            const faucetUrl = `https://liberdus.com/faucet?address=${encodedAddress}`;
+            const newWindow = window.open(faucetUrl, '_blank');
+            if (!newWindow) {
+              showToast('Please allow popups to open the faucet page', 0, 'error');
+            }
+          } catch (error) {
+            console.error('Error opening faucet URL:', error);
+            showToast('Error opening faucet page', 0, 'error');
+          }
+        } else {
+          console.error('Account address not available');
+          showToast('Account address not available', 0, 'error');
+        }
+      }
     });
 
     // Add refresh balance button handler
@@ -1325,6 +1377,11 @@ class WalletScreen {
 
   isActive() {
     return this.screen.classList.contains('active');
+  }
+
+  // Check if the current network is mainnet
+  isMainnet() {
+    return network?.name === 'Mainnet';
   }
 
   // Update wallet view; refresh wallet
