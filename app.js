@@ -4343,7 +4343,7 @@ async function postAssetTransfer(to, amount, memo, keys) {
 }
 
 // TODO - backend - when account is being registered, ensure that loserCase(alias)=alias and hash(alias)==aliasHash
-async function postRegisterAlias(alias, keys) {
+async function postRegisterAlias(alias, keys, isPrivate = false) {
   const aliasBytes = utf82bin(alias);
   const aliasHash = hashBytes(aliasBytes);
   const { publicKey } = generatePQKeys(keys.pqSeed);
@@ -4357,6 +4357,7 @@ async function postRegisterAlias(alias, keys) {
     pqPublicKey: pqPublicKey,
     timestamp: getCorrectedTimestamp(),
     networkId: network.netid,
+    private: isPrivate,
   };
   const txid = await signObj(tx, keys);
   const res = await injectTx(tx, txid);
@@ -13086,6 +13087,9 @@ class CreateAccountModal {
     this.migrateAccountsButton = document.getElementById('migrateAccountsButton');
     this.toggleMoreOptions = document.getElementById('toggleMoreOptions');
     this.moreOptionsSection = document.getElementById('moreOptionsSection');
+    this.privateAccountCheckbox = document.getElementById('togglePrivateAccount');
+    this.privateAccountHelpButton = document.getElementById('privateAccountHelpButton');
+    this.privateAccountTemplate = document.getElementById('privateAccountHelpMessageTemplate');
 
     // Setup event listeners
     this.form.addEventListener('submit', (e) => this.handleSubmit(e));
@@ -13101,6 +13105,14 @@ class CreateAccountModal {
       this.privateKeyInput.setAttribute('type', type);
       // Toggle the visual state class on the button
       this.togglePrivateKeyVisibility.classList.toggle('toggled-visible');
+    });
+
+    // Add listener for the private account help button
+    this.privateAccountHelpButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const message = this.getPrivateAccountHelpMessage();
+      showToast(message, 0, 'info', true);
     });
 
     this.migrateAccountsButton.addEventListener('click', async () => await migrateAccountsModal.open());
@@ -13143,9 +13155,19 @@ class CreateAccountModal {
     this.moreOptionsSection.style.display = 'none';
     this.toggleButton.checked = false;
     this.privateKeySection.style.display = 'none';
+    this.privateAccountCheckbox.checked = false;
     
     // Open the modal
     this.open();
+  }
+
+  /**
+   * Get the private account help message HTML
+   * @returns {string}
+   */
+  getPrivateAccountHelpMessage() {
+    return this.privateAccountTemplate?.innerHTML || 
+      '<strong>What is a Private Account?</strong><br>Private accounts can only interact with other private accounts.';
   }
 
   /**
@@ -13268,6 +13290,7 @@ class CreateAccountModal {
     this.usernameInput.disabled = true;
     this.privateKeyInput.disabled = true;
     this.backButton.disabled = true;
+    this.privateAccountCheckbox.disabled = true;
 
     event.preventDefault();
     
@@ -13361,19 +13384,8 @@ class CreateAccountModal {
       }
     }
 
-    // Create new account entry
-    myAccount = {
-      netid,
-      username,
-      chatTimestamp: 0,
-      keys: {
-        address: addressHex,
-        public: publicKeyHex,
-        secret: privateKeyHex,
-        type: 'secp256k1',
-        pqSeed: pqSeed, // store only the 64 byte seed instead of 32,000 byte public and secret keys
-      },
-    };
+    // Get or create account entry
+    const isPrivateAccount = this.privateAccountCheckbox.checked;
     let waitingToastId = showToast('Creating account...', 0, 'loading');
     let res;
 
@@ -13381,13 +13393,31 @@ class CreateAccountModal {
       await getNetworkParams();
       const storedKey = `${username}_${netid}`;
       myData = loadState(storedKey)
-      if (myData) {
+      if (myData && myData.account) {
         myAccount = myData.account;
+        // Preserve private flag if account already exists, otherwise use checkbox value
+        if (myAccount.private === undefined) {
+          myAccount.private = isPrivateAccount;
+        }
       } else {
+        // Create new account entry
+        myAccount = {
+          netid,
+          username,
+          chatTimestamp: 0,
+          private: isPrivateAccount,
+          keys: {
+            address: addressHex,
+            public: publicKeyHex,
+            secret: privateKeyHex,
+            type: 'secp256k1',
+            pqSeed: pqSeed, // store only the 64 byte seed instead of 32,000 byte public and secret keys
+          },
+        };
         // create new data record if it doesn't exist
         myData = newDataRecord(myAccount);
       }
-      res = await postRegisterAlias(username, myAccount.keys);
+      res = await postRegisterAlias(username, myAccount.keys, myAccount.private || false);
     } catch (error) {
       this.reEnableControls();
       if (waitingToastId) hideToast(waitingToastId);
@@ -13474,6 +13504,7 @@ class CreateAccountModal {
     this.privateKeyInput.disabled = false;
     this.backButton.disabled = false;
     this.migrateAccountsButton.disabled = false;
+    this.privateAccountCheckbox.disabled = false;
   }
 }
 // Initialize the create account modal
@@ -15380,7 +15411,8 @@ class MigrateAccountsModal {
       } else if (section === 'available') {
         myData = loadState(username+'_'+netid)
         if (myData){ 
-          const res = await postRegisterAlias(username, myData.account.keys)
+          const isPrivate = myData.account?.private || false;
+          const res = await postRegisterAlias(username, myData.account.keys, isPrivate)
           if (res !== null){
             res.submittedts = getCorrectedTimestamp()
             res.netid = netid

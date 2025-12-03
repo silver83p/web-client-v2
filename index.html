@@ -608,9 +608,16 @@
               </div>
               
               <div id="moreOptionsSection" style="display: none;">
-                <div class="form-group">
+                <div class="form-group form-group--checkbox">
+                  <input type="checkbox" id="togglePrivateAccount" />
+                  <label for="togglePrivateAccount">
+                    Make this a private account
+                    <span class="toll-info-icon private-account-help" data-icon="info" id="privateAccountHelpButton"></span>
+                  </label>
+                </div>
+                <div class="form-group form-group--checkbox">
                   <input type="checkbox" id="togglePrivateKeyInput" />
-                  <label for="togglePrivateKeyInput" style="display: inline; margin-left: 5px">
+                  <label for="togglePrivateKeyInput">
                     Use my own private key (Advanced)
                   </label>
                 </div>
@@ -1189,6 +1196,23 @@
             <li>Any toll that was not given to the recipient can be reclaimed</li>
             <li>To reclaim the toll you must not send more messages to the recipient for 7 days</li>
             <li>After 7 days just open and close the chat session with the recipient to reclaim any remaining toll</li>
+          </ul>
+        </div>
+      </template>
+
+      <!-- Template for private account help message -->
+      <template id="privateAccountHelpMessageTemplate">
+        <div class="toll-info-message">
+          <h4>What is a Private Account?</h4>
+          <p>A private account restricts communication and payments to only other private accounts.</p>
+          
+          <h5>Important:</h5>
+          <ul>
+            <li>Private account username should be obscure and not connected to you</li>
+            <li>Username of a private account should not be shared publicly and only shared through a direct message</li>
+            <li>Public accounts cannot interact with private accounts</li>
+            <li>This setting cannot be changed after account creation</li>
+            <li>Private accounts allow to communicate without exposing metadata</li>
           </ul>
         </div>
       </template>
