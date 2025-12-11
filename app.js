@@ -10875,7 +10875,12 @@ console.warn('in send message', txid)
               const hasHint = typeof ownerIsMineHint !== 'undefined';
               let isOwnerMine = false;
               if (hasHint) {
-                isOwnerMine = ownerIsMineHint === true || ownerIsMineHint === '1';
+                // Use both item.my and replyOwnerIsMine to determine from current viewer's perspective
+                // item.my: true if reply is from current user (viewer's perspective)
+                // replyOwnerIsMine: true if original message was from sender's perspective
+                // If they match (both true or both false), original message is from current user's perspective
+                const isSelfReply = ownerIsMineHint === true || ownerIsMineHint === '1';
+                isOwnerMine = item.my === isSelfReply;
               } else {
                 const targetMsg = contact.messages?.find((m) => m.txid === item.replyId);
                 isOwnerMine = !!(targetMsg && targetMsg.my);
