@@ -1526,6 +1526,16 @@ class WalletScreen {
    * @returns {Promise<void>}
    */
   async requestFromFaucet() {
+    // Disable button immediately to prevent spam clicking
+    if (this.openFaucetBridgeButton.disabled) {
+      return;
+    }
+    this.openFaucetBridgeButton.disabled = true;
+    // Re-enable button after 5 seconds
+    setTimeout(() => {
+      this.openFaucetBridgeButton.disabled = false;
+    }, 5000);
+
     if (this.isFaucetRequestInProgress) {
       return;
     }
@@ -1555,7 +1565,6 @@ class WalletScreen {
     const toastId = showToast('Requesting from faucet...', 0, 'loading');
     try {
       this.isFaucetRequestInProgress = true;
-      this.openFaucetBridgeButton.disabled = true;
       
       const payload = {
         username: myAccount.username,
@@ -1589,7 +1598,6 @@ class WalletScreen {
     } finally {
       hideToast(toastId);
       this.isFaucetRequestInProgress = false;
-      this.openFaucetBridgeButton.disabled = false;
     }
   }
 }
