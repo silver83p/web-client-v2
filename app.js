@@ -1531,22 +1531,23 @@ class WalletScreen {
       return;
     }
     this.openFaucetBridgeButton.disabled = true;
+    // Re-enable button after 5 seconds
+    setTimeout(() => {
+      this.openFaucetBridgeButton.disabled = false;
+    }, 5000);
 
     if (this.isFaucetRequestInProgress) {
-      this.openFaucetBridgeButton.disabled = false;
       return;
     }
 
     if (!myAccount?.keys?.address) {
       console.error('Account address not available');
       showToast('Account address not available', 0, 'error');
-      this.openFaucetBridgeButton.disabled = false;
       return;
     }
 
     if (!isOnline) {
       showToast('You must be online to request from faucet', 0, 'error');
-      this.openFaucetBridgeButton.disabled = false;
       return;
     }
 
@@ -1557,7 +1558,6 @@ class WalletScreen {
       const minBalanceForFaucet = 100n * wei; // 100 LIB in wei
       if (balanceInWei >= minBalanceForFaucet) {
         showToast('Balance exceeds 100 LIB, so you cannot claim more tokens from the faucet.', 0, 'warning');
-        this.openFaucetBridgeButton.disabled = false;
         return;
       }
     }
@@ -1598,10 +1598,6 @@ class WalletScreen {
     } finally {
       hideToast(toastId);
       this.isFaucetRequestInProgress = false;
-      // Keep button disabled for 3 seconds to prevent spam clicking
-      setTimeout(() => {
-        this.openFaucetBridgeButton.disabled = false;
-      }, 3000);
     }
   }
 }
