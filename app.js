@@ -1526,18 +1526,27 @@ class WalletScreen {
    * @returns {Promise<void>}
    */
   async requestFromFaucet() {
+    // Disable button immediately to prevent spam clicking
+    if (this.openFaucetBridgeButton.disabled) {
+      return;
+    }
+    this.openFaucetBridgeButton.disabled = true;
+
     if (this.isFaucetRequestInProgress) {
+      this.openFaucetBridgeButton.disabled = false;
       return;
     }
 
     if (!myAccount?.keys?.address) {
       console.error('Account address not available');
       showToast('Account address not available', 0, 'error');
+      this.openFaucetBridgeButton.disabled = false;
       return;
     }
 
     if (!isOnline) {
       showToast('You must be online to request from faucet', 0, 'error');
+      this.openFaucetBridgeButton.disabled = false;
       return;
     }
 
@@ -1548,6 +1557,7 @@ class WalletScreen {
       const minBalanceForFaucet = 100n * wei; // 100 LIB in wei
       if (balanceInWei >= minBalanceForFaucet) {
         showToast('Balance exceeds 100 LIB, so you cannot claim more tokens from the faucet.', 0, 'warning');
+        this.openFaucetBridgeButton.disabled = false;
         return;
       }
     }
@@ -1555,7 +1565,6 @@ class WalletScreen {
     const toastId = showToast('Requesting from faucet...', 0, 'loading');
     try {
       this.isFaucetRequestInProgress = true;
-      this.openFaucetBridgeButton.disabled = true;
       
       const payload = {
         username: myAccount.username,
@@ -1589,7 +1598,10 @@ class WalletScreen {
     } finally {
       hideToast(toastId);
       this.isFaucetRequestInProgress = false;
-      this.openFaucetBridgeButton.disabled = false;
+      // Keep button disabled for 3 seconds to prevent spam clicking
+      setTimeout(() => {
+        this.openFaucetBridgeButton.disabled = false;
+      }, 3000);
     }
   }
 }
