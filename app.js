@@ -19195,7 +19195,14 @@ function isFaucetAddress(address) {
   if (!address || !network.faucetAddress) {
     return false;
   }
-  return normalizeAddress(address) === normalizeAddress(network.faucetAddress);
+  const normalizedAddress = normalizeAddress(address);
+  // Support both single string and array of addresses
+  const faucetAddresses = Array.isArray(network.faucetAddress) 
+    ? network.faucetAddress 
+    : [network.faucetAddress];
+  return faucetAddresses.some(faucetAddr => 
+    normalizeAddress(faucetAddr) === normalizedAddress
+  );
 }
 
 function isMobile() {
