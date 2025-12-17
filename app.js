@@ -2489,16 +2489,53 @@ class MyInfoModal {
     this.subtitleDiv = this.avatarSection.querySelector('.subtitle');
     this.qrContainer = this.modal.querySelector('#myInfoQR');
 
+    // Create avatar edit button
+    this.avatarEditButton = document.createElement('button');
+    this.avatarEditButton.className = 'icon-button edit-icon avatar-edit-button avatar-edit-button-outside';
+    this.avatarEditButton.setAttribute('aria-label', 'Edit photo');
+
     this.backButton.addEventListener('click', () => this.close());
     this.editButton.addEventListener('click', () => myProfileModal.open());
+
+    // Avatar edit button click
+    this.avatarEditButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openAvatarEdit();
+    });
+
+    // Make the avatar itself clickable
+    this.avatarDiv.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openAvatarEdit();
+    });
+
+    // Attach edit button to the avatar div
+    if (!this.avatarDiv.contains(this.avatarEditButton)) {
+      this.avatarDiv.appendChild(this.avatarEditButton);
+    }
+  }
+
+  // Helper method to open avatar edit modal for own avatar
+  openAvatarEdit() {
+    if (!myAccount?.keys?.address) return;
+    avatarEditModal.open(myAccount.keys.address, true); // true = isOwnAvatar
   }
 
   async updateMyInfo() {
     if (!myAccount) return;
 
-    const identicon = generateIdenticon(myAccount.keys.address, 96);
+    // Use getContactAvatarHtml for consistent avatar rendering
+    const avatarHtml = await getContactAvatarHtml(
+      { address: myAccount.keys.address, hasAvatar: myData?.account?.hasAvatar },
+      96
+    );
+    this.avatarDiv.innerHTML = avatarHtml;
 
-    this.avatarDiv.innerHTML = identicon;
+    // Re-append the avatar edit button after setting the avatar content
+    if (!this.avatarDiv.contains(this.avatarEditButton)) {
+      this.avatarDiv.appendChild(this.avatarEditButton);
+    }
+
     this.nameDiv.textContent = myAccount.username;
     this.subtitleDiv.textContent = myAccount.keys.address;
 
@@ -2615,7 +2652,7 @@ class ContactInfoModal {
     this.subtitleDiv = this.avatarSection.querySelector('.subtitle');
     this.usernameDiv = document.getElementById('contactInfoUsername');
     this.avatarEditButton = document.createElement('button');
-    this.avatarEditButton.className = 'icon-button edit-icon avatar-edit-button';
+    this.avatarEditButton.className = 'icon-button edit-icon avatar-edit-button avatar-edit-button-outside';
     this.avatarEditButton.setAttribute('aria-label', 'Edit photo');
 
     // Back button
@@ -2657,9 +2694,9 @@ class ContactInfoModal {
       this.openAvatarEdit();
     });
 
-    // Attach edit button to the avatar section (top-right)
-    if (!this.avatarSection.contains(this.avatarEditButton)) {
-      this.avatarSection.appendChild(this.avatarEditButton);
+    // Attach edit button to the avatar div
+    if (!this.avatarDiv.contains(this.avatarEditButton)) {
+      this.avatarDiv.appendChild(this.avatarEditButton);
     }
   }
 
@@ -2669,6 +2706,11 @@ class ContactInfoModal {
 
     // Update the avatar section
     this.avatarDiv.innerHTML = avatarHtml;
+
+    // Re-append the avatar edit button after setting the avatar content
+    if (!this.avatarDiv.contains(this.avatarEditButton)) {
+      this.avatarDiv.appendChild(this.avatarEditButton);
+    }
     this.nameDiv.textContent = displayInfo.name !== 'Not Entered' ? displayInfo.name : displayInfo.username;
     this.subtitleDiv.textContent = displayInfo.address;
 
@@ -5290,6 +5332,7 @@ class AvatarEditModal {
     this.squareSize = 220;
     this.enableTransform = false;
     this.coverOverscan = 16; // extra pixels to ensure circle is always fully covered
+    this.isOwnAvatar = false; // Track if editing own avatar vs contact avatar
   }
 
   load() {
@@ -5383,8 +5426,9 @@ class AvatarEditModal {
     window.addEventListener('touchend', endDrag);
   }
 
-  async open(address) {
+  async open(address, isOwnAvatar = false) {
     this.currentAddress = normalizeAddress(address);
+    this.isOwnAvatar = isOwnAvatar; // Track if editing own avatar vs contact avatar
     this.pendingBlob = null;
     this.activeImageBlob = null;
     this.enableTransform = false;
@@ -5399,6 +5443,7 @@ class AvatarEditModal {
     this.pendingBlob = null;
     this.activeImageBlob = null;
     this.enableTransform = false;
+    this.isOwnAvatar = false;
     this.imageNaturalWidth = 0;
     this.imageNaturalHeight = 0;
     this.offsetX = 0;
@@ -5441,8 +5486,14 @@ class AvatarEditModal {
    */
   async refreshPreview() {
     this.clearPreviewUrl();
-    const contact = myData?.contacts?.[this.currentAddress];
-    const displayInfo = contact ? createDisplayInfo(contact) : { address: this.currentAddress, hasAvatar: false };
+    let displayInfo;
+    if (this.isOwnAvatar) {
+      // For own avatar, use account data
+      displayInfo = { address: this.currentAddress, hasAvatar: myData?.account?.hasAvatar || false };
+    } else {
+      const contact = myData?.contacts?.[this.currentAddress];
+      displayInfo = contact ? createDisplayInfo(contact) : { address: this.currentAddress, hasAvatar: false };
+    }
 
     if (this.pendingBlob) {
       await this.setImageFromBlob(this.pendingBlob, true);
@@ -5488,8 +5539,13 @@ class AvatarEditModal {
     } else {
       // Show Upload/Delete buttons, hide Save/Cancel buttons
       this.uploadButton.style.display = 'inline-flex';
-      const contact = myData?.contacts?.[this.currentAddress];
-      const hasAvatar = !!contact?.hasAvatar;
+      let hasAvatar;
+      if (this.isOwnAvatar) {
+        hasAvatar = !!myData?.account?.hasAvatar;
+      } else {
+        const contact = myData?.contacts?.[this.currentAddress];
+        hasAvatar = !!contact?.hasAvatar;
+      }
       this.deleteButton.style.display = hasAvatar ? 'inline-flex' : 'none';
       this.saveActionButton.style.display = 'none';
       this.cancelButton.style.display = 'none';
@@ -5538,23 +5594,33 @@ class AvatarEditModal {
       return;
     }
 
-    const contact = myData?.contacts?.[this.currentAddress];
-    if (!contact) {
-      this.close();
-      return;
-    }
-
     try {
       // Delete avatar from cache
       await contactAvatarCache.delete(this.currentAddress);
-      contact.hasAvatar = false;
-      saveState();
 
-      // Update UI
-      contactInfoModal.updateContactInfo(createDisplayInfo(contact));
-      contactInfoModal.needsContactListUpdate = true;
-      if (chatModal.isActive() && chatModal.address === this.currentAddress) {
-        chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+      if (this.isOwnAvatar) {
+        // Update own avatar state
+        if (myData?.account) {
+          myData.account.hasAvatar = false;
+          saveState();
+        }
+        // Update My Info modal UI
+        myInfoModal.updateMyInfo();
+      } else {
+        const contact = myData?.contacts?.[this.currentAddress];
+        if (!contact) {
+          this.close();
+          return;
+        }
+        contact.hasAvatar = false;
+        saveState();
+
+        // Update UI
+        contactInfoModal.updateContactInfo(createDisplayInfo(contact));
+        contactInfoModal.needsContactListUpdate = true;
+        if (chatModal.isActive() && chatModal.address === this.currentAddress) {
+          chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+        }
       }
 
       // Update preview in the modal to show identicon
@@ -5758,24 +5824,34 @@ class AvatarEditModal {
       return;
     }
 
-    const contact = myData?.contacts?.[this.currentAddress];
-    if (!contact) {
-      this.close();
-      return;
-    }
-
     try {
       // Need an image source to save
       if (this.pendingBlob || this.activeImageBlob) {
         const sourceBlob = this.pendingBlob || this.activeImageBlob;
         const thumbnail = await this.exportCroppedThumbnail(sourceBlob);
         await contactAvatarCache.save(this.currentAddress, thumbnail);
-        contact.hasAvatar = true;
-        saveState();
-        contactInfoModal.updateContactInfo(createDisplayInfo(contact));
-        contactInfoModal.needsContactListUpdate = true;
-        if (chatModal.isActive() && chatModal.address === this.currentAddress) {
-          chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+
+        if (this.isOwnAvatar) {
+          // Update own avatar state
+          if (myData?.account) {
+            myData.account.hasAvatar = true;
+            saveState();
+          }
+          // Update My Info modal UI
+          myInfoModal.updateMyInfo();
+        } else {
+          const contact = myData?.contacts?.[this.currentAddress];
+          if (!contact) {
+            this.close();
+            return;
+          }
+          contact.hasAvatar = true;
+          saveState();
+          contactInfoModal.updateContactInfo(createDisplayInfo(contact));
+          contactInfoModal.needsContactListUpdate = true;
+          if (chatModal.isActive() && chatModal.address === this.currentAddress) {
+            chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+          }
         }
       }
     } catch (err) {
@@ -20977,10 +21053,10 @@ async function getContactAvatarHtml(contactOrAddress, size = 50) {
     try {
       const blobUrl = await contactAvatarCache.getBlobUrl(address);
       if (blobUrl) {
-        return `<img src="${blobUrl}" class="contact-avatar-img" width="${size}" height="${size}" alt="">`;
+        return `<img src="${blobUrl}" class="contact-avatar-img" width="${size}" height="${size}" alt="avatar">`;
       }
     } catch (err) {
-      console.warn('Failed to load contact avatar, falling back to identicon:', err);
+      console.warn('Failed to load avatar, falling back to identicon:', err);
     }
   }
 
