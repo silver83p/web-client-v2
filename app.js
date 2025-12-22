@@ -345,7 +345,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   helpModal.load();
   farmModal.load();
   logsModal.load();
-  testnetWarningModal.load();
 
   // Create Account Modal
   createAccountModal.load();
@@ -1416,8 +1415,14 @@ class WalletScreen {
 
   open() {
     this.screen.classList.add('active');
-    // Show testnet warning modal if on testnet and not shown this session
-    testnetWarningModal.checkAndShow();
+    // Show testnet warning toast if on testnet and not shown this session
+    if (!this.isMainnet()) {
+      const hasBeenShown = sessionStorage.getItem('testnetWarningShown');
+      if (hasBeenShown !== 'true') {
+        showToast('The LIB in this Testnet is not of any value and will not be transferred to the Mainnet.', 0, 'info');
+        sessionStorage.setItem('testnetWarningShown', 'true');
+      }
+    }
   }
 
   close() {
@@ -9031,52 +9036,6 @@ class HelpModal {
   }
 }
 const helpModal = new HelpModal();
-
-class TestnetWarningModal {
-  constructor() {}
-
-  load() {
-    this.modal = document.getElementById('testnetWarningModal');
-    this.closeButton = document.getElementById('closeTestnetWarningModal');
-    this.closeButton2 = document.getElementById('closeTestnetWarningButton');
-
-    if (this.closeButton) {
-      this.closeButton.addEventListener('click', () => this.close());
-    }
-    if (this.closeButton2) {
-      this.closeButton2.addEventListener('click', () => this.close());
-    }
-  }
-
-  open() {
-    this.modal.classList.add('active');
-    enterFullscreen();
-    // Mark as shown in session storage
-    sessionStorage.setItem('testnetWarningShown', 'true');
-  }
-
-  close() {
-    this.modal.classList.remove('active');
-    enterFullscreen();
-  }
-
-  checkAndShow() {
-    // Check if network is Testnet
-    if (network?.name !== 'Testnet') {
-      return;
-    }
-
-    // Check if modal has been shown this session
-    const hasBeenShown = sessionStorage.getItem('testnetWarningShown');
-    if (hasBeenShown === 'true') {
-      return;
-    }
-
-    // Show the modal
-    this.open();
-  }
-}
-const testnetWarningModal = new TestnetWarningModal();
 
 class FarmModal {
   constructor() {}
