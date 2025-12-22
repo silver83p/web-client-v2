@@ -1415,6 +1415,14 @@ class WalletScreen {
 
   open() {
     this.screen.classList.add('active');
+    // Show testnet warning toast if on testnet and not shown this session
+    if (!this.isMainnet()) {
+      const hasBeenShown = sessionStorage.getItem('testnetWarningShown');
+      if (hasBeenShown !== 'true') {
+        showToast('The LIB in this Testnet is not of any value and will not be transferred to the Mainnet.', 0, 'info');
+        sessionStorage.setItem('testnetWarningShown', 'true');
+      }
+    }
   }
 
   close() {
