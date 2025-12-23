@@ -4301,6 +4301,28 @@ async function processChats(chats, keys) {
           if (payload.senderInfo && !mine){
             contact.senderInfo = cleanSenderInfo(payload.senderInfo)
             delete payload.senderInfo;
+            if (contact.senderInfo.avatarId && contact.senderInfo.avatarKey && contact.avatarId !== contact.senderInfo.avatarId) {
+              downloadAndDecryptAvatar(`https://inv.liberdus.com:2083/get/${contact.senderInfo.avatarId}`, contact.senderInfo.avatarKey)
+                .then(async (blob) => {
+                  try {
+                    await contactAvatarCache.save(contact.address, blob);
+                    contact.avatarId = contact.senderInfo.avatarId;
+                    contact.hasAvatar = true;
+                    saveState();
+                    // Refresh UI immediately: chat modal avatar + messages + chat list
+                    if (chatModal.isActive() && chatModal.address === contact.address) {
+                      chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+                      chatModal.appendChatModal(true);
+                    }
+                    if (typeof chatsScreen !== 'undefined') {
+                      chatsScreen.updateChatList();
+                    }
+                  } catch (e) {
+                    console.warn('Failed to save avatar after download:', e);
+                  }
+                })
+                .catch(err => console.warn('Failed to download avatar:', err));
+            }
             if (contact.username) {
               // if we already have the username, we can use it
               contact.senderInfo.username = contact.username;
@@ -4422,6 +4444,28 @@ async function processChats(chats, keys) {
           if (payload.senderInfo && !mine) {
             contact.senderInfo = cleanSenderInfo(payload.senderInfo);
             delete payload.senderInfo;
+            if (contact.senderInfo.avatarId && contact.senderInfo.avatarKey && contact.avatarId !== contact.senderInfo.avatarId) {
+              downloadAndDecryptAvatar(`https://inv.liberdus.com:2083/get/${contact.senderInfo.avatarId}`, contact.senderInfo.avatarKey)
+                .then(async (blob) => {
+                  try {
+                    await contactAvatarCache.save(contact.address, blob);
+                    contact.avatarId = contact.senderInfo.avatarId;
+                    contact.hasAvatar = true;
+                    saveState();
+                    // Refresh UI immediately: chat modal avatar + messages + chat list
+                    if (chatModal.isActive() && chatModal.address === contact.address) {
+                      chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+                      chatModal.appendChatModal(true);
+                    }
+                    if (typeof chatsScreen !== 'undefined') {
+                      chatsScreen.updateChatList();
+                    }
+                  } catch (e) {
+                    console.warn('Failed to save avatar after download:', e);
+                  }
+                })
+                .catch(err => console.warn('Failed to download avatar:', err));
+            }
             if (contact.username) {
               // if we already have the username, we can use it
               contact.senderInfo.username = contact.username;
@@ -5596,6 +5640,38 @@ class AvatarEditModal {
   }
 
   /**
+   * Attempt to delete an avatar from the attachment server.
+   * Accepts an avatarId and optional secret; for backwards compatibility
+   * the secret may be omitted.
+   * @param {string} id Avatar id
+   * @param {string?} secret Avatar secret
+   */
+  async deleteAvatarFromServer(id, secret) {
+    if (!id) return false;
+    try {
+      const idParam = encodeURIComponent(secret ? `${id}-${secret}` : id);
+      try {
+        const delRes = await fetch(`https://inv.liberdus.com:2083/delete/${idParam}`, { method: 'DELETE' });
+        if (!delRes.ok) {
+          if (delRes.status === 404) {
+            // Missing resource on server -> treat as already-deleted (success)
+            return true;
+          }
+          console.warn('Avatar delete request failed on server:', delRes.status, await delRes.text().catch(() => ''));
+          return false;
+        }
+        return true;
+      } catch (e) {
+        console.warn('Failed to call avatar delete endpoint:', e);
+        return false;
+      }
+    } catch (e) {
+      console.warn('Error while attempting avatar server delete:', e);
+      return false;
+    }
+  }
+
+  /**
    * Delete the current avatar immediately and save.
    */
   async handleDelete() {
@@ -5605,14 +5681,30 @@ class AvatarEditModal {
     }
 
     try {
-      // Delete avatar from cache
-      await contactAvatarCache.delete(this.currentAddress);
-
       if (this.isOwnAvatar) {
         // Update own avatar state
         if (myData?.account) {
-          myData.account.hasAvatar = false;
-          saveState();
+          // Attempt to delete avatar on attachment server if we have id (secret optional)
+          let deletedOnServer = true;
+          try {
+            const aid = myData.account.avatarId;
+            const secret = myData.account.avatarSecret;
+            if (aid) deletedOnServer = await this.deleteAvatarFromServer(aid, secret);
+          } catch (e) {
+            console.warn('Error while attempting avatar server delete:', e);
+            deletedOnServer = false;
+          }
+
+          if (deletedOnServer) {
+            await contactAvatarCache.delete(this.currentAddress);
+            myData.account.hasAvatar = false;
+            delete myData.account.avatarId;
+            delete myData.account.avatarKey;
+            delete myData.account.avatarSecret;
+            saveState();
+          } else {
+            showToast('Failed to delete avatar', 3000, 'error');
+          }
         }
         // Update My Info modal UI
         myInfoModal.updateMyInfo();
@@ -5623,6 +5715,8 @@ class AvatarEditModal {
           return;
         }
         contact.hasAvatar = false;
+        delete contact.avatarId;
+        await contactAvatarCache.delete(this.currentAddress);
         saveState();
 
         // Update UI
@@ -5839,14 +5933,54 @@ class AvatarEditModal {
       if (this.pendingBlob || this.activeImageBlob) {
         const sourceBlob = this.pendingBlob || this.activeImageBlob;
         const thumbnail = await this.exportCroppedThumbnail(sourceBlob);
-        await contactAvatarCache.save(this.currentAddress, thumbnail);
 
         if (this.isOwnAvatar) {
-          // Update own avatar state
-          if (myData?.account) {
-            myData.account.hasAvatar = true;
-            saveState();
+          // If we already have an avatar on the server, try to delete it first
+          let deletedOld = true;
+          try {
+            const oldId = myData?.account?.avatarId;
+            const oldSecret = myData?.account?.avatarSecret;
+            if (oldId) deletedOld = await this.deleteAvatarFromServer(oldId, oldSecret);
+          } catch (e) {
+            console.warn('Failed to delete existing avatar before upload:', e);
+            deletedOld = false;
           }
+
+          if (!deletedOld) {
+            showToast('Upload failed: could not delete existing avatar from server', 3000, 'error');
+            return;
+          }
+
+          // Generate random key and secret, encrypt thumbnail
+          const avatarKey = generateRandomBytes(32);
+          const secret = bin2hex(generateRandomBytes(16));
+          const encryptedBlob = await encryptBlob(thumbnail, avatarKey);
+
+          // Upload encrypted blob to attachment server
+          const formData = new FormData();
+          formData.append('file', encryptedBlob);
+          formData.append('secret', secret);
+          const response = await fetch('https://inv.liberdus.com:2083/post', {
+            method: 'POST',
+            body: formData
+          });
+          if (!response.ok) {
+            showToast('Failed to upload avatar', 3000, 'error');
+            return;
+          }
+          const result = await response.json();
+          const avatarId = result.id;
+
+          // Save thumbnail to cache now that server operations succeeded
+          await contactAvatarCache.save(this.currentAddress, thumbnail);
+
+          // Save id, key and secret in account
+          myData.account.avatarId = avatarId;
+          myData.account.avatarKey = bin2base64(avatarKey);
+          myData.account.avatarSecret = secret;
+          myData.account.hasAvatar = true;
+          saveState();
+
           // Update My Info modal UI
           myInfoModal.updateMyInfo();
         } else {
@@ -5856,6 +5990,8 @@ class AvatarEditModal {
             return;
           }
           contact.hasAvatar = true;
+          delete contact.avatarId;
+          await contactAvatarCache.save(this.currentAddress, thumbnail);
           saveState();
           contactInfoModal.updateContactInfo(createDisplayInfo(contact));
           contactInfoModal.needsContactListUpdate = true;
@@ -11180,6 +11316,11 @@ class ChatModal {
         senderInfo.phone = myData.account.phone;
         senderInfo.linkedin = myData.account.linkedin;
         senderInfo.x = myData.account.x;
+        // Add avatar info if available
+        if (myData.account.avatarId && myData.account.avatarKey) {
+          senderInfo.avatarId = myData.account.avatarId;
+          senderInfo.avatarKey = myData.account.avatarKey;
+        }
       }
 
       // Always encrypt and send senderInfo (which will contain at least the username)
@@ -13717,6 +13858,11 @@ console.warn('in send message', txid)
         senderInfo.phone = myData.account.phone;
         senderInfo.linkedin = myData.account.linkedin;
         senderInfo.x = myData.account.x;
+        // Add avatar info if available
+        if (myData.account.avatarId && myData.account.avatarKey) {
+          senderInfo.avatarId = myData.account.avatarId;
+          senderInfo.avatarKey = myData.account.avatarKey;
+        }
       }
 
       // Always encrypt and send senderInfo
@@ -13847,6 +13993,11 @@ console.warn('in send message', txid)
       senderInfo.phone = myData.account.phone;
       senderInfo.linkedin = myData.account.linkedin;
       senderInfo.x = myData.account.x;
+      // Add avatar info if available
+        if (myData.account.avatarId && myData.account.avatarKey) {
+          senderInfo.avatarId = myData.account.avatarId;
+          senderInfo.avatarKey = myData.account.avatarKey;
+        }
     }
 
     payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
@@ -19946,6 +20097,12 @@ function cleanSenderInfo(si) {
   if (si.x) {
     csi.x = normalizeXTwitterUsername(si.x)
   }
+  if (si.avatarId) {
+    csi.avatarId = si.avatarId
+  }
+  if (si.avatarKey) {
+    csi.avatarKey = si.avatarKey
+  }
   return csi;
 }
 
@@ -21079,6 +21236,62 @@ async function getContactAvatarHtml(contactOrAddress, size = 50) {
   }
 
   return generateIdenticon('', size);
+}
+
+/**
+ * Encrypt a blob using ChaCha20-Poly1305 via Web Worker
+ * @param {Blob} blob - The blob to encrypt
+ * @param {Uint8Array} key - The encryption key
+ * @returns {Promise<Blob>} The encrypted blob
+ */
+async function encryptBlob(blob, key) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker('encryption.worker.js', { type: 'module' });
+    worker.postMessage({ action: 'encryptBlob', blob, key });
+    worker.onmessage = (e) => {
+      if (e.data.error) {
+        reject(new Error(e.data.error));
+      } else {
+        resolve(e.data.blob);
+      }
+      worker.terminate();
+    };
+    worker.onerror = (error) => {
+      reject(error);
+      worker.terminate();
+    };
+  });
+}
+
+/**
+ * Download and decrypt an avatar from the attachment server
+ * @param {string} url - The download URL
+ * @param {string} key - The decryption key (base64)
+ * @returns {Promise<Blob>} The decrypted avatar blob
+ */
+async function downloadAndDecryptAvatar(url, key) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download avatar: ${response.status}`);
+    }
+    // Download bytes, convert to base64 (encryptChacha/ decryptChacha use base64 strings)
+    const cipherBin = new Uint8Array(await response.arrayBuffer());
+    const cipherB64 = bin2base64(cipherBin);
+
+    // key is stored as base64 in account; convert to binary key for decryptChacha
+    const keyBin = base642bin(key);
+
+    // decryptChacha expects (keyUint8Array, cipherBase64) and returns plaintext base64
+    const plainB64 = decryptChacha(keyBin, cipherB64);
+    if (!plainB64) throw new Error('decryptChacha returned null');
+
+    const clearBin = base642bin(plainB64);
+    return new Blob([clearBin], { type: 'image/jpeg' });
+  } catch (error) {
+    console.warn('Error downloading/decrypting avatar:', error);
+    throw error;
+  }
 }
 
 function getStabilityFactor() {
