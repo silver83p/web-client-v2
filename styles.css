@@ -2255,8 +2255,7 @@ input[type='file'].form-control {
   min-height: auto;
 }
 
-#displayAddress,
-#secretHexDisplay {
+#displayAddress {
   background-color: var(--light-color) !important;
   font-family: monospace;
   font-size: 0.8rem !important;
@@ -2270,6 +2269,16 @@ input[type='file'].form-control {
   white-space: normal;
   border: 1px solid var(--border-color);
   border-radius: 12px;
+}
+
+#secretHexDisplay {
+  flex: 1;
+  font-size: 0.875rem;
+  padding: 8px 12px;
+  word-break: break-all;
+  line-height: 1.4;
+  background-color: #f8f9fa;
+  cursor: default;
 }
 
 /* Reduce bottom margin for the form-group containing the address */
@@ -2290,9 +2299,18 @@ input[type='file'].form-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Adjust vertical position for better centering */
+}
+
+/* Adjust vertical position for better centering */
+#copyAddress {
   position: relative;
   top: -5px;
+}
+
+#copySecretButton {
+  color: #007bff;
+  margin-top: 4px;
+  flex-shrink: 0;
 }
 
 #copyAddress::before,
@@ -2334,6 +2352,24 @@ input[type='file'].form-control {
 #copyAddress.success::before,
 #copySecretButton.success::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* Secret Modal Styles */
+#secretModal .form-group p {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+#secretContent {
+  display: none;
+}
+
+#secretContent .form-group > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 /* QR code container */
