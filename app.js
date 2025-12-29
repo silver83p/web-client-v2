@@ -6379,10 +6379,12 @@ function markConnectivityDependentElements() {
 
     // Wallet related
     '#refreshBalance',
+    '#openFaucetBridgeButton',
     '#sendForm button[type="submit"]',
 
     // Send asset related
     '#sendAssetForm button[type="submit"]',
+    '#sendToAddress',
     '#toggleBalance',
 
     // Add friend related
@@ -6397,10 +6399,14 @@ function markConnectivityDependentElements() {
     // Profile related
     '#createAccountForm button[type="submit"]',
     '#importForm button[type="submit"]',
+    '#newUsername',
+    '#newPrivateKey',
+    '#migrateAccountsButton',
 
     // stakeModal
     '#submitStake',
     '#faucetButton',
+    '#stakeNodeAddress',
 
     // tollModal
     '#saveNewTollButton',
