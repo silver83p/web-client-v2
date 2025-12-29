@@ -3,7 +3,9 @@
 const version = 't'; // Also increment this when you increment version.html
 let myVersion = '0';
 async function checkVersion() {
-  myVersion = localStorage.getItem('version') || '0';
+  // Use network-specific version key to avoid false update alerts when switching networks
+  const versionKey = network?.netid ? `version_${network.netid}` : 'version';
+  myVersion = localStorage.getItem(versionKey) || '0';
   let newVersion;
   try {
     const response = await fetch(`version.html`, {cache: 'reload', headers: {
@@ -27,7 +29,7 @@ async function checkVersion() {
   console.log(parseInt(myVersion.replace(/\D/g, '')), parseInt(newVersion.replace(/\D/g, '')));
   if (parseInt(myVersion.replace(/\D/g, '')) != parseInt(newVersion.replace(/\D/g, ''))) {
     alert('Updating to new version: ' + newVersion + ' ' + version);
-    localStorage.setItem('version', newVersion); // Save new version
+    localStorage.setItem(versionKey, newVersion); // Save new version with network-specific key
     const newUrl = window.location.href.split('?')[0];
 
     logsModal.log(`Updated to version: ${newVersion}`)
