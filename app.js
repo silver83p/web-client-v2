@@ -2658,8 +2658,13 @@ class MyInfoModal {
     if (!myAccount) return;
 
     // Use getContactAvatarHtml for consistent avatar rendering
+    // Include account avatar fields so user preference (`useAvatar`) is respected
     const avatarHtml = await getContactAvatarHtml(
-      { address: myAccount.keys.address, hasAvatar: myData?.account?.hasAvatar },
+      {
+        address: myAccount.keys.address,
+        hasAvatar: myData?.account?.hasAvatar,
+        avatarId: myData?.account?.avatarId,
+      },
       96
     );
     this.avatarDiv.innerHTML = avatarHtml;
@@ -4453,9 +4458,14 @@ async function processChats(chats, keys) {
               downloadAndDecryptAvatar(`https://inv.liberdus.com:2083/get/${contact.senderInfo.avatarId}`, contact.senderInfo.avatarKey)
                 .then(async (blob) => {
                   try {
-                    await contactAvatarCache.save(contact.address, blob);
+                    // Save blob under the server-provided avatar id
+                    await contactAvatarCache.save(contact.senderInfo.avatarId, blob);
                     contact.avatarId = contact.senderInfo.avatarId;
                     contact.hasAvatar = true;
+                    // If contact provided a new avatar, prefer their sent avatar
+                    myData.contacts ??= {};
+                    myData.contacts[contact.address] ??= { address: contact.address };
+                    myData.contacts[contact.address].useAvatar = 'contact';
                     saveState();
                     // Refresh UI immediately: chat modal avatar + messages + chat list
                     if (chatModal.isActive() && chatModal.address === contact.address) {
@@ -4596,9 +4606,13 @@ async function processChats(chats, keys) {
               downloadAndDecryptAvatar(`https://inv.liberdus.com:2083/get/${contact.senderInfo.avatarId}`, contact.senderInfo.avatarKey)
                 .then(async (blob) => {
                   try {
-                    await contactAvatarCache.save(contact.address, blob);
+                    await contactAvatarCache.save(contact.senderInfo.avatarId, blob);
                     contact.avatarId = contact.senderInfo.avatarId;
                     contact.hasAvatar = true;
+                    // If contact provided a new avatar, prefer their sent avatar
+                    myData.contacts ??= {};
+                    myData.contacts[contact.address] ??= { address: contact.address };
+                    myData.contacts[contact.address].useAvatar = 'contact';
                     saveState();
                     // Refresh UI immediately: chat modal avatar + messages + chat list
                     if (chatModal.isActive() && chatModal.address === contact.address) {
@@ -5494,6 +5508,9 @@ function createDisplayInfo(contact) {
     x: contact.senderInfo?.x || 'Not provided',
     address: contact.address,
     hasAvatar: !!contact.hasAvatar,
+    avatarId: contact.avatarId,
+    mineAvatarId: contact.mineAvatarId,
+    useAvatar: contact.useAvatar,
   };
 }
 
@@ -5535,6 +5552,19 @@ class AvatarEditModal {
     this.enableTransform = false;
     this.coverOverscan = 16; // extra pixels to ensure circle is always fully covered
     this.isOwnAvatar = false; // Track if editing own avatar vs contact avatar
+    this._avatarEditSelected = null; // 'contact' | 'mine' | 'identicon'
+    // Cached DOM refs for avatar options
+    this.avatarOptionsContainer = null;
+    this.avatarOptionsActions = null;
+    this.avatarThumbContact = null;
+    this.avatarThumbUploaded = null;
+    this.avatarThumbIdenticon = null;
+    this.avatarOptionContact = null;
+    this.avatarOptionUploaded = null;
+    this.avatarOptionIdenticon = null;
+    this.avatarUseButton = null;
+    // Track object URLs created for option thumbnails so we can revoke them
+    this._optionBlobUrls = [];
   }
 
   load() {
@@ -5549,6 +5579,15 @@ class AvatarEditModal {
     this.previewSquare = document.getElementById('avatarEditSquare');
     this.zoomRange = document.getElementById('avatarZoomRange');
     this.zoomControls = document.querySelector('.avatar-edit-controls');
+    this.avatarOptionsContainer = document.getElementById('avatarOptionsContainer');
+    this.avatarOptionsActions = document.getElementById('avatarOptionsActions');
+    this.avatarThumbContact = document.getElementById('avatarThumbContact');
+    this.avatarThumbUploaded = document.getElementById('avatarThumbUploaded');
+    this.avatarThumbIdenticon = document.getElementById('avatarThumbIdenticon');
+    this.avatarOptionContact = document.getElementById('avatarOptionContact');
+    this.avatarOptionUploaded = document.getElementById('avatarOptionUploaded');
+    this.avatarOptionIdenticon = document.getElementById('avatarOptionIdenticon');
+    this.avatarUseButton = document.getElementById('avatarUseButton');
 
     if (!this.modal || !this.backButton || !this.uploadButton || !this.deleteButton || !this.saveActionButton || !this.cancelButton || !this.fileInput || !this.previewContainer || !this.previewSquare || !this.zoomRange) {
       console.warn('AvatarEditModal elements not found');
@@ -5635,6 +5674,8 @@ class AvatarEditModal {
     this.activeImageBlob = null;
     this.enableTransform = false;
     await this.refreshPreview();
+    // populate three-option avatar selector (contact, mine, identicon)
+    try { await this.populateOptions(); } catch (e) { console.warn('populateOptions failed', e); }
     this.modal.classList.add('active');
     enterFullscreen();
   }
@@ -5652,7 +5693,223 @@ class AvatarEditModal {
     this.offsetY = 0;
     this.dragging = false;
     this.fileInput.value = '';
+    // hide avatar options UI if present
+    try {
+      const container = document.getElementById('avatarOptionsContainer');
+      const actions = document.getElementById('avatarOptionsActions');
+      if (container) container.style.display = 'none';
+      if (actions) actions.style.display = 'none';
+      this._avatarEditSelected = null;
+      const [o1,o2,o3] = [
+        document.getElementById('avatarOptionContact'),
+        document.getElementById('avatarOptionUploaded'),
+        document.getElementById('avatarOptionIdenticon')
+      ];
+      [o1,o2,o3].forEach(o => { if (o) o.style.outline = 'none'; });
+      const useBtn = document.getElementById('avatarUseButton');
+      if (useBtn) useBtn.disabled = true;
+      // Revoke any object URLs created for option thumbnails
+      if (this._optionBlobUrls && this._optionBlobUrls.length) {
+        for (const u of this._optionBlobUrls) {
+          try { URL.revokeObjectURL(u); } catch (e) {}
+        }
+        this._optionBlobUrls = [];
+      }
+    } catch (e) {}
     enterFullscreen();
+  }
+
+  /**
+   * Populate the avatar selection options (contact, mine, identicon)
+   * and wire handlers to persist `useAvatar` for the contact.
+   */
+  async populateOptions() {
+    const address = this.currentAddress;
+    const contactThumb = this.avatarThumbContact;
+    const uploadedThumb = this.avatarThumbUploaded;
+    const identiconThumb = this.avatarThumbIdenticon;
+    const container = this.avatarOptionsContainer;
+    const actions = this.avatarOptionsActions;
+    const useBtn = this.avatarUseButton;
+
+    if (!contactThumb || !uploadedThumb || !identiconThumb || !container || !actions || !useBtn) return;
+
+    // clear previous
+    contactThumb.innerHTML = '';
+    uploadedThumb.innerHTML = '';
+    identiconThumb.innerHTML = '';
+    this._avatarEditSelected = null;
+    useBtn.disabled = true;
+
+    // Revoke any previously-created option object URLs to avoid showing stale
+    // thumbnails after deletes and to avoid leaking object URLs.
+    if (this._optionBlobUrls && this._optionBlobUrls.length) {
+      for (const u of this._optionBlobUrls) {
+        try { URL.revokeObjectURL(u); } catch (e) {}
+      }
+      this._optionBlobUrls = [];
+    }
+
+    // fetch blobs (may be null). Use `get()` (blob) rather than cached blob URLs
+    // so we can detect actual existence after deletes.
+    let contactBlob = null;
+    let userBlob = null;
+    if (this.isOwnAvatar) {
+      // When editing own avatar we do not show preference options —
+      // only allow upload/delete. Hide options UI and show delete/upload as appropriate.
+      container.style.display = 'none';
+      actions.style.display = 'none';
+      // Clear any stale option handlers and disable use button since options are hidden.
+      try { useBtn.onclick = null; } catch (e) {}
+      useBtn.disabled = true;
+      this.deleteButton.style.display = myData?.account?.hasAvatar ? 'inline-flex' : 'none';
+      // Early return: remaining option population is contact-specific and not needed for own avatar.
+      return;
+    } else {
+      const contactObj = myData?.contacts?.[address] || null;
+      try { contactBlob = contactObj?.avatarId ? await contactAvatarCache.get(contactObj.avatarId) : null; } catch (e) { contactBlob = null; }
+      try { userBlob = contactObj?.mineAvatarId ? await contactAvatarCache.get(contactObj.mineAvatarId) : null; } catch (e) { userBlob = null; }
+    }
+
+    const contactUrl = contactBlob ? URL.createObjectURL(contactBlob) : null;
+    const userUrl = userBlob ? URL.createObjectURL(userBlob) : null;
+    if (contactUrl) this._optionBlobUrls.push(contactUrl);
+    if (userUrl) this._optionBlobUrls.push(userUrl);
+
+    // If there are no uploaded avatars for this contact (neither contact-sent nor user's uploaded),
+    // do not show the avatar options UI at all. For own-avatar editing we hide the options when
+    // there is no account avatar available.
+    if (!contactUrl && !userUrl) {
+      if (container) container.style.display = 'none';
+      if (actions) actions.style.display = 'none';
+      // ensure use button disabled
+      if (useBtn) useBtn.disabled = true;
+      // hide delete button as there's nothing for the user to delete
+      if (this.deleteButton) this.deleteButton.style.display = 'none';
+      return;
+    }
+
+    if (contactUrl) {
+      contactThumb.innerHTML = `<img src="${contactUrl}" width="64" height="64" style="border-radius:50%">`;
+    } else {
+      contactThumb.innerHTML = '';
+    }
+
+    if (userUrl) {
+      uploadedThumb.innerHTML = `<img src="${userUrl}" width="64" height="64" style="border-radius:50%">`;
+    } else {
+      uploadedThumb.innerHTML = '';
+    }
+
+    identiconThumb.innerHTML = generateIdenticon(address, 64);
+
+    // hide option entries that don't have an image (don't show empty options)
+    if (this.avatarOptionContact) this.avatarOptionContact.style.display = contactUrl ? '' : 'none';
+    if (this.avatarOptionUploaded) this.avatarOptionUploaded.style.display = userUrl ? '' : 'none';
+    if (this.avatarOptionIdenticon) this.avatarOptionIdenticon.style.display = identiconThumb ? '' : 'none';
+
+    // show container and actions
+    container.style.display = 'block';
+    actions.style.display = 'block';
+
+    // Show Delete button only when appropriate:
+    // - If editing own avatar: show when account hasAvatar
+    // - If editing a contact: show when the user's uploaded ('mine') avatar exists
+    try {
+      if (this.deleteButton) {
+        this.deleteButton.style.display = userUrl ? 'inline-flex' : 'none';
+      }
+    } catch (e) {}
+
+    // Ensure any avatar images inside this modal's header/controls show the user's uploaded
+    // avatar (`mine`) or the identicon — never the contact-sent avatar. This prevents the
+    // edit-icon area from displaying the contact avatar when editing.
+    try {
+      const headerImgs = this.modal.querySelectorAll('.contact-avatar-img');
+      if (headerImgs && headerImgs.length) {
+        for (const imgEl of headerImgs) {
+          if (userUrl) {
+            imgEl.src = userUrl;
+          } else {
+            // Replace the <img> with the identicon SVG
+            const sizeAttr = parseInt(imgEl.getAttribute('width')) || 40;
+            const wrapper = document.createElement('span');
+            wrapper.innerHTML = generateIdenticon(address, sizeAttr);
+            imgEl.replaceWith(wrapper.firstChild);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to update modal header avatar images:', e);
+    }
+
+    // attach click handlers (re-attach to ensure latest)
+
+    const selectOption = (type, el) => {
+      this._avatarEditSelected = type;
+      useBtn.disabled = false;
+      [this.avatarOptionContact, this.avatarOptionUploaded, this.avatarOptionIdenticon].forEach(o => { if (o) o.style.outline = 'none'; });
+      if (el) el.style.outline = '3px solid #007acc';
+    };
+
+    // Pre-select the current useAvatar preference if set (only if that option is visible).
+    // For contacts, prefer stored per-contact preference; default to identicon.
+    const currentPref = myData?.contacts?.[address]?.useAvatar ?? null;
+    const effectivePref = currentPref ?? 'identicon';
+
+    if (effectivePref) {
+      if (effectivePref === 'contact' && this.avatarOptionContact && this.avatarOptionContact.style.display !== 'none') selectOption('contact', this.avatarOptionContact);
+      else if (effectivePref === 'mine' && this.avatarOptionUploaded && this.avatarOptionUploaded.style.display !== 'none') selectOption('mine', this.avatarOptionUploaded);
+      else if (effectivePref === 'identicon' && this.avatarOptionIdenticon && this.avatarOptionIdenticon.style.display !== 'none') selectOption('identicon', this.avatarOptionIdenticon);
+    }
+    if (this.avatarOptionContact) this.avatarOptionContact.onclick = () => selectOption('contact', this.avatarOptionContact);
+    if (this.avatarOptionUploaded) this.avatarOptionUploaded.onclick = () => selectOption('mine', this.avatarOptionUploaded);
+    if (this.avatarOptionIdenticon) this.avatarOptionIdenticon.onclick = () => selectOption('identicon', this.avatarOptionIdenticon);
+
+    useBtn.onclick = async () => {
+      if (!this._avatarEditSelected || !address) return;
+      if (this.isOwnAvatar) {
+        // Own-avatar options are not shown; do not persist an account-level preference.
+        // Just refresh the My Info UI in case nothing changed.
+        try {
+          if (myInfoModal && typeof myInfoModal.updateMyInfo === 'function') {
+            myInfoModal.updateMyInfo();
+          }
+        } catch (e) {
+          console.warn('Failed to refresh My Info UI after avatar option selection (own avatar):', e);
+        }
+      } else {
+        // persist preference on contact
+        myData.contacts ??= {};
+        myData.contacts[address] ??= { address };
+        myData.contacts[address].useAvatar = this._avatarEditSelected;
+        saveState();
+        // Update UI where appropriate so the change is visible immediately
+        try {
+          const contact = myData.contacts[address];
+          if (contactInfoModal && typeof contactInfoModal.updateContactInfo === 'function') {
+            contactInfoModal.updateContactInfo(createDisplayInfo(contact));
+            contactInfoModal.needsContactListUpdate = true;
+          }
+          if (chatModal && chatModal.isActive && chatModal.isActive() && chatModal.address === address) {
+            chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
+          }
+        } catch (e) {
+          console.warn('Failed to refresh avatar UI after selecting useAvatar:', e);
+        }
+      }
+      // Close modal
+      this.close();
+    };
+
+    // wire close button to hide our controls when closed
+    const closeBtn = document.getElementById('closeAvatarEditModal');
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        if (container) container.style.display = 'none';
+        if (actions) actions.style.display = 'none';
+      };
+    }
   }
 
   /**
@@ -5702,10 +5959,35 @@ class AvatarEditModal {
       return;
     }
 
-    // Try to get avatar blob from cache
+    // For contact avatar editing: show only the user's uploaded avatar ('mine') if present,
+    // otherwise fall back to identicon. We intentionally ignore the contact-sent avatar here.
+    if (!this.isOwnAvatar) {
+      try {
+        const contactObj = myData?.contacts?.[this.currentAddress] || null;
+        const mineBlob = contactObj?.mineAvatarId ? await contactAvatarCache.get(contactObj.mineAvatarId) : null;
+        if (mineBlob) {
+          await this.setImageFromBlob(mineBlob, false);
+          return;
+        }
+      } catch (e) {
+        // ignore and fall through to identicon
+      }
+
+      // No user-uploaded avatar -> show identicon (never show contact avatar here)
+      const avatarHtml = generateIdenticon(this.currentAddress, 218);
+      this.previewContainer.innerHTML = avatarHtml;
+      this.enableTransform = false;
+      this.updateZoomUI();
+      if (this.previewBg) this.previewBg.style.display = 'none';
+      if (this.foregroundImg) this.foregroundImg.style.display = 'none';
+      this.updateButtonVisibility();
+      return;
+    }
+
+    // For own avatar, keep existing behavior (account-based)
     let avatarBlob = null;
     try {
-      avatarBlob = await contactAvatarCache.get(this.currentAddress);
+      avatarBlob = await contactAvatarCache.get(myData?.account?.avatarId);
     } catch (e) {
       avatarBlob = null;
     }
@@ -5715,7 +5997,7 @@ class AvatarEditModal {
       return;
     }
 
-    // Fallback to identicon if no avatar blob
+    // Fallback to identicon if no avatar blob for own avatar
     const avatarHtml = await getContactAvatarHtml(displayInfo, 218);
     this.previewContainer.innerHTML = avatarHtml;
     this.enableTransform = false;
@@ -5739,16 +6021,14 @@ class AvatarEditModal {
       this.saveActionButton.style.display = 'inline-flex';
       this.cancelButton.style.display = 'inline-flex';
     } else {
-      // Show Upload/Delete buttons, hide Save/Cancel buttons
+      // Show Upload button and Save/Cancel hidden. Delete visibility for contacts is
+      // controlled by `populateOptions()` (which has async knowledge of cache). Only
+      // set Delete visibility here for own-avatar context.
       this.uploadButton.style.display = 'inline-flex';
-      let hasAvatar;
       if (this.isOwnAvatar) {
-        hasAvatar = !!myData?.account?.hasAvatar;
-      } else {
-        const contact = myData?.contacts?.[this.currentAddress];
-        hasAvatar = !!contact?.hasAvatar;
+        const hasAvatar = !!myData?.account?.hasAvatar;
+        this.deleteButton.style.display = hasAvatar ? 'inline-flex' : 'none';
       }
-      this.deleteButton.style.display = hasAvatar ? 'inline-flex' : 'none';
       this.saveActionButton.style.display = 'none';
       this.cancelButton.style.display = 'none';
     }
@@ -5844,7 +6124,8 @@ class AvatarEditModal {
           }
 
           if (deletedOnServer) {
-            await contactAvatarCache.delete(this.currentAddress);
+            // delete account avatar by id
+            await contactAvatarCache.delete(myData?.account?.avatarId);
             myData.account.hasAvatar = false;
             delete myData.account.avatarId;
             delete myData.account.avatarKey;
@@ -5862,17 +6143,56 @@ class AvatarEditModal {
           this.close();
           return;
         }
-        contact.hasAvatar = false;
-        delete contact.avatarId;
-        await contactAvatarCache.delete(this.currentAddress);
-        saveState();
 
-        // Update UI
+        // Delete only the user's uploaded avatar slot ('mine'). Do not remove contact-sent avatar.
+        if (contact.mineAvatarId) {
+          await contactAvatarCache.delete(contact.mineAvatarId);
+          delete contact.mineAvatarId;
+        }
+
+        // Check whether a contact-sent avatar still exists
+        let contactExists = false;
+        try {
+          const contactBlob = contact.avatarId ? await contactAvatarCache.get(contact.avatarId) : null;
+          contactExists = !!contactBlob;
+        } catch (e) {
+          contactExists = false;
+        }
+
+        // Update contact.hasAvatar to reflect any remaining avatar
+        contact.hasAvatar = contactExists;
+
+        // Set per-contact preference only if the user previously preferred their uploaded avatar.
+        // If the current preference is not 'mine', leave it unchanged.
+        myData.contacts ??= {};
+        myData.contacts[this.currentAddress] ??= { address: this.currentAddress };
+        const currentPref = myData.contacts[this.currentAddress].useAvatar ?? null;
+        if (currentPref === 'mine') {
+          myData.contacts[this.currentAddress].useAvatar = contactExists ? 'contact' : 'identicon';
+          saveState();
+        }
+
+        // Update UI so contact info reflects deletion
         contactInfoModal.updateContactInfo(createDisplayInfo(contact));
         contactInfoModal.needsContactListUpdate = true;
         if (chatModal.isActive() && chatModal.address === this.currentAddress) {
           chatModal.modalAvatar.innerHTML = await getContactAvatarHtml(contact, 40);
         }
+      }
+
+      // Revoke any option thumbnails in this modal to avoid showing stale URLs
+      if (this._optionBlobUrls && this._optionBlobUrls.length) {
+        for (const u of this._optionBlobUrls) {
+          try { URL.revokeObjectURL(u); } catch (e) {}
+        }
+        this._optionBlobUrls = [];
+      }
+
+      // Refresh the option list once so the modal immediately reflects the deletion
+      try {
+        await this.populateOptions();
+      } catch (e) {
+        console.warn('Failed to repopulate avatar options after delete:', e);
       }
 
       // Update preview in the modal to show identicon
@@ -6119,8 +6439,8 @@ class AvatarEditModal {
           const result = await response.json();
           const avatarId = result.id;
 
-          // Save thumbnail to cache now that server operations succeeded
-          await contactAvatarCache.save(this.currentAddress, thumbnail);
+          // Save thumbnail to cache now that server operations succeeded (keyed by avatarId)
+          await contactAvatarCache.save(avatarId, thumbnail);
 
           // Save id, key and secret in account
           myData.account.avatarId = avatarId;
@@ -6138,8 +6458,14 @@ class AvatarEditModal {
             return;
           }
           contact.hasAvatar = true;
-          delete contact.avatarId;
-          await contactAvatarCache.save(this.currentAddress, thumbnail);
+          // Save user's uploaded avatar under a generated id and reference it on the contact
+          const mineId = bin2hex(generateRandomBytes(16));
+          await contactAvatarCache.save(mineId, thumbnail);
+          contact.mineAvatarId = mineId;
+          // Prefer the user's uploaded avatar for this contact
+          myData.contacts ??= {};
+          myData.contacts[this.currentAddress] ??= { address: this.currentAddress };
+          myData.contacts[this.currentAddress].useAvatar = 'mine';
           saveState();
           contactInfoModal.updateContactInfo(createDisplayInfo(contact));
           contactInfoModal.needsContactListUpdate = true;
@@ -7262,7 +7588,7 @@ class BackupAccountModal {
    *          Resolves with token data on success; rejects with Error on cancel/deny/timeout/error.
    */
   async startGoogleDriveAuth() {
-    const sessionId = crypto.randomUUID();
+    const sessionId = bin2hex(generateRandomBytes(16));
     const url = this.buildOAuthServerUrl(sessionId);
     const isReactNative = reactNativeApp.isReactNativeWebView;
     
@@ -21262,7 +21588,8 @@ class ContactAvatarCache {
   constructor() {
     this.dbName = 'liberdus_contact_avatars';
     this.storeName = 'avatars';
-    this.dbVersion = 1;
+    // Bump version to force onupgradeneeded for existing installations
+    this.dbVersion = 2;
     this.db = null;
     this.blobUrlCache = new Map();
   }
@@ -21300,10 +21627,18 @@ class ContactAvatarCache {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
-        if (!db.objectStoreNames.contains(this.storeName)) {
-          const store = db.createObjectStore(this.storeName, { keyPath: 'address' });
-          store.createIndex('savedAt', 'savedAt', { unique: false });
+        // If an old store exists (keyPath=address) remove it and recreate under 'id'.
+        if (db.objectStoreNames.contains(this.storeName)) {
+          try {
+            db.deleteObjectStore(this.storeName);
+            console.log('Deleted old avatars object store to recreate with id keyPath');
+          } catch (e) {
+            console.warn('Failed to delete existing avatars object store during upgrade:', e);
+          }
         }
+        // Use avatar id as the primary key for one-image-per-id storage
+        const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
+        store.createIndex('savedAt', 'savedAt', { unique: false });
       };
     });
   }
@@ -21360,131 +21695,116 @@ class ContactAvatarCache {
   }
 
   /**
-   * Save a contact avatar to IndexedDB
-   * @param {string} address - The contact's address (used as key)
-   * @param {Blob} avatarBlob - The avatar blob to store
+   * Save an avatar blob to the avatars store keyed by avatar id.
+   * @param {string} id - Avatar id (server-provided or locally-generated)
+   * @param {Blob} avatarBlob - The avatar image blob to store
    * @returns {Promise<void>}
    */
-  async save(address, avatarBlob) {
-    if (!this.db) {
-      await this.init();
-    }
+  async save(id, avatarBlob) {
+    if (!id) throw new Error('avatar id required');
+    if (!this.db) await this.init();
 
-    if (this.blobUrlCache.has(address)) {
-      URL.revokeObjectURL(this.blobUrlCache.get(address));
-      this.blobUrlCache.delete(address);
+    // Revoke any cached object URL for this id
+    if (this.blobUrlCache.has(id)) {
+      try { URL.revokeObjectURL(this.blobUrlCache.get(id)); } catch (e) {}
+      this.blobUrlCache.delete(id);
     }
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction([this.storeName], 'readwrite');
       const store = tx.objectStore(this.storeName);
 
-      const data = {
-        address,
-        avatar: avatarBlob,
+      const record = {
+        id,
+        blob: avatarBlob,
+        type: avatarBlob?.type || 'image/jpeg',
+        size: avatarBlob?.size || 0,
+        savedAt: Date.now(),
       };
 
-      const request = store.put(data);
-
-      request.onsuccess = () => {
-        resolve();
-      };
-
-      request.onerror = () => {
-        console.warn('Failed to save contact avatar:', request.error);
-        reject(request.error);
+      const putReq = store.put(record);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => {
+        console.warn('Failed to save avatar blob:', putReq.error);
+        reject(putReq.error);
       };
     });
   }
 
   /**
-   * Retrieve a contact avatar blob from IndexedDB
-   * @param {string} address - The contact's address
+   * Get avatar blob by avatar id.
+   * @param {string} id - Avatar id (server-provided or locally-generated)
    * @returns {Promise<Blob|null>} The avatar blob or null if not found
    */
-  async get(address) {
-    if (!this.db) {
-      await this.init();
-    }
+  async get(id) {
+    if (!id) return null;
+    if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction([this.storeName], 'readonly');
       const store = tx.objectStore(this.storeName);
-      const request = store.get(address);
+      const request = store.get(id);
 
       request.onsuccess = () => {
         const result = request.result;
-        if (result && result.avatar) {
-          resolve(result.avatar);
-        } else {
-          resolve(null);
-        }
+        if (!result) return resolve(null);
+        return resolve(result.blob || null);
       };
 
       request.onerror = () => {
-        console.warn('Failed to get contact avatar:', request.error);
+        console.warn('Failed to get avatar blob:', request.error);
         reject(request.error);
       };
     });
   }
 
   /**
-   * Get a blob URL for a contact avatar
-   * @param {string} address - The contact's address
+   * Get a blob URL for an avatar id (cached).
+   * @param {string} id - Avatar id (server-provided or locally-generated)
    * @returns {Promise<string|null>} Blob URL or null if not found
    */
-  async getBlobUrl(address) {
-    if (this.blobUrlCache.has(address)) {
-      return this.blobUrlCache.get(address);
-    }
-
-    const blob = await this.get(address);
+  async getBlobUrl(id) {
+    if (!id) return null;
+    if (this.blobUrlCache.has(id)) return this.blobUrlCache.get(id);
+    const blob = await this.get(id);
     if (blob) {
       const blobUrl = URL.createObjectURL(blob);
-      this.blobUrlCache.set(address, blobUrl);
+      this.blobUrlCache.set(id, blobUrl);
       return blobUrl;
     }
-
     return null;
   }
 
   /**
-   * Delete a contact avatar from IndexedDB
-   * @param {string} address - The contact's address
+   * Delete an avatar record by id.
+   * @param {string} id - Avatar id to delete
    * @returns {Promise<void>}
    */
-  async delete(address) {
-    if (!this.db) {
-      await this.init();
-    }
+  async delete(id) {
+    if (!id) return;
+    if (!this.db) await this.init();
 
-    if (this.blobUrlCache.has(address)) {
-      URL.revokeObjectURL(this.blobUrlCache.get(address));
-      this.blobUrlCache.delete(address);
+    // Revoke cached URL for this id
+    if (this.blobUrlCache.has(id)) {
+      try { URL.revokeObjectURL(this.blobUrlCache.get(id)); } catch (e) {}
+      this.blobUrlCache.delete(id);
     }
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction([this.storeName], 'readwrite');
       const store = tx.objectStore(this.storeName);
-      const request = store.delete(address);
-
+      const request = store.delete(id);
       request.onsuccess = () => resolve();
-
-      request.onerror = () => {
-        console.warn('Failed to delete contact avatar:', request.error);
-        reject(request.error);
-      };
+      request.onerror = () => reject(request.error);
     });
   }
 
   /**
    * Export all avatars as an object with base64-encoded data
-   * @returns {Promise<Object>} Object mapping address to { data: base64, type: mimeType }
+   * @returns {Promise<Object>} Object mapping id to { data: base64, type: mimeType, size }
    */
   async exportAll() {
-    if (!this.db) {
-      await this.init();
-    }
+    if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction([this.storeName], 'readonly');
@@ -21492,24 +21812,21 @@ class ContactAvatarCache {
       const request = store.getAll();
 
       request.onsuccess = async () => {
-        const results = request.result;
+        const results = request.result || [];
         const avatars = {};
-
         for (const item of results) {
-          if (item.address && item.avatar) {
+          if (item && item.id && item.blob) {
             try {
-              // Convert blob to base64
-              const base64 = await this.blobToBase64(item.avatar);
-              avatars[item.address] = {
-                data: base64,
-                type: item.avatar.type || 'image/jpeg'
+              avatars[item.id] = {
+                data: await this.blobToBase64(item.blob),
+                type: item.type || 'image/jpeg',
+                size: item.size || 0,
               };
             } catch (e) {
-              console.warn(`Failed to export avatar for ${item.address}:`, e);
+              console.warn(`Failed to export avatar id ${item.id}:`, e);
             }
           }
         }
-
         resolve(avatars);
       };
 
@@ -21522,37 +21839,29 @@ class ContactAvatarCache {
 
   /**
    * Import avatars from exported data
-   * @param {Object} avatarsData - Object mapping address to { data: base64, type: mimeType }
+   * @param {Object} avatarsData - Object mapping avatar id to { data: base64, type: mimeType }
    * @param {boolean} overwrite - Whether to overwrite existing avatars
    * @returns {Promise<number>} Number of avatars imported
    */
   async importAll(avatarsData, overwrite = false) {
-    if (!this.db) {
-      await this.init();
-    }
-
-    if (!avatarsData || typeof avatarsData !== 'object') {
-      return 0;
-    }
+    if (!this.db) await this.init();
+    if (!avatarsData || typeof avatarsData !== 'object') return 0;
 
     let importedCount = 0;
-
-    for (const [address, avatarInfo] of Object.entries(avatarsData)) {
-      if (!avatarInfo || !avatarInfo.data) continue;
-
+    for (const [id, avatarInfo] of Object.entries(avatarsData)) {
+      if (!avatarInfo) continue;
       try {
-        // Check if avatar already exists
         if (!overwrite) {
-          const existing = await this.get(address);
+          const existing = await this.get(id);
           if (existing) continue;
         }
-
-        // Convert base64 back to blob
-        const blob = this.base64ToBlob(avatarInfo.data, avatarInfo.type || 'image/jpeg');
-        await this.save(address, blob);
-        importedCount++;
+        if (avatarInfo.data) {
+          const blob = this.base64ToBlob(avatarInfo.data, avatarInfo.type || 'image/jpeg');
+          await this.save(id, blob);
+          importedCount++;
+        }
       } catch (e) {
-        console.warn(`Failed to import avatar for ${address}:`, e);
+        console.warn(`Failed to import avatar id ${id}:`, e);
       }
     }
 
@@ -21593,6 +21902,8 @@ class ContactAvatarCache {
     return new Blob([byteArray], { type: mimeType });
   }
 }
+
+const contactAvatarCache = new ContactAvatarCache();
 
 /**
  * ThumbnailCache - Handles IndexedDB storage for image thumbnails
@@ -22007,8 +22318,6 @@ class ThumbnailCache {
   }
 }
 
-// Create caches instances
-const contactAvatarCache = new ContactAvatarCache();
 const thumbnailCache = new ThumbnailCache();
 
 /**
@@ -22022,23 +22331,77 @@ async function getContactAvatarHtml(contactOrAddress, size = 50) {
     ? normalizeAddress(contactOrAddress)
     : normalizeAddress(contactOrAddress?.address);
 
-  const hasAvatar =
-    typeof contactOrAddress === 'object' && contactOrAddress !== null && 'hasAvatar' in contactOrAddress
-      ? contactOrAddress.hasAvatar
-      : myData?.contacts?.[address]?.hasAvatar;
+  // Helper to return img HTML when blobUrl available
+  const makeImg = (url) => `<img src="${url}" class="contact-avatar-img" width="${size}" height="${size}" alt="avatar">`;
+  
+  const contactObj = typeof contactOrAddress === 'object' && contactOrAddress !== null
+    ? contactOrAddress
+    : myData?.contacts?.[address] || {};
 
-  if (address && hasAvatar) {
+  // If the requested avatar is for the current user, always return the
+  // account avatar if present, otherwise identicon. We do not consult or
+  // persist a `useAvatar` preference for the account anymore.
+  if (address && myAccount?.keys?.address && normalizeAddress(myAccount.keys.address) === address) {
     try {
-      const blobUrl = await contactAvatarCache.getBlobUrl(address);
-      if (blobUrl) {
-        return `<img src="${blobUrl}" class="contact-avatar-img" width="${size}" height="${size}" alt="avatar">`;
+      const aid = myData?.account?.avatarId;
+      if (aid) {
+        const url = await contactAvatarCache.getBlobUrl(aid);
+        if (url) return makeImg(url);
+      }
+    } catch (e) {
+      console.warn('Failed to load account avatar, falling back to identicon:', e);
+    }
+    return generateIdenticon(address, size);
+  }
+
+  // useAvatar preference: 'contact' | 'mine' | 'identicon'
+  const usePref = contactObj.useAvatar || myData?.contacts?.[address]?.useAvatar || null;
+
+  if (address) {
+    try {
+      if (usePref === 'identicon') return generateIdenticon(address, size);
+
+      // Determine available avatar ids from contact or account
+      const contact = typeof contactOrAddress === 'object' && contactOrAddress !== null
+        ? contactOrAddress
+        : myData?.contacts?.[address] || null;
+
+      if (usePref === 'mine') {
+        // Prefer the user's uploaded avatar for this contact; fall back to contact avatar.
+        // Only use the account avatar when the contact is the current user.
+        let id = contact?.mineAvatarId || contact?.avatarId;
+        if (!id && address && myData?.account?.address && normalizeAddress(myData.account.address) === address) {
+          id = myData?.account?.avatarId;
+        }
+        if (id) {
+          const url = await contactAvatarCache.getBlobUrl(id);
+          if (url) return makeImg(url);
+        }
+      } else if (usePref === 'contact') {
+        const id = contact?.avatarId || null;
+        if (id) {
+          const url = await contactAvatarCache.getBlobUrl(id);
+          if (url) return makeImg(url);
+        }
+      } else {
+        // No explicit preference: prefer contact avatar, then user-uploaded avatar.
+        // Do NOT fall back to the account's avatar here — that previously caused
+        // unrelated contacts with no images to show the user's own avatar.
+        let id = contact?.avatarId;
+        if (id) {
+          let url = await contactAvatarCache.getBlobUrl(id);
+          if (url) return makeImg(url);
+        }
+        id = contact?.mineAvatarId;
+        if (id) {
+          let url = await contactAvatarCache.getBlobUrl(id);
+          if (url) return makeImg(url);
+        }
       }
     } catch (err) {
       console.warn('Failed to load avatar, falling back to identicon:', err);
     }
-  }
 
-  if (address) {
     return generateIdenticon(address, size);
   }
 
