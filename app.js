@@ -12809,6 +12809,31 @@ console.warn('in send message', txid)
     return new Blob([clearBin], { type: linkEl.dataset.type || 'application/octet-stream' });
   }
 
+  /**
+   * Handles attachment errors, showing appropriate toast messages.
+   * Shows warning for expired files (404/410/403), error for other failures.
+   * @param {Error} err - The error that occurred
+   * @param {string} defaultErrorMessage - Default error message to show for non-expired errors
+   */
+  handleAttachmentError(err, defaultErrorMessage = 'Decryption failed.') {
+    if (err?.name === 'AbortError') {
+      return; // Don't show error for user-initiated cancellations
+    }
+
+    // Check if the error is due to file not being available (expired)
+    const isFileExpired = err.message && (
+      err.message.includes('HTTP 404') ||
+      err.message.includes('HTTP 410') ||
+      err.message.includes('HTTP 403')
+    );
+
+    if (isFileExpired) {
+      showToast('File has expired. Please ask that it be resent to you.', 0, 'warning');
+    } else {
+      showToast(defaultErrorMessage, 0, 'error');
+    }
+  }
+
   async handleAttachmentDownload(item, linkEl) {
     let loadingToastId;
     try {
@@ -12880,10 +12905,7 @@ console.warn('in send message', txid)
       console.error('Attachment decrypt failed:', err);
       
       hideToast(loadingToastId);
-
-      if (err.name !== 'AbortError') {
-        showToast(`Decryption failed.`, 0, 'error');
-      }
+      this.handleAttachmentError(err, 'Decryption failed.');
     }
   }
 
@@ -13702,7 +13724,7 @@ console.warn('in send message', txid)
     } catch (err) {
       console.error('Preview decrypt/thumbnail failed:', err);
       hideToast(loadingToastId);
-      if (err?.name !== 'AbortError') showToast('Preview failed.', 0, 'error');
+      this.handleAttachmentError(err, 'Preview failed.');
     }
   }
 
