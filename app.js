@@ -12933,7 +12933,6 @@ console.warn('in send message', txid)
       this.addAttachmentButton.disabled = false;
       this.isEncrypting = false;
     } finally {
-      hideToast(loadingToastId);
       event.target.value = ''; // Reset the file input value
     }
   }
