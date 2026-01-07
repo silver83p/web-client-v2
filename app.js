@@ -3423,7 +3423,13 @@ class EditContactModal {
   handleSave() {
     // Save changes - if input is empty/spaces, it will become undefined
     const newName = this.nameInput.value.trim() || null;
-    const newNotes = this.notesInput.value.trim() || null;
+    // Enforce 1000 character limit on notes (safety check)
+    const maxNotesLength = 1000;
+    let notesValue = this.notesInput.value;
+    if (notesValue.length > maxNotesLength) {
+      notesValue = notesValue.substring(0, maxNotesLength);
+    }
+    const newNotes = notesValue.trim() || null;
     const contact = myData.contacts[this.currentContactAddress];
     if (contact) {
       contact.name = newName;
