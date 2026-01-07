@@ -12537,19 +12537,22 @@ console.warn('in send message', txid)
               const fileSize = att.size ? this.formatFileSize(att.size) : '';
               const fileType = att.type ? att.type.split('/').pop().toUpperCase() : '';
               const isImage = att.type && att.type.startsWith('image/');
+              const isVideo = att.type && att.type.startsWith('video/');
+              const hasThumbnail = isImage || isVideo;
               const fileTypeIcon = this.getFileTypeForIcon(att.type || '', fileName);
-              const paddingStyle = isImage ? 'padding: 5px 5px;' : 'padding: 10px 12px;';
+              const paddingStyle = hasThumbnail ? 'padding: 5px 5px;' : 'padding: 10px 12px;';
               return `
-                <div class="attachment-row" style="display: flex; ${isImage ? 'flex-direction: column;' : 'align-items: center;'} background: #f5f5f7; border-radius: 12px; ${paddingStyle} margin-bottom: 6px;"
+                <div class="attachment-row" style="display: flex; ${hasThumbnail ? 'flex-direction: column;' : 'align-items: center;'} background: #f5f5f7; border-radius: 12px; ${paddingStyle} margin-bottom: 6px;"
                   data-url="${fileUrl}"
                   data-name="${encodeURIComponent(fileName)}"
                   data-type="${att.type || ''}"
                   data-msg-idx="${i}"
                   ${isImage ? 'data-image-attachment="true"' : ''}
+                  ${isVideo ? 'data-video-attachment="true"' : ''}
                 >
-                  <div class="attachment-icon-container" style="${isImage ? 'margin-bottom: 10px; flex-direction: column;' : 'margin-right: 14px; flex-shrink: 0;'}">
+                  <div class="attachment-icon-container" style="${hasThumbnail ? 'margin-bottom: 10px; flex-direction: column;' : 'margin-right: 14px; flex-shrink: 0;'}">
                     <div class="attachment-icon" data-file-type="${fileTypeIcon}"></div>
-                    ${isImage ? '<div class="attachment-preview-hint">Click for options</div>' : ''}
+                    ${hasThumbnail ? '<div class="attachment-preview-hint">Click for options</div>' : ''}
                   </div>
                   <div style="min-width:0;">
                     <span class="attachment-label" style="font-weight:500;color:#222;font-size:0.7em;display:block;word-wrap:break-word;">
@@ -12939,13 +12942,26 @@ console.warn('in send message', txid)
     let loadingToastId;
     let thumbnailBlob = null;
     
+    // Normalize file type (fallback to extension detection for missing MIME types)
+    const normalizedType = this.getMimeTypeFromFilename(file.name, file.type);
+    
     // Generate thumbnail for images before encryption
-    const isImage = file.type && file.type.startsWith('image/');
+    const isImage = normalizedType.startsWith('image/');
     if (isImage) {
       try {
         thumbnailBlob = await thumbnailCache.generateThumbnail(file);
       } catch (error) {
         console.warn('Failed to generate thumbnail for attached image:', error);
+      }
+    }
+
+    // Generate thumbnail for videos before encryption
+    const isVideo = normalizedType.startsWith('video/');
+    if (isVideo && !thumbnailBlob) {
+      try {
+        thumbnailBlob = await thumbnailCache.extractVideoThumbnail(file);
+      } catch (error) {
+        console.warn('Failed to extract thumbnail for attached video:', error);
       }
     }
 
@@ -13001,15 +13017,15 @@ console.warn('in send message', txid)
               url: attachmentUrl,
               name: file.name,
               size: file.size,
-              type: file.type,
+              type: normalizedType,
               pqEncSharedKey: bin2base64(pqEncSharedKey),
               selfKey
             });
             
             // Cache thumbnail if we generated one - use captured variable
-            if (capturedThumbnailBlob && isImage) {
+            if (capturedThumbnailBlob && (isImage || isVideo)) {
               thumbnailCache.save(attachmentUrl, capturedThumbnailBlob, file.type).catch(err => {
-                console.warn('Failed to cache thumbnail for attached image:', err);
+                console.warn('Failed to cache thumbnail for attached file:', err);
               });
             }
             
@@ -13214,6 +13230,51 @@ console.warn('in send message', txid)
   }
 
   /**
+   * Get MIME type from filename extension with fallback
+   * @param {string} filename - The filename
+   * @param {string} existingType - Existing MIME type from file.type
+   * @returns {string} Normalized MIME type
+   */
+  getMimeTypeFromFilename(filename, existingType) {
+    // If we already have a valid MIME type, use it
+    if (existingType && existingType !== '' && existingType !== 'application/octet-stream') {
+      return existingType;
+    }
+    
+    // Fallback: detect from file extension
+    const ext = filename.toLowerCase().split('.').pop();
+    const mimeTypes = {
+      // Video formats
+      'mov': 'video/quicktime',
+      'mp4': 'video/mp4',
+      'avi': 'video/x-msvideo',
+      'webm': 'video/webm',
+      'mkv': 'video/x-matroska',
+      'm4v': 'video/x-m4v',
+      '3gp': 'video/3gpp',
+      'flv': 'video/x-flv',
+      'ogv': 'video/ogg',
+      // Image formats
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'bmp': 'image/bmp',
+      'svg': 'image/svg+xml',
+      // Audio formats
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'ogg': 'audio/ogg',
+      'm4a': 'audio/mp4',
+      'aac': 'audio/aac',
+      'flac': 'audio/flac',
+    };
+    
+    return mimeTypes[ext] || existingType || 'application/octet-stream';
+  }
+
+  /**
    * Get the file type for icon display
    * @param {string} type - MIME type of the file
    * @param {string} name - Name of the file
@@ -13263,13 +13324,15 @@ console.warn('in send message', txid)
   }
 
   /**
-   * Load thumbnails for image attachments asynchronously
+   * Load thumbnails for image and video attachments asynchronously
    * @returns {void}
    */
   async loadThumbnailsForAttachments() {
-    const imageAttachments = this.messagesList.querySelectorAll('[data-image-attachment="true"]');
+    const thumbnailAttachments = this.messagesList.querySelectorAll(
+      '[data-image-attachment="true"], [data-video-attachment="true"]'
+    );
     
-    for (const attachmentRow of imageAttachments) {
+    for (const attachmentRow of thumbnailAttachments) {
       const url = attachmentRow.dataset.url;
       if (!url || url === '#') continue;
 
@@ -13433,24 +13496,31 @@ console.warn('in send message', txid)
       const blobUrl = URL.createObjectURL(blob);
       const filename = decodeURIComponent(linkEl.dataset.name || 'download');
 
-      // Generate and cache thumbnail for images, then update in place
-      if (blob.type.startsWith('image/')) {
+      // Generate and cache thumbnail for images and videos, then update in place
+      if (blob.type.startsWith('image/') || blob.type.startsWith('video/')) {
         const attachmentUrl = linkEl.dataset.url;
-        const attachmentRow = linkEl.closest('.attachment-row') || linkEl.closest('[data-image-attachment="true"]');
+        const attachmentRow = linkEl.closest('.attachment-row') || 
+          linkEl.closest('[data-image-attachment="true"]') ||
+          linkEl.closest('[data-video-attachment="true"]');
         
-        thumbnailCache.generateThumbnail(blob).then(thumbnail => {
-          return thumbnailCache.save(attachmentUrl, thumbnail, blob.type);
-        }).then(async () => {
-          // Update thumbnail in place
-          if (attachmentRow) {
-            const thumbnailBlob = await thumbnailCache.get(attachmentUrl);
-            if (thumbnailBlob) {
-              this.updateThumbnailInPlace(attachmentRow, thumbnailBlob);
+        const thumbnailPromise = blob.type.startsWith('image/')
+          ? thumbnailCache.generateThumbnail(blob)
+          : thumbnailCache.extractVideoThumbnail(blob);
+        
+        thumbnailPromise
+          .then(thumbnail => thumbnailCache.save(attachmentUrl, thumbnail, blob.type))
+          .then(async () => {
+            // Update thumbnail in place
+            if (attachmentRow) {
+              const thumbnailBlob = await thumbnailCache.get(attachmentUrl);
+              if (thumbnailBlob) {
+                this.updateThumbnailInPlace(attachmentRow, thumbnailBlob);
+              }
             }
-          }
-        }).catch(err => {
-          console.warn('Failed to generate or cache thumbnail:', err);
-        });
+          })
+          .catch(err => {
+            console.warn('Failed to generate or cache thumbnail:', err);
+          });
       }
 
       hideToast(loadingToastId);
@@ -14272,8 +14342,8 @@ console.warn('in send message', txid)
 
   /**
    * Shows context menu for an attachment row.
-   * - Images: "Preview" when no thumbnail exists in IndexedDB; "Save" when it exists
-   * - Non-images: always "Save"
+   * - Images/Videos: "Preview" when no thumbnail exists in IndexedDB; "Save" when it exists
+   * - Non-images/videos: always "Save"
    * @param {Event} e
    * @param {HTMLElement} attachmentRow
    */
@@ -14304,12 +14374,14 @@ console.warn('in send message', txid)
     }
 
     const isImageAttachment = attachmentRow.dataset.imageAttachment === 'true';
+    const isVideoAttachment = attachmentRow.dataset.videoAttachment === 'true';
+    const hasThumbnailSupport = isImageAttachment || isVideoAttachment;
 
     // Decide Preview/Save vs Save:
-    // - Images: Show both Preview and Save when no thumbnail exists; Show only Save when it exists
-    // - Non-images: always Save (no thumbnail concept)
+    // - Images/Videos: Show both Preview and Save when no thumbnail exists; Show only Save when it exists
+    // - Non-images/videos: always Save (no thumbnail concept)
     let hasThumb = true;
-    if (isImageAttachment) {
+    if (hasThumbnailSupport) {
       hasThumb = false;
       if (url && url !== '#') {
         try {
@@ -14321,9 +14393,9 @@ console.warn('in send message', txid)
       }
     }
 
-    // Show Preview only for images without a thumbnail; Save is always visible
+    // Show Preview only for images/videos without a thumbnail; Save is always visible
     const previewOpt = this.imageAttachmentContextMenu.querySelector('[data-action="preview"]');
-    if (previewOpt) previewOpt.style.display = (isImageAttachment && !hasThumb) ? '' : 'none';
+    if (previewOpt) previewOpt.style.display = (hasThumbnailSupport && !hasThumb) ? '' : 'none';
 
     this.positionContextMenu(this.imageAttachmentContextMenu, attachmentRow);
     this.imageAttachmentContextMenu.style.display = 'block';
@@ -14336,7 +14408,7 @@ console.warn('in send message', txid)
     const { messageEl } = this.getAttachmentContextFromRow(row);
     switch (action) {
       case 'preview':
-        void this.previewImageAttachment(row);
+        void this.previewMediaAttachment(row);
         break;
       case 'save':
         void this.saveImageAttachment(row);
@@ -14359,28 +14431,32 @@ console.warn('in send message', txid)
   }
 
   /**
-   * Preview an image attachment: decrypt + generate thumbnail + cache thumbnail in IndexedDB.
+   * Preview a media attachment (image or video): decrypt + generate/extract thumbnail + cache thumbnail in IndexedDB.
    * Does NOT trigger download.
    * @param {HTMLElement} attachmentRow
    */
-  async previewImageAttachment(attachmentRow) {
+  async previewMediaAttachment(attachmentRow) {
     let loadingToastId;
     try {
       const { item, url } = this.getAttachmentContextFromRow(attachmentRow);
-      if (!item) return;
-
-      if (!url || url === '#') return;
+      if (!item || !url || url === '#') return;
 
       loadingToastId = showToast(`Decrypting attachment...`, 0, 'loading');
 
       const blob = await this.decryptAttachmentToBlob(item, attachmentRow);
-      if (!blob.type.startsWith('image/')) {
+      const isImage = blob.type.startsWith('image/');
+      const isVideo = blob.type.startsWith('video/');
+
+      if (!isImage && !isVideo) {
         hideToast(loadingToastId);
-        return showToast('Not an image attachment', 2000, 'info');
+        return showToast('Not a supported media attachment', 2000, 'info');
       }
 
-      // 5. Generate + cache thumbnail
-      const thumbnail = await thumbnailCache.generateThumbnail(blob);
+      // Generate thumbnail based on media type
+      const thumbnail = isImage
+        ? await thumbnailCache.generateThumbnail(blob)
+        : await thumbnailCache.extractVideoThumbnail(blob);
+      
       await thumbnailCache.save(url, thumbnail, blob.type);
       this.updateThumbnailInPlace(attachmentRow, thumbnail);
 
@@ -22442,6 +22518,69 @@ class ThumbnailCache {
       };
 
       img.src = blobUrl;
+    });
+  }
+
+  /**
+   * Extract a thumbnail frame from a video file
+   * @param {Blob|File} videoFile - The video file to extract thumbnail from
+   * @param {number} timeInSeconds - Time in seconds to extract frame from (default: 0.5)
+   * @param {number} maxSize - Maximum dimension in pixels (default: 500)
+   * @param {number} quality - JPEG quality 0-1 (default: 0.9)
+   * @returns {Promise<Blob>} The thumbnail blob as JPEG
+   */
+  async extractVideoThumbnail(videoFile, timeInSeconds = 0.5, maxSize = 500, quality = 0.9) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+
+      const objectURL = URL.createObjectURL(videoFile);
+      video.src = objectURL;
+
+      video.onloadedmetadata = () => {
+        // Seek to specified time (default 0.5s) but don't go past end
+        const seekTime = Math.min(timeInSeconds, Math.max(0, video.duration - 0.1));
+        video.currentTime = seekTime;
+      };
+
+      video.onseeked = () => {
+        // Calculate thumbnail dimensions maintaining aspect ratio
+        const scale = Math.min(1, maxSize / Math.max(video.videoWidth, video.videoHeight));
+        const thumbWidth = Math.floor(video.videoWidth * scale);
+        const thumbHeight = Math.floor(video.videoHeight * scale);
+
+        // Create canvas for thumbnail
+        const canvas = document.createElement('canvas');
+        canvas.width = thumbWidth;
+        canvas.height = thumbHeight;
+        const ctx = canvas.getContext('2d');
+        
+        // Enable high-quality rendering
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw video frame onto canvas (scaled)
+        ctx.drawImage(video, 0, 0, thumbWidth, thumbHeight);
+
+        // Convert to JPEG blob
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(objectURL);
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to create video thumbnail blob'));
+          }
+        }, 'image/jpeg', quality);
+      };
+
+      video.onerror = (error) => {
+        URL.revokeObjectURL(objectURL);
+        reject(new Error('Failed to load video for thumbnail extraction: ' + (error.message || 'Unknown error')));
+      };
+
+      video.load();
     });
   }
 
