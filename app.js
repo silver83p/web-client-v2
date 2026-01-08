@@ -12942,8 +12942,10 @@ class ChatModal {
                 // Upload encrypted thumbnail
                 previewUrl = await this.uploadEncryptedFile(encryptedThumbnailBlob, file.name);
               } catch (error) {
-                console.warn('Failed to upload thumbnail (will use local cache):', error);
-                // Continue without previewUrl - recipient can use local cache or decrypt full file
+                console.warn('Failed to upload thumbnail:', error);
+                // If thumbnail upload fails, delete the successfully uploaded main file
+                this.deleteAttachmentsFromServer(attachmentUrl);
+                throw error;  // Re-throw to trigger cleanup
               }
             }
             
