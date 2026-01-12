@@ -12096,6 +12096,14 @@ class ChatModal {
         }
       }
 
+      // Add timezone for friends and connections
+      if (Number(contact?.friend) >= 2) {
+        const tz = getLocalTimeZone();
+        if (tz) {
+          senderInfo.timezone = tz;
+        }
+      }
+
       // Always encrypt and send senderInfo (which will contain at least the username)
       payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
 
@@ -15352,6 +15360,14 @@ class ChatModal {
         }
       }
 
+      // Add timezone for friends and connections
+      if (Number(contact?.friend) >= 2) {
+        const tz = getLocalTimeZone();
+        if (tz) {
+          senderInfo.timezone = tz;
+        }
+      }
+
       // Always encrypt and send senderInfo
       payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
 
@@ -15492,6 +15508,14 @@ class ChatModal {
           senderInfo.avatarId = myData.account.avatarId;
           senderInfo.avatarKey = myData.account.avatarKey;
         }
+    }
+
+    // Add timezone for friends and connections
+    if (Number(contact?.friend) >= 2) {
+      const tz = getLocalTimeZone();
+      if (tz) {
+        senderInfo.timezone = tz;
+      }
     }
 
     payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
@@ -16156,6 +16180,33 @@ class CallInviteModal {
 
 const callInviteModal = new CallInviteModal();
 
+// ---- Call scheduling shared helpers (display-only) ----
+function getActiveChatContactTimeZone() {
+  const addr = chatModal?.address;
+  if (!addr) return '';
+  const tz = myData?.contacts?.[addr]?.senderInfo?.timezone;
+  return typeof tz === 'string' ? tz : '';
+}
+
+function roundToMinuteMs(ms) {
+  return Math.round(ms / 60000) * 60000;
+}
+
+function formatTimeInTimeZone(ms, tz) {
+  if (!tz || !ms) return '';
+  try {
+    const fmt = new Intl.DateTimeFormat(undefined, {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+    return fmt.format(new Date(ms));
+  } catch (e) {
+    return '';
+  }
+}
+
 /**
  * Call Schedule Choice Modal
  * Presents: Call Now | Schedule | Cancel
@@ -16167,6 +16218,8 @@ class CallScheduleChoiceModal {
     this.scheduleBtn = null;
     this.cancelBtn = null;
     this.closeBtn = null;
+    this.recipientTime = null;
+    this._recipientTimeInterval = null;
     this.onSelect = null; // function(choice)
   }
 
@@ -16177,6 +16230,7 @@ class CallScheduleChoiceModal {
     this.scheduleBtn = document.getElementById('openCallScheduleDateBtn');
     this.cancelBtn = document.getElementById('cancelCallScheduleChoice');
     this.closeBtn = document.getElementById('closeCallScheduleChoiceModal');
+    this.recipientTime = document.getElementById('callScheduleChoiceRecipientTime');
 
     const onNow = () => this._select('now');
     const onSchedule = () => this._select('schedule');
@@ -16191,13 +16245,53 @@ class CallScheduleChoiceModal {
   open(onSelect) {
     this.onSelect = onSelect;
     this.modal?.classList.add('active');
+    this._startRecipientTimeUpdates();
   }
 
   _select(value) {
     if (this.modal) this.modal.classList.remove('active');
+    this._stopRecipientTimeUpdates();
     const cb = this.onSelect;
     this.onSelect = null;
     if (cb) cb(value);
+  }
+
+  _startRecipientTimeUpdates() {
+    this._stopRecipientTimeUpdates();
+    this._updateRecipientTimeNow();
+    this._recipientTimeInterval = setInterval(() => this._updateRecipientTimeNow(), 30000);
+  }
+
+  _stopRecipientTimeUpdates() {
+    if (this._recipientTimeInterval) {
+      clearInterval(this._recipientTimeInterval);
+      this._recipientTimeInterval = null;
+    }
+    if (this.recipientTime) {
+      this.recipientTime.textContent = '';
+      this.recipientTime.style.display = 'none';
+    }
+  }
+
+  _updateRecipientTimeNow() {
+    if (!this.recipientTime) return;
+    const tz = getActiveChatContactTimeZone();
+    if (!tz) {
+      this.recipientTime.textContent = '';
+      this.recipientTime.style.display = 'none';
+      return;
+    }
+
+    const now = roundToMinuteMs(getCorrectedTimestamp());
+    const s = formatTimeInTimeZone(now, tz);
+    if (!s) {
+      this.recipientTime.textContent = '';
+      this.recipientTime.style.display = 'none';
+      return;
+    }
+
+    this.recipientTime.textContent = `Recipient time: ${s}`;
+    this.recipientTime.style.display = '';
   }
 }
 
@@ -16213,6 +16307,7 @@ class CallScheduleDateModal {
     this.hourSelect = null;
     this.minuteSelect = null;
     this.ampmSelect = null;
+    this.recipientTime = null;
     this.submitBtn = null;
     this.cancelBtn = null;
     this.closeBtn = null;
@@ -16223,6 +16318,7 @@ class CallScheduleDateModal {
     this._onSubmit = this._onSubmit.bind(this);
     this._onSubmitBtn = this._onSubmitBtn.bind(this);
     this._onCancel = this._onCancel.bind(this);
+    this._onInputChange = this._onInputChange.bind(this);
   }
 
   load() {
@@ -16233,6 +16329,7 @@ class CallScheduleDateModal {
     this.hourSelect = document.getElementById('callScheduleHour');
     this.minuteSelect = document.getElementById('callScheduleMinute');
     this.ampmSelect = document.getElementById('callScheduleAmPm');
+    this.recipientTime = document.getElementById('callScheduleConvertedTime');
     this.submitBtn = document.getElementById('confirmCallSchedule');
     this.cancelBtn = document.getElementById('cancelCallScheduleDate');
     this.closeBtn = document.getElementById('closeCallScheduleDateModal');
@@ -16241,6 +16338,9 @@ class CallScheduleDateModal {
     if (this.submitBtn) this.submitBtn.addEventListener('click', this._onSubmitBtn);
     if (this.cancelBtn) this.cancelBtn.addEventListener('click', this._onCancel);
     if (this.closeBtn) this.closeBtn.addEventListener('click', this._onCancel);
+
+    // Live update of converted time preview (single listener for all inputs)
+    if (this.form) this.form.addEventListener('change', this._onInputChange);
   }
 
   open(onDone) {
@@ -16305,6 +16405,9 @@ class CallScheduleDateModal {
     }
     this.modal?.classList.add('active');
     this.clockTimer.start();
+
+    // Render the initial converted time preview
+    this._updateConvertedTimePreview();
   }
 
   _onSubmit(e) {
@@ -16317,6 +16420,71 @@ class CallScheduleDateModal {
   }
   _onCancel() {
     this._closeWith(null);
+  }
+
+  _onInputChange() {
+    this._updateConvertedTimePreview();
+  }
+
+  _getSelectedCorrectedTimestamp() {
+    if (!this.dateInput || !this.hourSelect || !this.minuteSelect || !this.ampmSelect) return 0;
+    const dateVal = this.dateInput.value;
+    const hourVal = this.hourSelect.value;
+    const minuteVal = this.minuteSelect.value;
+    const ampmVal = this.ampmSelect.value;
+    if (!dateVal || hourVal === '' || minuteVal === '') return 0;
+
+    const parsed = this._parseDateInput(dateVal);
+    const hour12 = Number(hourVal);
+    const minute = Number(minuteVal);
+    if (!parsed || Number.isNaN(hour12) || Number.isNaN(minute)) return 0;
+
+    const hour24 = this._convert12To24(hour12, ampmVal);
+    const { year, month, day } = parsed;
+    const localMs = new Date(year, month - 1, day, hour24, minute, 0, 0).getTime();
+    return localMs + timeSkew;
+  }
+
+  _updateConvertedTimePreview() {
+    if (!this.recipientTime) return;
+
+    const tz = getActiveChatContactTimeZone();
+    const tsRaw = this._getSelectedCorrectedTimestamp();
+    // Display-only: stabilize at the chosen minute even if timeSkew includes seconds.
+    const ts = tsRaw ? roundToMinuteMs(tsRaw) : 0;
+
+    if (!tz || !ts) {
+      this.recipientTime.textContent = '';
+      this.recipientTime.style.display = 'none';
+      return;
+    }
+
+    const s = (() => {
+      if (!tz || !ts) return '';
+      try {
+        const fmt = new Intl.DateTimeFormat(undefined, {
+          timeZone: tz,
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        });
+        return fmt.format(new Date(ts));
+      } catch (e) {
+        return '';
+      }
+    })();
+
+    if (!s) {
+      this.recipientTime.textContent = '';
+      this.recipientTime.style.display = 'none';
+      return;
+    }
+
+    this.recipientTime.textContent = `Recipient time: ${s}`;
+    this.recipientTime.style.display = '';
   }
 
   _submitValue() {
@@ -16405,6 +16573,12 @@ class CallScheduleDateModal {
     if (this.modal) this.modal.classList.remove('active');
     const cb = this.onDone;
     this.onDone = null;
+
+    // Hide converted time preview when closing
+    if (this.recipientTime) {
+      this.recipientTime.textContent = '';
+      this.recipientTime.style.display = 'none';
+    }
     if (cb) cb(value);
   }
 }
@@ -18852,20 +19026,27 @@ class SendAssetConfirmModal {
     let encSenderInfo = '';
     let senderInfo = '';
     if (sharedKeyMethod != 'none'){
-      if (myData.contacts[toAddress]?.friend === 3) {
-        // Create sender info object
-        senderInfo = {
-          username: myAccount.username,
-          name: myData.account.name,
-          email: myData.account.email,
-          phone: myData.account.phone,
-          linkedin: myData.account.linkedin,
-          x: myData.account.x,
-        };
-      } else {
-        senderInfo = {
-          username: myAccount.username,
-        };
+      const friendLevel = Number(myData.contacts[toAddress]?.friend) || 0;
+
+      // Always include username; include additional info only for full friends
+      senderInfo = {
+        username: myAccount.username,
+      };
+
+      if (friendLevel === 3) {
+        senderInfo.name = myData.account.name;
+        senderInfo.email = myData.account.email;
+        senderInfo.phone = myData.account.phone;
+        senderInfo.linkedin = myData.account.linkedin;
+        senderInfo.x = myData.account.x;
+      }
+
+      // Add timezone for friends and connections
+      if (friendLevel >= 2) {
+        const tz = getLocalTimeZone();
+        if (tz) {
+          senderInfo.timezone = tz;
+        }
       }
       encSenderInfo = encryptChacha(dhkey, stringify(senderInfo));
     } else {
@@ -21667,6 +21848,12 @@ function cleanSenderInfo(si) {
   if (si.x) {
     csi.x = normalizeXTwitterUsername(si.x)
   }
+  if (si.timezone) {
+    const tz = normalizeTimeZone(si.timezone);
+    if (tz) {
+      csi.timezone = tz;
+    }
+  }
   if (si.avatarId) {
     csi.avatarId = si.avatarId
   }
@@ -21674,6 +21861,27 @@ function cleanSenderInfo(si) {
     csi.avatarKey = si.avatarKey
   }
   return csi;
+}
+
+function getLocalTimeZone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === 'string' ? tz : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function normalizeTimeZone(tz) {
+  if (typeof tz !== 'string') {
+    return '';
+  }
+  const cleaned = tz.trim();
+  if (!cleaned) {
+    return '';
+  }
+  // Keep bounded to avoid storing arbitrarily large strings
+  return cleaned.slice(0, 64);
 }
 
 function stopLongPoll() {
