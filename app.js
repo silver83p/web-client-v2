@@ -5804,6 +5804,36 @@ async function injectTx(tx, txid) {
     return null;
   }
 
+  function maybeShowLowLibToast() {
+    try {
+      // Keep this simple: check locally cached wallet values only.
+      const LOW_LIB_USD_THRESHOLD = 0.02;
+      if (!myData?.wallet?.assets || !Array.isArray(myData.wallet.assets)) return;
+      const libAsset = myData.wallet.assets.find((asset) => asset?.symbol === 'LIB');
+      if (!libAsset) return;
+
+      let usd = Number(libAsset.networth);
+      if (!Number.isFinite(usd)) {
+        // Fallback: estimate from cached balance + price.
+        const balance = libAsset.balance ?? 0n;
+        const price = Number(libAsset.price);
+        if (!Number.isFinite(price) || typeof wei === 'undefined') return;
+        usd = (price * Number(balance)) / Number(wei);
+      }
+
+      if (Number.isFinite(usd) && usd < LOW_LIB_USD_THRESHOLD) {
+        showToast(
+          'Add more LIB before you run out. On the Wallet page click the Faucet button.',
+          0,
+          'warning'
+        );
+      }
+    } catch (e) {
+      // Never block the transaction flow on toast logic.
+      console.warn('Low-LIB toast check failed:', e);
+    }
+  }
+
   try {
     const timestamp = getCorrectedTimestamp();
     // initialize pending array if it doesn't exist
@@ -5845,6 +5875,9 @@ async function injectTx(tx, txid) {
         pendingTxData.to = tx.nominee; // Store 64-character address as-is for stake transactions
       }
       myData.pending.push(pendingTxData);
+
+      // After submitting a transaction, warn if user is low on LIB.
+      maybeShowLowLibToast();
     } else {
       let toastMessage = 'Error injecting transaction: ' + data?.result?.reason;
       console.error('Error injecting transaction:', data?.result?.reason);
@@ -7482,7 +7515,7 @@ function showToast(message, duration = 2000, type = 'default', isHTML = false) {
     // Exception: loading toasts are never manually closable by user
     if (duration <= 0 && type !== 'loading') {
       // Sticky toast - add close button and click handler (but not for loading toasts)
-      toast.style.pointerEvents = 'auto';
+      toast.classList.add('sticky');
       const closeBtn = document.createElement('button');
       closeBtn.className = 'toast-close-btn';
       closeBtn.setAttribute('aria-label', 'Close');
@@ -12039,7 +12072,7 @@ class ChatModal {
         const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : this.toll;
         const sufficientBalance = await validateBalance(tollInLib);
         if (!sufficientBalance) {
-          const msg = `Insufficient balance for fee${tollInLib > 0n ? ' and toll' : ''}`;
+          const msg = `Insufficient balance for fee${tollInLib > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`;
           showToast(msg, 0, 'error');
           return;
         }
@@ -12666,7 +12699,7 @@ class ChatModal {
       const amount = myData.contacts[this.address].tollRequiredToSend == 1 ? this.toll : 0n;
       const sufficientBalance = await validateBalance(amount);
       if (!sufficientBalance) {
-        const msg = `Insufficient balance for fee${amount > 0n ? ' and toll' : ''}`;
+        const msg = `Insufficient balance for fee${amount > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`;
         showToast(msg, 0, 'error');
         this.sendButton.disabled = false;
         return;
@@ -15748,7 +15781,7 @@ class ChatModal {
 
       const sufficientBalance = await validateBalance(tollInLib);
       if (!sufficientBalance) {
-        const msg = `Insufficient balance for fee${tollInLib > 0n ? ' and toll' : ''}`;
+        const msg = `Insufficient balance for fee${tollInLib > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`;
         showToast(msg, 0, 'error');
         return;
       }
@@ -16024,7 +16057,7 @@ class ChatModal {
 
       const sufficientBalance = await validateBalance(0n);
       if (!sufficientBalance) {
-        showToast('Insufficient balance for fee', 0, 'error');
+        showToast('Insufficient balance for fee. Go to the wallet to add more LIB.', 0, 'error');
         return;
       }
 
@@ -20597,7 +20630,7 @@ class SendAssetConfirmModal {
       const amountStr = big2str(amount, 18).slice(0, -16);
       const feeStr = big2str(txFeeInLIB, 18).slice(0, -16);
       const balanceStr = big2str(balance, 18).slice(0, -16);
-      showToast(`Insufficient balance: ${amountStr} + ${feeStr} (fee) > ${balanceStr} LIB`, 0, 'error');
+      showToast(`Insufficient balance: ${amountStr} + ${feeStr} (fee) > ${balanceStr} LIB. Go to the wallet to add more LIB`, 0, 'error');
       cancelButton.disabled = false;
       return;
     }
