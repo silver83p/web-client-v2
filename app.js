@@ -36,6 +36,8 @@ async function checkVersion() {
       newUrl,
       'styles.css',
       'app.js',
+      'dao.repo.js',
+      'dao.mock-data.js',
       'lib.js',
       'network.js',
       'crypto.js',
@@ -72,6 +74,14 @@ async function forceReload(urls) {
 // Needed to stringify and parse bigints; also deterministic stringify
 //   modified to use export
 import { stringify, parse } from './external/stringify-shardus.js';
+
+import {
+  daoRepo,
+  DAO_STATES,
+  getDaoStateLabel,
+  getDaoTypeLabel,
+  getEffectiveDaoState,
+} from './dao.repo.js';
 
 // Import crypto functions from crypto.js
 import {
@@ -408,6 +418,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Menu Modal
   menuModal.load();
+
+  // DAO Modals
+  daoModal.load();
+  addProposalModal.load();
+  proposalInfoModal.load();
 
   // Settings Modal
   settingsModal.load();
@@ -1713,6 +1728,10 @@ class MenuModal {
     this.closeButton.addEventListener('click', () => this.close());
     this.validatorButton = document.getElementById('openValidator');
     this.validatorButton.addEventListener('click', () => validatorStakingModal.open());
+    this.daoButton = document.getElementById('openDao');
+    if (this.daoButton) {
+      this.daoButton.addEventListener('click', () => daoModal.open());
+    }
     this.inviteButton = document.getElementById('openInvite');
     this.inviteButton.addEventListener('click', () => inviteModal.open());
     this.explorerButton = document.getElementById('openExplorer');
@@ -1841,6 +1860,610 @@ class MenuModal {
 }
 
 const menuModal = new MenuModal();
+
+// =====================
+// DAO / Proposals
+// =====================
+
+// DAO proposals are loaded via `daoRepo` and kept in memory (no localStorage persistence).
+
+function getDaoVoterId() {
+  return myAccount?.address || myData?.account?.address || myAccount?.username || myData?.account?.username || 'anon';
+}
+
+function formatDaoTimestamp(ts) {
+  const n = Number(ts || 0);
+  if (!n) return '';
+  try {
+    return new Date(n).toLocaleString();
+  } catch {
+    return '';
+  }
+}
+
+class DaoModal {
+  constructor() {
+    this.selectedGroupKey = 'active';
+    this.selectedStateKey = 'voting';
+    this._outsideClickHandler = null;
+    this.isLoading = false;
+  }
+
+  load() {
+    this.modal = document.getElementById('daoModal');
+    this.closeButton = document.getElementById('closeDaoModal');
+    this.titleEl = document.getElementById('daoModalTitle');
+    this.statusMenuButton = document.getElementById('daoFilterButton');
+    this.statusMenu = document.getElementById('daoStatusContextMenu');
+    this.groupActiveButton = document.getElementById('daoGroupActiveButton');
+    this.groupArchivedButton = document.getElementById('daoGroupArchivedButton');
+    this.list = document.getElementById('daoProposalList');
+    this.emptyState = document.getElementById('daoProposalEmptyState');
+    this.addButton = document.getElementById('daoAddProposalButton');
+
+    if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
+    if (this.addButton) this.addButton.addEventListener('click', () => addProposalModal.open());
+
+    if (this.statusMenuButton) {
+      this.statusMenuButton.addEventListener('click', (e) => this.toggleStatusMenu(e));
+    }
+
+    if (this.groupActiveButton) {
+      this.groupActiveButton.addEventListener('click', () => {
+        this.setGroupFilter('active');
+      });
+    }
+    if (this.groupArchivedButton) {
+      this.groupArchivedButton.addEventListener('click', () => {
+        this.setGroupFilter('archived');
+      });
+    }
+
+    if (this.statusMenu) {
+      this.statusMenu.addEventListener('click', (e) => {
+        const option = e.target.closest('.context-menu-option');
+        if (!option) return;
+        const key = option.dataset.stateKey;
+        if (!key) return;
+        this.setStateFilter(key);
+      });
+    }
+
+    // Close the DAO menu on outside click
+    this._outsideClickHandler = (e) => {
+      if (!this.statusMenu || this.statusMenu.style.display !== 'block') return;
+      if (this.statusMenu.contains(e.target)) return;
+      if (this.statusMenuButton && this.statusMenuButton.contains(e.target)) return;
+      this.closeStatusMenu();
+    };
+    document.addEventListener('click', this._outsideClickHandler);
+  }
+
+  open() {
+    this._open();
+  }
+
+  async _open() {
+    this.isLoading = true;
+
+    // Close the main menu if opened from it
+    if (menuModal?.isActive?.()) menuModal.close();
+    footer?.closeNewChatButton?.();
+
+    this.modal.classList.add('active');
+    enterFullscreen();
+
+    // Default filter is Voting
+    this.selectedStateKey = this.selectedStateKey || 'voting';
+    this.selectedGroupKey = this.selectedGroupKey || 'active';
+    this.render();
+
+    try {
+      await daoRepo.refresh({ force: true });
+    } catch (e) {
+      console.warn('Failed to refresh DAO proposals:', e);
+      showToast('Failed to load proposals', 2500, 'error');
+    } finally {
+      this.isLoading = false;
+      this.render();
+    }
+  }
+
+  close() {
+    this.closeStatusMenu();
+    this.modal.classList.remove('active');
+    enterFullscreen();
+
+    if (this.addButton) {
+      this.addButton.classList.remove('visible');
+    }
+
+    // Restore new chat button if user is on chats/contacts
+    const activeScreenId = document.querySelector('.app-screen.active')?.id;
+    if (activeScreenId === 'chatsScreen' || activeScreenId === 'contactsScreen') {
+      footer?.openNewChatButton?.();
+    }
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
+  toggleStatusMenu(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!this.statusMenu) return;
+    if (this.statusMenu.style.display === 'block') {
+      this.closeStatusMenu();
+      return;
+    }
+    this.showStatusMenu();
+  }
+
+  showStatusMenu() {
+    if (!this.statusMenu || !this.statusMenuButton) return;
+    const buttonRect = this.statusMenuButton.getBoundingClientRect();
+    const menuWidth = 200;
+    const approxMenuHeight = 8 + DAO_STATES.length * 44; // padding + items
+
+    let left = buttonRect.right - menuWidth;
+    let top = buttonRect.bottom + 8;
+
+    if (left < 10) left = 10;
+    if (top + approxMenuHeight > window.innerHeight - 10) {
+      top = buttonRect.top - approxMenuHeight - 8;
+    }
+
+    Object.assign(this.statusMenu.style, {
+      left: `${left}px`,
+      top: `${top}px`,
+      display: 'block',
+    });
+  }
+
+  closeStatusMenu() {
+    if (!this.statusMenu) return;
+    this.statusMenu.style.display = 'none';
+  }
+
+  setStateFilter(key) {
+    this.selectedStateKey = key;
+    this.closeStatusMenu();
+    this.render();
+  }
+
+  setGroupFilter(key) {
+    this.selectedGroupKey = key;
+    this.render();
+  }
+
+  getProposals() {
+    return daoRepo.getProposalsForUi(this.selectedGroupKey);
+  }
+
+  render() {
+    const proposalsActive = daoRepo.getProposalsForUi('active');
+    const proposalsArchived = daoRepo.getProposalsForUi('archived');
+
+    const proposals = this.selectedGroupKey === 'archived' ? proposalsArchived : proposalsActive;
+
+    // Update counts by state (within selected group)
+    const counts = Object.fromEntries(DAO_STATES.map((s) => [s.key, 0]));
+    for (const p of proposals) {
+      const state = getEffectiveDaoState(p);
+      if (counts[state] !== undefined) counts[state] += 1;
+    }
+
+    // Update header title
+    const groupLabel = this.selectedGroupKey === 'archived' ? 'Archived' : 'Active';
+    const label = getDaoStateLabel(this.selectedStateKey);
+    if (this.titleEl) this.titleEl.textContent = `DAO · ${groupLabel} · ${label}`;
+
+    // Update group toggle labels + selection
+    if (this.groupActiveButton) {
+      this.groupActiveButton.textContent = `Active ${proposalsActive.length}`;
+      this.groupActiveButton.classList.toggle('active', this.selectedGroupKey !== 'archived');
+    }
+    if (this.groupArchivedButton) {
+      this.groupArchivedButton.textContent = `Archived ${proposalsArchived.length}`;
+      this.groupArchivedButton.classList.toggle('active', this.selectedGroupKey === 'archived');
+    }
+
+    for (const s of DAO_STATES) {
+      const el = document.getElementById(`daoStatusOption${s.label.replace(/\s+/g, '')}`);
+      if (el) el.textContent = `${s.label} ${counts[s.key] || 0}`;
+    }
+
+    // Filter + sort (newest entered into state first)
+    const filtered = proposals
+      .filter((p) => getEffectiveDaoState(p) === this.selectedStateKey)
+      .sort((a, b) => Number(b.stateEnteredAt || b.createdAt || 0) - Number(a.stateEnteredAt || a.createdAt || 0));
+
+    // Clear old list items
+    if (this.list) {
+      this.list.querySelectorAll('li.chat-item').forEach((el) => el.remove());
+    }
+
+    const hasAny = filtered.length > 0;
+    if (this.emptyState) this.emptyState.style.display = hasAny ? 'none' : 'block';
+
+    // Update empty state copy based on group.
+    if (this.emptyState && !hasAny) {
+      const lines = Array.from(this.emptyState.querySelectorAll('div'));
+      // Structure is: [0]=spacer, [1]=headline, [2]=subline, [3]=optional third line.
+      const headlineEl = lines[1] || null;
+      const sublineEl = lines[2] || null;
+      const isArchived = this.selectedGroupKey === 'archived';
+
+      if (this.isLoading) {
+        if (headlineEl) headlineEl.textContent = 'Loading proposals…';
+        if (sublineEl) sublineEl.textContent = 'Please wait';
+      } else {
+        if (headlineEl) headlineEl.textContent = isArchived ? 'No archived proposals found' : 'No proposals found';
+        if (sublineEl) {
+          sublineEl.textContent = isArchived
+            ? 'Archived proposals appear here after they age out'
+            : 'Use + to create a proposal';
+        }
+      }
+    }
+
+    if (!this.list) return;
+
+    for (const p of filtered) {
+      const li = document.createElement('li');
+      li.classList.add('chat-item');
+
+      const title = escapeHtml(p.title || 'Untitled Proposal');
+      const summary = escapeHtml((p.summary || '').trim());
+      const time = formatDaoTimestamp(p.stateEnteredAt || p.createdAt);
+
+      const numberPrefix = p.number ? `#${p.number} ` : '';
+
+      li.innerHTML = `
+        <div class="chat-content">
+          <div class="chat-header">
+            <div class="chat-name">${escapeHtml(numberPrefix)}${title}</div>
+            <div class="chat-time">${escapeHtml(time)}</div>
+          </div>
+          <div class="chat-message">${truncateMessage(summary || '—', 70)}</div>
+        </div>
+      `;
+      li.onclick = () => proposalInfoModal.open(p.id);
+      this.list.appendChild(li);
+    }
+
+    // Show + button when modal is active
+    if (this.addButton) {
+      this.addButton.classList.toggle('visible', this.isActive());
+    }
+  }
+}
+
+const daoModal = new DaoModal();
+
+class AddProposalModal {
+  load() {
+    this.modal = document.getElementById('addProposalModal');
+    this.closeButton = document.getElementById('closeAddProposalModal');
+    this.cancelButton = document.getElementById('cancelAddProposal');
+    this.form = document.getElementById('addProposalForm');
+    this.titleInput = document.getElementById('addProposalTitle');
+    this.typeSelect = document.getElementById('addProposalType');
+    this.summaryInput = document.getElementById('addProposalSummary');
+    this.typeFieldsContainer = document.getElementById('addProposalTypeFields');
+
+    if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
+    if (this.cancelButton) this.cancelButton.addEventListener('click', () => this.close());
+
+    if (this.form) {
+      this.form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.handleCreate();
+      });
+    }
+
+    if (this.typeSelect) {
+      this.typeSelect.addEventListener('change', () => {
+        this.renderTypeFields();
+      });
+    }
+  }
+
+  open() {
+    this.modal.classList.add('active');
+    enterFullscreen();
+    if (this.titleInput) this.titleInput.value = '';
+    if (this.typeSelect) this.typeSelect.value = 'treasury_project';
+    if (this.summaryInput) this.summaryInput.value = '';
+    this.renderTypeFields();
+    setTimeout(() => {
+      this.titleInput.focus();
+    }, 325);
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+    enterFullscreen();
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
+  renderTypeFields() {
+    if (!this.typeFieldsContainer) return;
+    const typeKey = this.typeSelect?.value || 'treasury_project';
+
+    // Minimal, mock-only dynamic fields.
+    if (typeKey === 'treasury_project' || typeKey === 'treasury_mint') {
+      this.typeFieldsContainer.innerHTML = `
+        <div class="form-group">
+          <label for="addProposalAddress">Address</label>
+          <input id="addProposalAddress" class="form-control" type="text" maxlength="128" placeholder="Destination address" />
+        </div>
+        <div class="form-group">
+          <label for="addProposalAmount">Amount</label>
+          <input id="addProposalAmount" class="form-control" type="number" min="0" step="0.0001" placeholder="0" />
+        </div>
+      `;
+      return;
+    }
+
+    if (typeKey === 'params_governance') {
+      this.typeFieldsContainer.innerHTML = `
+        <div class="form-group">
+          <label for="addProposalVotingThreshold">Voting Threshold</label>
+          <input id="addProposalVotingThreshold" class="form-control" type="text" maxlength="20" placeholder="e.g. 60%" />
+        </div>
+        <div class="form-group">
+          <label for="addProposalVotingEligibility">Voting Eligibility</label>
+          <input id="addProposalVotingEligibility" class="form-control" type="text" maxlength="120" placeholder="e.g. validators + stakers" />
+        </div>
+      `;
+      return;
+    }
+
+    if (typeKey === 'params_economic') {
+      this.typeFieldsContainer.innerHTML = `
+        <div class="form-group">
+          <label for="addProposalMinTxFee">Min Tx Fee</label>
+          <input id="addProposalMinTxFee" class="form-control" type="text" maxlength="24" placeholder="e.g. 0.001" />
+        </div>
+        <div class="form-group">
+          <label for="addProposalNodeRewards">Node Rewards</label>
+          <input id="addProposalNodeRewards" class="form-control" type="text" maxlength="24" placeholder="e.g. unchanged" />
+        </div>
+        <div class="form-group">
+          <label for="addProposalValidatorPenalty">Validator Penalty</label>
+          <input id="addProposalValidatorPenalty" class="form-control" type="text" maxlength="24" placeholder="e.g. 50" />
+        </div>
+      `;
+      return;
+    }
+
+    // params_protocol
+    this.typeFieldsContainer.innerHTML = `
+      <div class="form-group">
+        <label for="addProposalMinActiveNodes">Min Active Nodes</label>
+        <input id="addProposalMinActiveNodes" class="form-control" type="number" min="0" step="1" placeholder="e.g. 100" />
+      </div>
+      <div class="form-group">
+        <label for="addProposalMaxActiveNodes">Max Active Nodes</label>
+        <input id="addProposalMaxActiveNodes" class="form-control" type="number" min="0" step="1" placeholder="e.g. 250" />
+      </div>
+      <div class="form-group">
+        <label for="addProposalMinValidatorVersion">Min Validator Version</label>
+        <input id="addProposalMinValidatorVersion" class="form-control" type="text" maxlength="40" placeholder="e.g. 1.2.3" />
+      </div>
+    `;
+  }
+
+  async handleCreate() {
+    const title = (this.titleInput?.value || '').trim();
+    const summary = (this.summaryInput?.value || '').trim();
+    const typeKey = (this.typeSelect?.value || '').trim();
+
+    if (!title) {
+      showToast('Please enter a title', 2000, 'warning');
+      return;
+    }
+    if (!summary) {
+      showToast('Please enter a summary', 2000, 'warning');
+      return;
+    }
+
+    if (!typeKey) {
+      showToast('Please select a type', 2000, 'warning');
+      return;
+    }
+
+    const fields = {};
+    // Collect dynamic fields if present.
+    const addrEl = document.getElementById('addProposalAddress');
+    const amtEl = document.getElementById('addProposalAmount');
+    const thrEl = document.getElementById('addProposalVotingThreshold');
+    const eligEl = document.getElementById('addProposalVotingEligibility');
+    const feeEl = document.getElementById('addProposalMinTxFee');
+    const rewardsEl = document.getElementById('addProposalNodeRewards');
+    const penEl = document.getElementById('addProposalValidatorPenalty');
+    const minNodesEl = document.getElementById('addProposalMinActiveNodes');
+    const maxNodesEl = document.getElementById('addProposalMaxActiveNodes');
+    const minVerEl = document.getElementById('addProposalMinValidatorVersion');
+
+    if (addrEl?.value) fields.address = addrEl.value.trim();
+    if (amtEl?.value) fields.amount = amtEl.value;
+    if (thrEl?.value) fields.votingThreshold = thrEl.value.trim();
+    if (eligEl?.value) fields.votingEligibility = eligEl.value.trim();
+    if (feeEl?.value) fields.minTxFee = feeEl.value.trim();
+    if (rewardsEl?.value) fields.nodeRewards = rewardsEl.value.trim();
+    if (penEl?.value) fields.validatorPenalty = penEl.value.trim();
+    if (minNodesEl?.value) fields.minActiveNodes = Number(minNodesEl.value);
+    if (maxNodesEl?.value) fields.maxActiveNodes = Number(maxNodesEl.value);
+    if (minVerEl?.value) fields.minValidatorVersion = minVerEl.value.trim();
+
+    try {
+      await daoRepo.createProposal({
+        title,
+        summary,
+        type: typeKey,
+        fields,
+        createdBy: myAccount?.username || myAccount?.address || 'unknown',
+      });
+    } catch (e) {
+      console.warn('Failed to create proposal:', e);
+      showToast(e?.message || 'Failed to create proposal', 2500, 'error');
+      return;
+    }
+
+    this.close();
+    // Ensure DAO modal shows the new proposal (Discussion by default for new proposals)
+    daoModal.selectedStateKey = 'discussion';
+    daoModal.selectedGroupKey = 'active';
+    if (!daoModal.isActive()) daoModal.open();
+    else daoModal.render();
+
+    showToast('Proposal submitted (Discussion)', 2000, 'success');
+  }
+}
+
+const addProposalModal = new AddProposalModal();
+
+class ProposalInfoModal {
+  load() {
+    this.modal = document.getElementById('proposalInfoModal');
+    this.closeButton = document.getElementById('closeProposalInfoModal');
+    this.numberEl = document.getElementById('proposalInfoNumber');
+    this.titleEl = document.getElementById('proposalInfoTitle');
+    this.typeEl = document.getElementById('proposalInfoType');
+    this.metaEl = document.getElementById('proposalInfoMeta');
+    this.summaryEl = document.getElementById('proposalInfoSummary');
+    this.fieldsEl = document.getElementById('proposalInfoFields');
+    this.voteSection = document.getElementById('proposalVoteSection');
+    this.voteYesBtn = document.getElementById('proposalVoteYes');
+    this.voteNoBtn = document.getElementById('proposalVoteNo');
+    this.voteCountsEl = document.getElementById('proposalVoteCounts');
+
+    this._currentProposalId = null;
+
+    if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
+
+    if (this.voteYesBtn) this.voteYesBtn.addEventListener('click', () => this.castVote('yes'));
+    if (this.voteNoBtn) this.voteNoBtn.addEventListener('click', () => this.castVote('no'));
+  }
+
+  open(proposalId) {
+    this._open(proposalId);
+  }
+
+  async _open(proposalId) {
+    this._currentProposalId = proposalId;
+
+    this.modal.classList.add('active');
+    enterFullscreen();
+
+    let p = null;
+    try {
+      await daoRepo.ensureLoaded();
+      p = daoRepo.getProposalById(proposalId);
+    } catch (e) {
+      console.warn('Failed to load proposal:', e);
+    }
+
+    if (!p) {
+      if (this.numberEl) this.numberEl.textContent = '';
+      if (this.titleEl) this.titleEl.textContent = 'Proposal not found';
+      if (this.typeEl) this.typeEl.textContent = '';
+      if (this.metaEl) this.metaEl.textContent = '';
+      if (this.summaryEl) this.summaryEl.textContent = '';
+      if (this.fieldsEl) this.fieldsEl.innerHTML = '';
+      if (this.voteSection) this.voteSection.style.display = 'none';
+      return;
+    }
+
+    const uiState = getDaoStateLabel(getEffectiveDaoState({ state: p.state, stateEnteredAt: p.state_changed, createdAt: p.created }));
+    const entered = formatDaoTimestamp(p.state_changed || p.created);
+    const createdBy = p.createdBy ? ` · by ${p.createdBy}` : '';
+    const typeLabel = getDaoTypeLabel(p.type);
+
+    if (this.numberEl) this.numberEl.textContent = p.number ? `Proposal #${p.number}` : 'Proposal';
+    if (this.titleEl) this.titleEl.textContent = p.title || 'Untitled Proposal';
+    if (this.typeEl) this.typeEl.textContent = typeLabel ? `Type: ${typeLabel}` : '';
+    if (this.metaEl) this.metaEl.textContent = `${uiState} · ${entered}${createdBy}`;
+    if (this.summaryEl) this.summaryEl.textContent = p.summary || '';
+
+    if (this.fieldsEl) {
+      const entries = Object.entries(p.fields || {}).filter(([, v]) => v !== undefined && v !== null && String(v).length > 0);
+      if (entries.length === 0) {
+        this.fieldsEl.innerHTML = '';
+      } else {
+        this.fieldsEl.innerHTML = entries
+          .map(([k, v]) => {
+            const key = escapeHtml(String(k));
+            const val = escapeHtml(String(v));
+            return `<div><span style="color: var(--secondary-text-color)">${key}</span>: ${val}</div>`;
+          })
+          .join('');
+      }
+    }
+
+    this.renderVotingSection(p);
+  }
+
+  renderVotingSection(p) {
+    if (!this.voteSection) return;
+    const effective = getEffectiveDaoState({ state: p.state, stateEnteredAt: p.state_changed, createdAt: p.created });
+    const showVoting = effective === 'voting';
+    this.voteSection.style.display = showVoting ? 'block' : 'none';
+    if (!showVoting) return;
+
+    const voterId = getDaoVoterId();
+    const votes = p.votes || { yes: 0, no: 0, by: {} };
+    const myVote = votes.by?.[voterId] || '';
+
+    if (this.voteCountsEl) this.voteCountsEl.textContent = `Yes: ${votes.yes || 0} · No: ${votes.no || 0}`;
+
+    if (this.voteYesBtn) {
+      this.voteYesBtn.classList.toggle('btn--primary', myVote === 'yes');
+      this.voteYesBtn.classList.toggle('btn--secondary', myVote !== 'yes');
+    }
+    if (this.voteNoBtn) {
+      this.voteNoBtn.classList.toggle('btn--primary', myVote === 'no');
+      this.voteNoBtn.classList.toggle('btn--secondary', myVote !== 'no');
+    }
+  }
+
+  async castVote(choice) {
+    if (!this._currentProposalId) return;
+
+    const voterId = getDaoVoterId();
+    const result = await daoRepo.castVote({
+      proposalId: this._currentProposalId,
+      voterId,
+      choice,
+    });
+
+    if (!result?.ok) {
+      showToast(result?.error || 'Failed to vote', 2000, 'warning');
+      return;
+    }
+
+    // Re-render this modal and the list counts.
+    this.open(this._currentProposalId);
+    if (daoModal?.isActive?.()) daoModal.render();
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+    enterFullscreen();
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+}
+
+const proposalInfoModal = new ProposalInfoModal();
 
 class SettingsModal {
   constructor() { }
@@ -23766,6 +24389,15 @@ function closeTopModal(topModal){
       break;
     case 'menuModal':
       menuModal.close();
+      break;
+    case 'daoModal':
+      daoModal.close();
+      break;
+    case 'addProposalModal':
+      addProposalModal.close();
+      break;
+    case 'proposalInfoModal':
+      proposalInfoModal.close();
       break;
     case 'settingsModal':
       settingsModal.close();
