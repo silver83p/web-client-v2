@@ -1790,6 +1790,10 @@ class MenuModal {
     this.farmButton = document.getElementById('openFarm');
     this.farmButton.addEventListener('click', () => farmModal.open());
     
+    // Header sign out button
+    this.signOutHeaderButton = document.getElementById('signOutMenuHeader');
+    this.signOutHeaderButton.addEventListener('click', async () => await this.handleSignOut());
+    
     
     // Show launch button if ReactNativeWebView is available
     if (window?.ReactNativeWebView) {
@@ -1803,8 +1807,20 @@ class MenuModal {
     }
   }
 
+  enableSignOutButtonWithDelay() {
+    // Disable button initially
+    this.signOutHeaderButton.classList.remove('active');
+    // Re-enable after delay to prevent accidental taps when opening modal
+    setTimeout(() => {
+      if (this.isActive()) {
+        this.signOutHeaderButton.classList.add('active');
+      }
+    }, 1000); // 1000ms delay before button becomes clickable
+  }
+
   open() {
     this.modal.classList.add('active');
+    this.enableSignOutButtonWithDelay();
     enterFullscreen();
   }
 
@@ -2535,10 +2551,26 @@ class SettingsModal {
     
     this.signOutButton = document.getElementById('handleSignOutSettings');
     this.signOutButton.addEventListener('click', async () => await menuModal.handleSignOut());
+    
+    // Header sign out button
+    this.signOutHeaderButton = document.getElementById('signOutSettingsHeader');
+    this.signOutHeaderButton.addEventListener('click', async () => await menuModal.handleSignOut());
+  }
+
+  enableSignOutButtonWithDelay() {
+    // Disable button initially
+    this.signOutHeaderButton.classList.remove('active');
+    // Re-enable after delay to prevent accidental taps when opening modal
+    setTimeout(() => {
+      if (this.isActive()) {
+        this.signOutHeaderButton.classList.add('active');
+      }
+    }, 1000); // 1000ms delay before button becomes clickable
   }
 
   open() {
     this.modal.classList.add('active');
+    this.enableSignOutButtonWithDelay();
     enterFullscreen();
   }
 
