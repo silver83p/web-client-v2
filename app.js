@@ -17963,9 +17963,9 @@ class ImportContactsModal {
           tolledDepositToastShown: true,
         };
 
-        // Store name in senderInfo since it came from the contact
+        // Store imported name in user input name field so it displays in contactList and can be changed by user
         if (parsedContact.name) {
-          contactRecord.senderInfo = { name: parsedContact.name };
+          contactRecord.name = parsedContact.name;
         }
 
         // Save avatar if present
