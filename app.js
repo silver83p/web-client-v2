@@ -1810,12 +1810,12 @@ class MenuModal {
   enableSignOutButtonWithDelay() {
     // Disable button initially
     this.signOutHeaderButton.classList.remove('active');
-    // Re-enable after delay to prevent accidental taps when opening modal
+    // Re-enable after modal animation completes (300ms) + small buffer to prevent accidental double-taps
     setTimeout(() => {
       if (this.isActive()) {
         this.signOutHeaderButton.classList.add('active');
       }
-    }, 1000); // 1000ms delay before button becomes clickable
+    }, 400); // 400ms = modal animation (300ms) + 100ms buffer
   }
 
   open() {
@@ -2560,12 +2560,12 @@ class SettingsModal {
   enableSignOutButtonWithDelay() {
     // Disable button initially
     this.signOutHeaderButton.classList.remove('active');
-    // Re-enable after delay to prevent accidental taps when opening modal
+    // Re-enable after modal animation completes (300ms) + small buffer to prevent accidental double-taps
     setTimeout(() => {
       if (this.isActive()) {
         this.signOutHeaderButton.classList.add('active');
       }
-    }, 1000); // 1000ms delay before button becomes clickable
+    }, 400); // 400ms = modal animation (300ms) + 100ms buffer
   }
 
   open() {
