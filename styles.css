@@ -33,6 +33,7 @@
   --danger-color: #dc3545;
   --success-color: #28a745;
   --warning-color: #ef6c00;
+  --secondary-warning-color: #ffc107; /* Yellow color for secondary warnings (e.g., incomplete/newly imported contacts) */
   --info-color: #0066cc;
   --light-color: #f8f9fa;
   --dark-color: #343a40;
@@ -944,7 +945,7 @@ body {
   display: inline-block;
   width: 8px;
   height: 8px;
-  background-color: var(--warning-color);
+  background-color: var(--secondary-warning-color);
   border-radius: 50%;
   margin-right: 6px;
   vertical-align: middle;
