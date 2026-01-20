@@ -17708,7 +17708,21 @@ class ImportContactsModal {
       }
 
       // Parse contacts
-      this.parsedContacts = this.parseVcfContacts(vcfContent);
+      const parsedContacts = this.parseVcfContacts(vcfContent);
+
+      // Deduplicate by username (keep first occurrence of each normalized username)
+      const seenUsernames = new Set();
+      this.parsedContacts = parsedContacts.filter(contact => {
+        if (!contact.username) return false;
+        
+        const normalizedUsername = normalizeUsername(contact.username);
+        if (seenUsernames.has(normalizedUsername)) {
+          return false; // Skip duplicate
+        }
+        
+        seenUsernames.add(normalizedUsername);
+        return true; // Keep first occurrence
+      });
 
       // Hide loading
       this.loadingState.style.display = 'none';
@@ -17880,7 +17894,7 @@ class ImportContactsModal {
   async renderContactList() {
     const myAddress = normalizeAddress(myAccount?.keys?.address || '');
 
-    // Filter out self
+    // Filter out self (contacts are already deduplicated by username)
     const filteredContacts = this.parsedContacts.filter(c => 
       normalizeAddress(c.address) !== myAddress
     );
