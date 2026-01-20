@@ -13031,8 +13031,6 @@ class ChatModal {
       if (contact && contact?.friend && contact?.friend >= 2) {
         // Add more personal details for connections
         senderInfo.name = myData.account.name;
-        senderInfo.email = myData.account.email;
-        senderInfo.phone = myData.account.phone;
         senderInfo.linkedin = myData.account.linkedin;
         senderInfo.x = myData.account.x;
         // Add avatar info if available
@@ -16369,8 +16367,6 @@ class ChatModal {
       // Add additional info only if recipient is a connection
       if (contact && contact?.friend && contact?.friend >= 2) {
         senderInfo.name = myData.account.name;
-        senderInfo.email = myData.account.email;
-        senderInfo.phone = myData.account.phone;
         senderInfo.linkedin = myData.account.linkedin;
         senderInfo.x = myData.account.x;
         // Add avatar info if available
@@ -16516,8 +16512,6 @@ class ChatModal {
 
     if (contact && contact?.friend && contact?.friend >= 2) {
       senderInfo.name = myData.account.name;
-      senderInfo.email = myData.account.email;
-      senderInfo.phone = myData.account.phone;
       senderInfo.linkedin = myData.account.linkedin;
       senderInfo.x = myData.account.x;
       // Add avatar info if available
@@ -20997,10 +20991,14 @@ class SendAssetConfirmModal {
 
       if (friendLevel === 2) {
         senderInfo.name = myData.account.name;
-        senderInfo.email = myData.account.email;
-        senderInfo.phone = myData.account.phone;
         senderInfo.linkedin = myData.account.linkedin;
         senderInfo.x = myData.account.x;
+        // Add avatar info if available
+        if (myData.account.avatarId && myData.account.avatarKey) {
+          senderInfo.avatarId = myData.account.avatarId;
+          senderInfo.avatarKey = myData.account.avatarKey;
+        }
+        // Add timezone if available
         const tz = getLocalTimeZone();
         if (tz) {
           senderInfo.timezone = tz;
