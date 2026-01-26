@@ -601,6 +601,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Call Invite Modal
   callInviteModal.load();
 
+  // Share Attachment Modal
+  shareAttachmentModal.load();
+
   // Share Contacts Modal
   shareContactsModal.load();
 
@@ -15543,6 +15546,9 @@ class ChatModal {
       case 'save':
         void this.saveImageAttachment(row);
         break;
+      case 'share':
+        if (messageEl) shareAttachmentModal.open(messageEl);
+        break;
       case 'reply':
         if (messageEl) this.startReplyToMessage(messageEl);
         break;
@@ -17308,6 +17314,342 @@ class CallInviteModal {
 }
 
 const callInviteModal = new CallInviteModal();
+
+/**
+ * Share Attachment Modal
+ * Allows users to select contacts to share an attachment with
+ */
+class ShareAttachmentModal {
+  constructor() {
+    this.messageEl = null;
+    this.attachmentData = null;
+  }
+
+  load() {
+    this.modal = document.getElementById('shareAttachmentModal');
+    this.contactsList = document.getElementById('shareAttachmentContactsList');
+    this.template = document.getElementById('shareAttachmentContactTemplate');
+    this.counter = document.getElementById('shareAttachmentCounter');
+    this.sendButton = document.getElementById('shareAttachmentSendBtn');
+    this.cancelButton = document.getElementById('shareAttachmentCancelBtn');
+    this.closeButton = document.getElementById('closeShareAttachmentModal');
+
+    this.contactsList.addEventListener('change', this.updateCounter.bind(this));
+    this.sendButton.addEventListener('click', this.sendAttachments.bind(this));
+    this.cancelButton.addEventListener('click', () => {
+      this.close();
+    });
+    this.closeButton.addEventListener('click', this.close.bind(this));
+  }
+
+  /**
+   * Opens the share modal and populates contact list.
+   * @param {HTMLElement} messageEl - The message element containing the attachment
+   */
+  open(messageEl) {
+    this.messageEl = messageEl;
+    this.attachmentData = this.extractAttachmentData(messageEl);
+
+    if (!this.attachmentData) {
+      showToast('No attachment data found', 2000, 'error');
+      return;
+    }
+
+    this.contactsList.innerHTML = '';
+    this.modal.classList.add('active');
+
+    // Build contacts list (exclude self and current chat contact) and group by status
+    const currentChatAddress = chatModal.address;
+    const allContacts = Object.values(myData.contacts || {})
+      .filter(c => c.address !== myAccount.address && c.address !== currentChatAddress)
+      .map(c => ({
+        address: c.address,
+        username: c.username || c.address,
+        friend: c.friend || 1
+      }));
+
+    // Group contacts by friend status
+    const groups = {
+      friends: allContacts.filter(c => c.friend === 3).sort((a,b) => a.username.toLowerCase().localeCompare(b.username.toLowerCase())),
+      acquaintances: allContacts.filter(c => c.friend === 2).sort((a,b) => a.username.toLowerCase().localeCompare(b.username.toLowerCase())),
+      others: allContacts.filter(c => ![2,3,0].includes(c.friend)).sort((a,b) => a.username.toLowerCase().localeCompare(b.username.toLowerCase())),
+    };
+
+    if (allContacts.length === 0) {
+      this.modal.querySelector('.empty-state').style.display = 'block';
+      this.updateCounter();
+      return;
+    }
+
+    const sectionMeta = [
+      { key: 'friends', label: 'Friends' },
+      { key: 'acquaintances', label: 'Connections' },
+      { key: 'others', label: 'Tolled' },
+    ];
+
+    for (const { key, label } of sectionMeta) {
+      const list = groups[key];
+      if (!list || list.length === 0) continue;
+      const header = document.createElement('div');
+      header.className = 'call-invite-section-header';
+      header.textContent = label;
+      this.contactsList.appendChild(header);
+
+      for (const contact of list) {
+        const clone = this.template.content ? this.template.content.cloneNode(true) : null;
+        if (!clone) continue;
+        const row = clone.querySelector('.call-invite-contact-row');
+        const checkbox = clone.querySelector('.call-invite-contact-checkbox');
+        const nameSpan = clone.querySelector('.call-invite-contact-name');
+        if (row) row.dataset.address = contact.address || '';
+        if (checkbox) {
+          checkbox.value = contact.address || '';
+          checkbox.id = `share_cb_${(contact.address||'').replace(/[^a-zA-Z0-9]/g,'')}`;
+        }
+        if (nameSpan) nameSpan.textContent = contact.username || contact.address || 'Unknown';
+        const labelEl = clone.querySelector('.call-invite-contact-label');
+        if (labelEl && checkbox) {
+          labelEl.addEventListener('click', (ev) => {
+            if (checkbox.disabled) return;
+            if (ev.target === checkbox) return;
+            ev.preventDefault();
+            checkbox.checked = !checkbox.checked;
+            this.updateCounter();
+          });
+        }
+        this.contactsList.appendChild(clone);
+      }
+    }
+
+    this.updateCounter();
+  }
+
+  close() {
+    this.modal.classList.remove('active');
+  }
+
+  isActive() {
+    return this.modal.classList.contains('active');
+  }
+
+  updateCounter() {
+    const selected = this.contactsList.querySelectorAll('.call-invite-contact-checkbox:checked').length;
+    this.counter.textContent = `${selected} selected (max 10)`;
+    this.sendButton.disabled = selected === 0;
+    const unchecked = Array.from(this.contactsList.querySelectorAll('.call-invite-contact-checkbox:not(:checked)'));
+    if (selected >= 10) {
+      unchecked.forEach(cb => cb.disabled = true);
+    } else {
+      unchecked.forEach(cb => cb.disabled = false);
+    }
+  }
+
+  /**
+   * Extract attachment data from message element
+   * @param {HTMLElement} messageEl
+   * @returns {Object|null} Attachment data
+   */
+  extractAttachmentData(messageEl) {
+    const attachmentRow = messageEl.querySelector('.attachment-row');
+    if (!attachmentRow) return null;
+
+    const url = attachmentRow.dataset.url;
+    const name = attachmentRow.dataset.name;
+    const type = attachmentRow.dataset.type;
+    const msgIdx = attachmentRow.dataset.msgIdx;
+
+    if (!url) return null;
+
+    // Get the actual message data from myData to access encryption keys
+    const contactAddress = chatModal.address;
+    const contact = myData.contacts[contactAddress];
+    
+    if (!contact || !contact.messages || !msgIdx) {
+      console.error('Cannot find message data for attachment');
+      return null;
+    }
+
+    const messageData = contact.messages[parseInt(msgIdx)];
+    if (!messageData || !messageData.xattach || !messageData.xattach[0]) {
+      console.error('Cannot find attachment in message data');
+      return null;
+    }
+
+    const attachmentData = messageData.xattach[0];
+
+    return {
+      url: attachmentData.url,
+      pUrl: attachmentData.pUrl || null,
+      name: attachmentData.name || name || 'attachment',
+      size: attachmentData.size || 0,
+      type: attachmentData.type || type || 'application/octet-stream',
+      encKey: attachmentData.encKey
+    };
+  }
+
+  async sendAttachments() {
+    const selectedBoxes = Array.from(this.contactsList.querySelectorAll('.call-invite-contact-checkbox:checked'));
+    const addresses = selectedBoxes.map(cb => cb.value).slice(0, 10);
+    
+    if (!this.attachmentData) {
+      showToast('No attachment data found', 2000, 'error');
+      return;
+    }
+
+    this.sendButton.disabled = true;
+    this.sendButton.textContent = 'Sending...';
+
+    try {
+      const keys = myAccount.keys;
+      if (!keys) {
+        showToast('Keys not found', 0, 'error');
+        return;
+      }
+
+      // Get the file's encryption key (migration ensures all attachments have encKey)
+      const encKey = this.attachmentData.encKey;
+      if (!encKey) {
+        showToast('Missing encryption key for attachment', 0, 'error');
+        return;
+      }
+
+      for (const addr of addresses) {
+        const contact = myData.contacts[addr];
+        const ok = await ensureContactKeys(addr);
+        if (!ok) {
+          showToast(`Skipping ${contact?.username || addr} (cannot get public key)`, 2000, 'warning');
+          continue;
+        }
+
+        const recipientPubKey = myData.contacts[addr].public;
+        const pqRecPubKey = myData.contacts[addr].pqPublic;
+        
+        // Create new dhkey for sharing recipient
+        const {dhkey: recipientDhkey, cipherText} = dhkeyCombined(keys.secret, recipientPubKey, pqRecPubKey);
+
+        // Create attachment object - encKey will be encrypted in the message envelope
+        const sharedAttachment = {
+          url: this.attachmentData.url,
+          pUrl: this.attachmentData.pUrl,
+          name: this.attachmentData.name,
+          size: this.attachmentData.size,
+          type: this.attachmentData.type,
+          encKey: encKey  // File encryption key (will be encrypted with message)
+        };
+
+        // Build message with attachment
+        const messageObj = {
+          type: 'message',
+          message: '',  // Empty message text
+          attachments: [sharedAttachment]
+        };
+
+        const encMessage = encryptChacha(recipientDhkey, stringify(messageObj));
+        
+        // For ourselves: re-encrypt encKey with our password for local storage
+        const password = keys.secret + keys.pqSeed;
+        const selfKey = encryptData(bin2hex(base642bin(encKey)), password, true);
+
+        const messagePayload = {
+          message: encMessage,
+          encrypted: true,
+          encryptionMethod: 'xchacha20poly1305',
+          pqEncSharedKey: bin2base64(cipherText),
+          selfKey: selfKey,
+          sent_timestamp: getCorrectedTimestamp()
+        };
+
+        // Get toll amount
+        const sortedAddresses = [longAddress(keys.address), longAddress(addr)].sort();
+        const chatId = hashBytes(sortedAddresses.join(''));
+        const chatIdAccount = await queryNetwork(`/messages/${chatId}/toll`);
+        const toIndex = sortedAddresses.indexOf(longAddress(addr));
+        const tollRequiredToSend = chatIdAccount?.toll?.required?.[toIndex] ?? 1;
+
+        if (tollRequiredToSend === 2) {
+          showToast(`You cannot share with ${contact?.username || addr} (you are blocked)`, 0, 'warning');
+          continue;
+        }
+        
+        // Calculate toll amount: 0 for connections, recipient's required toll for others
+        let tollInLib = tollRequiredToSend === 0 ? 0n : (contact.toll || 0n);
+        
+        // Add network fee to the toll amount
+        tollInLib = tollInLib + getTransactionFeeWei();
+        // if (tollRequiredToSend === 1) {
+        //   const username = (contact?.username) || `${addr.slice(0, 8)}...${addr.slice(-6)}`;
+        //   showToast(`You can only share with people who have added you as a connection. Ask ${username} to add you as a connection`, 0, 'info');
+        //   continue;
+        // }
+
+        const chatMessageObj = await chatModal.createChatMessage(addr, messagePayload, tollInLib, keys);
+        await signObj(chatMessageObj, keys);
+        const txid = getTxid(chatMessageObj);
+
+        // Create new message object for local display (with encKey in plaintext for our use)
+        const newMessage = {
+          message: '',
+          timestamp: messagePayload.sent_timestamp,
+          sent_timestamp: messagePayload.sent_timestamp,
+          my: true,
+          txid: txid,
+          status: 'sent',
+          xattach: [{
+            url: this.attachmentData.url,
+            pUrl: this.attachmentData.pUrl,
+            name: this.attachmentData.name,
+            size: this.attachmentData.size,
+            type: this.attachmentData.type,
+            encKey: encKey  // Store in plaintext locally
+          }]
+        };
+        insertSorted(contact.messages, newMessage, 'timestamp');
+
+        // Update chats list
+        const chatUpdate = {
+          address: addr,
+          timestamp: newMessage.sent_timestamp,
+          txid: txid,
+        };
+
+        const existingChatIndex = myData.chats.findIndex((chat) => chat.address === addr);
+        if (existingChatIndex !== -1) {
+          myData.chats.splice(existingChatIndex, 1);
+        }
+        insertSorted(myData.chats, chatUpdate, 'timestamp');
+
+        // Update the chat modal UI if open
+        if (chatModal.isActive() && chatModal.address === addr) {
+          chatModal.appendChatModal();
+        }
+
+        // Send the message transaction
+        const response = await injectTx(chatMessageObj, txid);
+
+        if (!response || !response.result || !response.result.success) {
+          console.error('attachment share message failed to send', response);
+          updateTransactionStatus(txid, addr, 'failed', 'message');
+          if (chatModal.isActive() && chatModal.address === addr) {
+            chatModal.appendChatModal();
+          }
+          showToast(`Failed to share with ${contact?.username || addr}`, 3000, 'error');
+        } else {
+          showToast(`Attachment shared with ${contact?.username || addr}`, 3000, 'success');
+        }
+      }
+
+    } catch (err) {
+      console.error('Share send error', err);
+      showToast('Failed to share attachment', 0, 'error');
+    } finally {
+      this.sendButton.disabled = false;
+      this.sendButton.textContent = 'Share';
+      this.close();
+    }
+  }
+}
+
+const shareAttachmentModal = new ShareAttachmentModal();
 
 /**
  * Share Contacts Modal
