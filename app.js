@@ -19597,10 +19597,12 @@ class NewChatModal {
     this.scanButton = document.getElementById('newChatScanQRButton');
     this.uploadButton = document.getElementById('newChatUploadQRButton');
     this.hiddenFileInput = document.getElementById('newChatQRFileInput');
+    this.inviteButton = document.getElementById('newChatInviteButton');
 
     this.scanButton.addEventListener('click', () => this.scanUsernameFromQR());
     this.uploadButton.addEventListener('click', () => this.hiddenFileInput.click());
     this.hiddenFileInput.addEventListener('change', (e) => this.handleQRImageUpload(e.target.files?.[0] || null));
+    this.inviteButton.addEventListener('click', () => this.handleInviteClick());
   }
 
   /**
@@ -19881,6 +19883,16 @@ class NewChatModal {
         this.submitButton.disabled = true;
       }
     }, 1000);
+  }
+
+  /**
+   * Invoked when the user clicks the Invite button
+   * It will close the new chat modal and open the invite modal
+   * @returns {void}
+   */
+  handleInviteClick() {
+    this.closeNewChatModal();
+    inviteModal.open();
   }
 }
 
