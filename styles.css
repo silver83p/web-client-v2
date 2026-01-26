@@ -1690,6 +1690,20 @@ input[type='file'].form-control::file-selector-button {
   }
 }
 
+/* Form group with divider (for sections after form actions) */
+.form-group.form-group--divider {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.form-group.form-group--divider p {
+  margin: 0 0 1rem 0;
+  color: var(--secondary-text-color);
+  font-size: var(--font-size-sm);
+}
+
 /* Developer Options Styling */
 .developer-options {
   border: 1px solid var(--border-color);
