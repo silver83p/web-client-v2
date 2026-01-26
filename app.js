@@ -13994,9 +13994,9 @@ class ChatModal {
       this.sendButton.disabled = true; // Disable send button during encryption
       this.addAttachmentButton.disabled = true;
       loadingToastId = showToast(`Attaching file...`, 0, 'loading');
-      const { dhkey, cipherText: pqEncSharedKey } = await this.getRecipientDhKey(this.address);
-      const password = myAccount.keys.secret + myAccount.keys.pqSeed;
-      const selfKey = encryptData(bin2hex(dhkey), password, true)
+      
+      // Generate random encryption key for this attachment
+      const encKey = generateRandomBytes(32);
 
       const worker = new Worker('encryption.worker.js', { type: 'module' });
       worker.onmessage = async (e) => {
@@ -14024,8 +14024,8 @@ class ChatModal {
             let previewUrl = null;
             if (capturedThumbnailBlob) {
               try {
-                // Encrypt thumbnail using same dhkey as main file
-                const encryptedThumbnailBlob = await encryptBlob(capturedThumbnailBlob, dhkey);
+                // Encrypt thumbnail using same random key as main file
+                const encryptedThumbnailBlob = await encryptBlob(capturedThumbnailBlob, encKey);
                 // Upload encrypted thumbnail
                 previewUrl = await this.uploadEncryptedFile(encryptedThumbnailBlob, file.name);
               } catch (error) {
@@ -14038,12 +14038,11 @@ class ChatModal {
             
             this.fileAttachments.push({
               url: attachmentUrl,
-              pUrl: previewUrl,  // NEW FIELD (undefined if upload failed)
+              pUrl: previewUrl,
               name: file.name,
               size: file.size,
               type: normalizedType,
-              pqEncSharedKey: bin2base64(pqEncSharedKey),  // Same key for main file AND thumbnail
-              selfKey  // Same key for main file AND thumbnail
+              encKey: bin2base64(encKey)
             });
             
             // Cache thumbnail if we generated one - use captured variable
@@ -14100,7 +14099,7 @@ class ChatModal {
       // read the file and send it to the worker for encryption
       const reader = new FileReader();
       reader.onload = async (e) => {
-        worker.postMessage({ fileBuffer: e.target.result, dhkey }, [e.target.result]);
+        worker.postMessage({ fileBuffer: e.target.result, dhkey: encKey }, [e.target.result]);
       };
       reader.readAsArrayBuffer(file);
       
@@ -14482,47 +14481,67 @@ class ChatModal {
   async decryptAttachmentToBlob(item, linkEl, urlOverride = null) {
     if (!item || !linkEl) throw new Error('Missing item or attachment element');
 
-    // 1) Derive dhkey
-    // - Attachments: use per-attachment keys from item.xattach (not stored in DOM)
-    // - Voice messages: use audio keys from the message item
-    let selfKey;
-    let pqEncSharedKey;
-
     // Use urlOverride if provided, otherwise use the main attachment URL
     const mainUrl = linkEl.dataset.url;
     const fetchUrl = urlOverride || mainUrl;
     if (!mainUrl || mainUrl === '#') throw new Error('Missing attachment url');
 
     const isVoice = item.type === 'vm';
-    if (isVoice) {
-      // Voice message: audio keys (fallback to message keys)
-      selfKey = item.audioSelfKey || item.selfKey;
-      pqEncSharedKey = item.audioPqEncSharedKey || item.pqEncSharedKey;
-    } else {
-      // Attachment: look up attachment entry by main url (keys are stored there)
-      const att = Array.isArray(item.xattach) ? item.xattach.find((a) => a?.url === mainUrl) : null;
-      selfKey = att?.selfKey;
-      pqEncSharedKey = att?.pqEncSharedKey;
-    }
-
     let dhkey;
-    if (item.my) {
-      if (!selfKey) throw new Error('Missing selfKey for decrypt');
-      const password = myAccount.keys.secret + myAccount.keys.pqSeed;
-      dhkey = hex2bin(decryptData(selfKey, password, true));
+    
+    // 1) Get encryption key
+    if (isVoice) {
+      // Voice message: use audio keys from the message item (no encKey for voice messages)
+      const selfKey = item.audioSelfKey || item.selfKey;
+      const pqEncSharedKey = item.audioPqEncSharedKey || item.pqEncSharedKey;
+      
+      if (item.my) {
+        if (!selfKey) throw new Error('Missing selfKey for decrypt');
+        const password = myAccount.keys.secret + myAccount.keys.pqSeed;
+        dhkey = hex2bin(decryptData(selfKey, password, true));
+      } else {
+        if (!pqEncSharedKey) throw new Error('Missing pqEncSharedKey for decrypt');
+        const ok = await ensureContactKeys(this.address);
+        const senderPublicKey = myData.contacts[this.address]?.public;
+        if (!ok || !senderPublicKey) throw new Error(`No public key found for sender ${this.address}`);
+        const pqCipher = (typeof pqEncSharedKey === 'string') ? base642bin(pqEncSharedKey) : pqEncSharedKey;
+        dhkey = dhkeyCombined(
+          myAccount.keys.secret,
+          senderPublicKey,
+          myAccount.keys.pqSeed,
+          pqCipher
+        ).dhkey;
+      }
     } else {
-      if (!pqEncSharedKey) throw new Error('Missing pqEncSharedKey for decrypt');
-      const ok = await ensureContactKeys(this.address);
-      const senderPublicKey = myData.contacts[this.address]?.public;
-      if (!ok || !senderPublicKey) throw new Error(`No public key found for sender ${this.address}`);
-      // dhkeyCombined/pqSharedKey expect ciphertext bytes; accept base64 strings too by converting here.
-      const pqCipher = (typeof pqEncSharedKey === 'string') ? base642bin(pqEncSharedKey) : pqEncSharedKey;
-      dhkey = dhkeyCombined(
-        myAccount.keys.secret,
-        senderPublicKey,
-        myAccount.keys.pqSeed,
-        pqCipher
-      ).dhkey;
+      // Attachment: look up attachment entry by main url
+      const att = Array.isArray(item.xattach) ? item.xattach.find((a) => a?.url === mainUrl) : null;
+      if (!att) throw new Error('Attachment entry not found');
+      
+      // Use encKey if available (new attachments), otherwise fall back to DH-derived keys (migrated/legacy)
+      if (att.encKey) {
+        dhkey = base642bin(att.encKey);
+      } else {
+        const selfKey = att.selfKey;
+        const pqEncSharedKey = att.pqEncSharedKey;
+        
+        if (item.my) {
+          if (!selfKey) throw new Error('Missing selfKey for decrypt');
+          const password = myAccount.keys.secret + myAccount.keys.pqSeed;
+          dhkey = hex2bin(decryptData(selfKey, password, true));
+        } else {
+          if (!pqEncSharedKey) throw new Error('Missing pqEncSharedKey for decrypt');
+          const ok = await ensureContactKeys(this.address);
+          const senderPublicKey = myData.contacts[this.address]?.public;
+          if (!ok || !senderPublicKey) throw new Error(`No public key found for sender ${this.address}`);
+          const pqCipher = (typeof pqEncSharedKey === 'string') ? base642bin(pqEncSharedKey) : pqEncSharedKey;
+          dhkey = dhkeyCombined(
+            myAccount.keys.secret,
+            senderPublicKey,
+            myAccount.keys.pqSeed,
+            pqCipher
+          ).dhkey;
+        }
+      }
     }
 
     // 2) Download encrypted bytes (use fetchUrl which may be pUrl or main url)
