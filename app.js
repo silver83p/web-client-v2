@@ -16348,13 +16348,16 @@ class ChatModal {
    */
   updateTollAmountUI(address) {
     const tollValue = document.getElementById('tollValue');
-    tollValue.style.color = 'black';
+    const tollLabel = document.getElementById('tollLabel');
     const contact = myData.contacts[address] || {};
     const isOffline = !isOnline;
 
+    // Remove any existing color classes
+    tollValue.classList.remove('toll-cost', 'toll-free');
+
     // If offline and no cached toll, show a clear offline status and exit
     if (isOffline && (contact.toll === undefined || contact.toll === null)) {
-      tollValue.style.color = 'black';
+      tollLabel.textContent = 'Toll:';
       tollValue.textContent = 'offline';
       this.toll = 0n;
       this.tollUnit = 'LIB';
@@ -16369,14 +16372,25 @@ class ChatModal {
 
     let display;
     if (contact.tollRequiredToSend == 1) {
-      display = `${usdString}`;
+      // Toll is required - show as "Toll cost:" with amount in red
+      tollLabel.textContent = 'Toll cost:';
+      display = usdString;
+      // if the value of toll is 0, use toll-free class instead
+      if(contact.toll == 0n) {  
+        tollValue.classList.add('toll-free');
+      } else {
+        tollValue.classList.add('toll-cost');
+      }
     } else if (contact.tollRequiredToSend == 2) {
-      tollValue.style.color = 'red';
-      display = `blocked`;
+      // User is blocked - show as "Toll cost:" with "blocked" in red
+      tollLabel.textContent = 'Toll cost:';
+      display = 'blocked';
+      tollValue.classList.add('toll-cost');
     } else {
-      // light green used to show success
-      tollValue.style.color = '#28a745';
-      display = `free; ${usdString}`;
+      // Toll is free - show as "Toll free:" with amount in green
+      tollLabel.textContent = 'Toll free:';
+      display = usdString;
+      tollValue.classList.add('toll-free');
     }
     tollValue.textContent = display;
 
