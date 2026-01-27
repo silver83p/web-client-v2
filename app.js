@@ -16192,6 +16192,7 @@ class ChatModal {
     if (isNaN(usdValue) || isNaN(libValue)) {
       text = `${tollFloat.toFixed(6)} USD`;
     } else {
+      // text = `${usdValue.toFixed(6)} USD (≈ ${libValue.toFixed(6)} LIB)`;
       // Only show USD in display; LIB calculations kept for potential future use
       text = `${usdValue.toFixed(6)} USD`;
     }
