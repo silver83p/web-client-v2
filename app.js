@@ -18668,16 +18668,21 @@ class ImportContactsModal {
 
   /**
    * Validates a contact on the network by username lookup
-   * @param {Object} parsedContact - Contact object with username
+   * Also verifies that VCF address matches network-resolved address.
+   * @param {Object} parsedContact - Contact object with username and address
    * @returns {Promise<Object>} { success: boolean, networkAddress?: string, error?: string }
    */
   async validateContactOnNetwork(parsedContact) {
     if (!parsedContact.username) {
       return { success: false, error: 'No username provided' };
     }
+    if (!parsedContact.address) {
+      return { success: false, error: 'No address provided' };
+    }
 
     try {
       const username = normalizeUsername(parsedContact.username);
+      const vcfAddress = normalizeAddress(parsedContact.address);
       const usernameBytes = utf82bin(username);
       const usernameHash = hashBytes(usernameBytes);
 
@@ -18689,6 +18694,11 @@ class ImportContactsModal {
       }
 
       const networkAddress = normalizeAddress(addressData.address);
+
+      // Reject tampered VCF entries where username/address pairing doesn't match network.
+      if (vcfAddress !== networkAddress) {
+        return { success: false, error: 'VCF address does not match network username record' };
+      }
 
       // Verify account exists and ensure it's a public account
       const accountData = await queryNetwork(`/account/${longAddress(networkAddress)}`);
@@ -18708,6 +18718,7 @@ class ImportContactsModal {
       return { success: true, networkAddress, username };
     } catch (error) {
       console.error('Error validating contact on network:', error);
+      logsModal.log('❌ Error validating contact on network:', error?.message || String(error));
       return { success: false, error: 'Network error during validation' };
     }
   }
@@ -18967,6 +18978,7 @@ class ImportContactsModal {
       for (const result of results) {
         if (result.status === 'rejected') {
           console.error('Validation promise rejected:', result.reason);
+          logsModal.log('❌ Validation promise rejected:', result.reason?.message || String(result.reason));
           failedCount++;
           continue;
         }
@@ -18976,6 +18988,7 @@ class ImportContactsModal {
 
         if (!validation.success) {
           console.warn(`Failed to validate contact ${parsedContact.username}:`, validation.error);
+          logsModal.log(`⚠️ Failed to validate contact ${parsedContact.username}:`, validation.error);
           failedContacts.push({ username: parsedContact.username, error: validation.error });
           failedCount++;
           continue;
@@ -18987,6 +19000,7 @@ class ImportContactsModal {
         // Check if contact already exists
         if (myData.contacts[networkAddress]) {
           console.log(`Contact ${parsedContact.username} already exists, skipping`);
+          logsModal.log(`ℹ️ Contact ${parsedContact.username} already exists, skipping`);
           continue;
         }
 
@@ -19060,6 +19074,7 @@ class ImportContactsModal {
 
     } catch (err) {
       console.error('Failed to import contacts:', err);
+      logsModal.log('❌ Failed to import contacts:', err?.message || String(err));
       showToast('Failed to import contacts', 0, 'error');
     } finally {
       this.isImporting = false;
