@@ -18377,13 +18377,11 @@ class ShareContactsModal {
       // Create blob from VCF content
       const vcfBlob = new Blob([vcfContent], { type: 'text/vcard' });
 
-      // Get recipient's DH key for encryption
-      const { dhkey, cipherText: pqEncSharedKey } = await chatModal.getRecipientDhKey(chatModal.address);
-      const password = myAccount.keys.secret + myAccount.keys.pqSeed;
-      const selfKey = encryptData(bin2hex(dhkey), password, true);
+      // Use a random encryption key for the attachment (matches chat attachments)
+      const encKey = generateRandomBytes(32);
 
-      // Encrypt the VCF blob
-      const encryptedBlob = await encryptBlob(vcfBlob, dhkey);
+      // Encrypt the VCF blob using the random key
+      const encryptedBlob = await encryptBlob(vcfBlob, encKey);
 
       // Upload encrypted file
       const attachmentUrl = await chatModal.uploadEncryptedFile(encryptedBlob, vcfFilename);
@@ -18394,8 +18392,7 @@ class ShareContactsModal {
         name: vcfFilename,
         size: vcfBlob.size,
         type: 'text/vcard',
-        pqEncSharedKey: bin2base64(pqEncSharedKey),
-        selfKey
+        encKey: bin2base64(encKey)
       });
 
       // Update attachment preview in chat modal
