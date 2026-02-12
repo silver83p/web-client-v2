@@ -3831,6 +3831,10 @@ mark {
   margin-bottom: 6px;
 }
 
+.toast-list-title-centered {
+  text-align: center;
+}
+
 .toast-list {
   margin: 0;
   padding-left: 18px;
@@ -3863,7 +3867,8 @@ mark {
   margin-bottom: 18px;
 }
 
-.toast-update-button {
+.toast-update-button,
+.toast-open-logs-button {
   display: block;
   margin-top: 6px;
   padding: 8px 12px;
@@ -3875,7 +3880,8 @@ mark {
   font-weight: 600;
 }
 
-.toast-launch-backup-button {
+.toast-launch-backup-button,
+.toast-open-logs-button {
   width: fit-content;
   margin-left: auto;
   margin-right: auto;

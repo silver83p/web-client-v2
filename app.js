@@ -7902,6 +7902,31 @@ function generateMessageHash(message) {
   return hex.slice(0, 20);
 }
 
+function normalizeFailureReason(error) {
+  if (!error) return 'Unknown reason';
+  if (typeof error === 'string') return error;
+  if (error?.message) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch (jsonError) {
+    return String(error);
+  }
+}
+
+function buildUserListToastHtml(title, usernames) {
+  const listItems = usernames
+    .filter(Boolean)
+    .map(name => `<li><strong>${escapeHtml(name)}</strong></li>`)
+    .join('');
+
+  return [
+    '<div class="toast-list-content">',
+    `<div class="toast-list-title toast-list-title-centered">${escapeHtml(title)}</div>`,
+    `<ul class="toast-list">${listItems}</ul>`,
+    '</div>'
+  ].join('');
+}
+
 // Add this function before the ContactInfoModal class
 function showToast(message, duration = 2000, type = 'default', isHTML = false, options = {}) {
   const toastContainer = document.getElementById('toastContainer');
@@ -11071,6 +11096,20 @@ class LogsModal {
     if (this.clearButton) {
       this.clearButton.addEventListener('click', () => this.clear());
     }
+
+    // Event delegation for dynamically created toast button.
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target && target.classList.contains('toast-open-logs-button')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const toastElement = target.closest('.toast');
+        if (toastElement && toastElement.id) {
+          hideToast(toastElement.id);
+        }
+        this.open();
+      }
+    }, { capture: true });
   }
 
   open() {
@@ -19381,10 +19420,17 @@ class ImportContactsModal {
       const results = await Promise.allSettled(validationPromises);
 
       // Process validation results and create contacts (limited to 20)
-      for (const result of results) {
+      for (let index = 0; index < results.length; index++) {
+        const result = results[index];
+        const address = contactsToProcess[index];
+        const fallbackContact = this.parsedContacts.find(c => normalizeAddress(c.address) === address);
+        const fallbackUsername = fallbackContact?.username || address || 'unknown';
+
         if (result.status === 'rejected') {
-          console.error('Validation promise rejected:', result.reason);
-          logsModal.log('❌ Validation promise rejected:', result.reason?.message || String(result.reason));
+          const failureReason = normalizeFailureReason(result.reason);
+          console.error(`Validation promise rejected for ${fallbackUsername}:`, result.reason);
+          logsModal.log(`❌ Failed to validate contact ${fallbackUsername}: ${failureReason}`);
+          failedContacts.push({ username: fallbackUsername, error: failureReason });
           failedCount++;
           continue;
         }
@@ -19393,9 +19439,10 @@ class ImportContactsModal {
         if (!parsedContact || !validation) continue;
 
         if (!validation.success) {
-          console.warn(`Failed to validate contact ${parsedContact.username}:`, validation.error);
-          logsModal.log(`⚠️ Failed to validate contact ${parsedContact.username}:`, validation.error);
-          failedContacts.push({ username: parsedContact.username, error: validation.error });
+          const failureReason = normalizeFailureReason(validation.error);
+          console.warn(`Failed to validate contact ${parsedContact.username}:`, failureReason);
+          logsModal.log(`⚠️ Failed to validate contact ${parsedContact.username}: ${failureReason}`);
+          failedContacts.push({ username: parsedContact.username, error: failureReason });
           failedCount++;
           continue;
         }
@@ -19488,17 +19535,20 @@ class ImportContactsModal {
       // Refresh contacts screen if visible
       contactsScreen.updateContactsList();
       
-      // Show appropriate success/error message with usernames
-      if (importedCount > 0 && failedCount === 0) {
-        const successList = importedContacts.join(', ');
-        showToast(`Successfully imported: ${successList}`, 3000, 'success');
-      } else if (importedCount > 0 && failedCount > 0) {
-        const successList = importedContacts.join(', ');
-        const failedList = failedContacts.map(c => c.username).join(', ');
-        showToast(`Imported: ${successList}\n\nFailed: ${failedList}`, 0, 'warning');
-      } else if (failedCount > 0) {
-        const failedList = failedContacts.map(c => c.username).join(', ');
-        showToast(`Failed to import: ${failedList}`, 0, 'error');
+      // Show import result toasts separately for better mobile UX.
+      if (importedCount > 0) {
+        const successLabel = importedCount === 1 ? 'contact' : 'contacts';
+        const successHtml = buildUserListToastHtml(`Imported ${importedCount} ${successLabel}`, importedContacts);
+        showToast(successHtml, 3500, 'success', true);
+      }
+
+      if (failedCount > 0) {
+        const failedLabel = failedCount === 1 ? 'contact' : 'contacts';
+        const failedHtml = [
+          buildUserListToastHtml(`Failed to import ${failedCount} ${failedLabel}`, failedContacts.map(c => c.username)),
+          '<button type="button" class="toast-open-logs-button">Open Logs</button>'
+        ].join('');
+        showToast(failedHtml, 0, 'error', true);
       }
 
       // Show warning if more than 20 contacts were selected
