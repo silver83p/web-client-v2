@@ -139,6 +139,7 @@ const wei = 10n ** BigInt(weiDigits);
 const MAX_MEMO_BYTES = 1000; // 1000 bytes for memos
 const MAX_CHAT_MESSAGE_BYTES = 1000; // 1000 bytes for chat messages
 const BRIDGE_USERNAME = 'liberdusbridge';
+const TRANSACTION_TIMESTAMP_OFFSET_MS = 500; // Transaction offset to allow for slow connections
 
 let myData = null;
 let myAccount = null; // this is set to myData.account for convience
@@ -4236,7 +4237,7 @@ class FriendModal {
       chatId: chatId_,
       required: requiredNum,
       type: 'update_toll_required',
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       networkId: network.netid,
     };
     const txid = await signObj(tx, myAccount.keys);
@@ -6184,7 +6185,7 @@ async function postAssetTransfer(to, amount, memo, keys) {
     // TODO backend is not allowing memo > 140 characters; by pass using xmemo; we might have to check the total tx size instead
     // memo: stringify(memo),
     xmemo: memo,
-    timestamp: getCorrectedTimestamp(),
+    timestamp: getTransactionTimestamp(),
     fee: getTransactionFeeWei(), // This is not used by the backend
     networkId: network.netid,
   };
@@ -6207,7 +6208,7 @@ async function postRegisterAlias(alias, keys, isPrivate = false) {
     alias: alias,
     publicKey: keys.public,
     pqPublicKey: pqPublicKey,
-    timestamp: getCorrectedTimestamp(),
+    timestamp: getTransactionTimestamp(),
     networkId: network.netid,
     private: isPrivate,
   };
@@ -8484,6 +8485,10 @@ function getCorrectedTimestamp() {
   return correctedTime;
 }
 
+function getTransactionTimestamp() {
+  return getCorrectedTimestamp() + TRANSACTION_TIMESTAMP_OFFSET_MS;
+}
+
 // Validator Modals
 
 // fetching market price by invoking `updateAssetPricesIfNeeded` and extracting from myData.assetPrices
@@ -10667,7 +10672,7 @@ class TollModal {
       from: longAddress(myAccount.keys.address),
       toll: toll,
       type: 'toll',
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       tollUnit: tollUnit,
       networkId: network.netid,
     };
@@ -11717,7 +11722,7 @@ class ValidatorStakingModal {
       nominator: longAddress(myAccount?.keys?.address),
       nominee: nodeAddress,
       force: false,
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       networkId: network.netid,
     };
 
@@ -12056,7 +12061,7 @@ class StakeValidatorModal {
       nominator: longAddress(myAccount.keys.address),
       nominee: nodeAddress,
       stake: amount,
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       networkId: network.netid,
     };
 
@@ -13183,7 +13188,7 @@ class ChatModal {
       from: longAddress(myData.account.keys.address),
       to: longAddress(contactAddress),
       chatId: hashBytes([longAddress(myData.account.keys.address), longAddress(contactAddress)].sort().join('')),
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       networkId: network.netid,
     };
     const txid = await signObj(tx, myAccount.keys);
@@ -13250,7 +13255,7 @@ class ChatModal {
       from: longAddress(myData.account.keys.address),
       to: longAddress(contactAddress),
       chatId: hashBytes([longAddress(myData.account.keys.address), longAddress(contactAddress)].sort().join('')),
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       oldContactTimestamp: myData.contacts[contactAddress].timestamp,
       networkId: network.netid,
     };
@@ -13730,7 +13735,7 @@ class ChatModal {
       chatId: hashBytes([fromAddr, toAddr].sort().join('')),
       message: 'x',
       xmessage: payload,
-      timestamp: getCorrectedTimestamp(),
+      timestamp: getTransactionTimestamp(),
       fee: getTransactionFeeWei(), // This is not used by the backend
       networkId: network.netid,
     };
