@@ -15161,6 +15161,18 @@ class ChatModal {
     if (attachmentRow) {
       e.preventDefault();
       e.stopPropagation();
+
+      const messageEl = attachmentRow.closest('.message');
+      if (messageEl?.dataset?.status === 'failed') {
+        const isPayment = messageEl.classList.contains('payment-info');
+        if (isPayment) {
+          this.showMessageContextMenu(e, messageEl);
+          return;
+        }
+        failedMessageMenu.open(e, messageEl);
+        return;
+      }
+
       await this.showAttachmentContextMenu(e, attachmentRow);
       return;
     }
@@ -15250,7 +15262,7 @@ class ChatModal {
       if (inviteOption) inviteOption.style.display = isExpired ? 'none' : 'flex';
       if (editResendOption) editResendOption.style.display = 'none';
       if (editOption) editOption.style.display = 'none';
-      if (replyOption) replyOption.style.display = isFuture ? 'flex' : 'none';
+      if (replyOption) replyOption.style.display = 'flex';
     } else if (isVoice) {
       if (copyOption) copyOption.style.display = 'none';
       if (inviteOption) inviteOption.style.display = 'none';
