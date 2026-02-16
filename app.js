@@ -4131,7 +4131,12 @@ class FriendModal {
     this.submitButton = document.getElementById('friendSubmitButton');
 
     // Friend modal form submission
-    this.friendForm.addEventListener('submit', (event) => this.handleFriendSubmit(event));
+    this.friendForm.addEventListener('submit', withButtonCooldown(
+      this.submitButton,
+      BUTTON_COOLDOWN_MS,
+      () => this.updateSubmitButtonState(),
+      (event) => this.handleFriendSubmit(event)
+    ));
 
     // Enable/disable submit button based on selection changes
     this.friendForm.addEventListener('change', (e) => {
@@ -4200,10 +4205,9 @@ class FriendModal {
     this.initialFriendStatus = contact.friend;
     this.warningShown = false;
 
-    // Initialize submit button state
-    this.updateSubmitButtonState();
-
     this.modal.classList.add('active');
+    // Initialize submit button state after modal is active so updateSubmitButtonState()'s isActive() guard passes
+    this.updateSubmitButtonState();
   }
 
   /**
@@ -4255,13 +4259,11 @@ class FriendModal {
    */
   async handleFriendSubmit(event) {
     event.preventDefault();
-    this.submitButton.disabled = true;
     const contact = myData.contacts[this.currentContactAddress];
     const selectedStatus = this.friendForm.querySelector('input[name="friendStatus"]:checked')?.value;
     const prevFriendStatus = Number(contact?.friend);
 
     if (selectedStatus == null || Number(selectedStatus) === contact.friend) {
-      this.submitButton.disabled = true;
       console.log('No change in friend status or no status selected.');
       return;
     }
@@ -4327,7 +4329,6 @@ class FriendModal {
 
     // Close the friend modal (skip warning since form was submitted)
     this.close(true);
-    this.submitButton.disabled = false;
   }
 
   // setAddress fuction that sets a global variable that can be used to set the currentContactAddress
@@ -4384,6 +4385,7 @@ class FriendModal {
 
   // Update the submit button's enabled state based on current and selected status
   updateSubmitButtonState() {
+    if (!this.isActive()) return;
     const contact = myData?.contacts?.[this.currentContactAddress];
     // return early if contact is not found or offline
     if (!contact || !isOnline) {
@@ -12541,7 +12543,12 @@ class ChatModal {
         this.closeHeaderContextMenu();
       }
     });
-    this.sendButton.addEventListener('click', this.handleSendMessage.bind(this));
+    this.sendButton.addEventListener('click', withButtonCooldown(
+      this.sendButton,
+      BUTTON_COOLDOWN_MS,
+      () => this.revalidateSendButtonState(),
+      () => this.handleSendMessage()
+    ));
     this.cancelEditButton.addEventListener('click', () => this.cancelEdit());
     this.closeButton.addEventListener('click', this.close.bind(this));
     this.sendButton.addEventListener('keydown', ignoreTabKey);
@@ -13311,8 +13318,6 @@ class ChatModal {
    * @returns {void}
    */
   async handleSendMessage() {
-    this.sendButton.disabled = true; // Disable the button
-
     // Check if user is offline - prevent sending messages when offline
     if (!isOnline) {
       showToast('You are offline. Please check your internet connection.', 3000, 'error');
@@ -13322,7 +13327,6 @@ class ChatModal {
     // if user is blocked, don't send message, show toast
     if (myData.contacts[this.address].tollRequiredToSend == 2) {
       showToast('You are blocked by this user', 0, 'error');
-      this.sendButton.disabled = false;
       return;
     }
 
@@ -13338,7 +13342,6 @@ class ChatModal {
 
       const message = this.messageInput.value.trim();
       if (!message && !this.fileAttachments?.length) {
-        this.sendButton.disabled = false;
         return;
       }
 
@@ -13347,7 +13350,6 @@ class ChatModal {
       if (!sufficientBalance) {
         const msg = `Insufficient balance for fee${amount > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`;
         showToast(msg, 0, 'error');
-        this.sendButton.disabled = false;
         return;
       }
 
@@ -13694,7 +13696,7 @@ class ChatModal {
         this.appendChatModal();
       }
     } finally {
-      this.sendButton.disabled = false; // Re-enable the button
+      // Cooldown and re-enable handled by withButtonCooldown wrapper
     }
   }
 
@@ -14281,6 +14283,18 @@ class ChatModal {
       // Only enable if online
       if (isOnline) this.sendButton.disabled = false;
     }
+  }
+
+  /**
+   * Revalidates the send button disabled state and visibility from current message and byte limit.
+   * No-op if the chat modal is not active (e.g. when cooldown timer fires after modal was closed).
+   */
+  revalidateSendButtonState() {
+    if (!this.isActive()) return;
+    const messageText = this.messageInput?.value ?? '';
+    const messageValidation = this.validateMessageSize(messageText);
+    this.updateMessageByteCounter(messageValidation);
+    this.toggleSendButtonVisibility();
   }
 
   /**
@@ -20771,7 +20785,21 @@ class NewChatModal {
     this.submitButton = document.querySelector('#newChatForm button[type="submit"]');
 
     this.closeNewChatModalButton.addEventListener('click', this.closeNewChatModal.bind(this));
-    this.newChatForm.addEventListener('submit', this.handleNewChat.bind(this));
+    this.newChatForm.addEventListener('submit', withButtonCooldown(
+      this.submitButton,
+      BUTTON_COOLDOWN_MS,
+      () => {
+        if (!this.isActive()) return;
+        // Re-run username validation so submit button disabled state is refreshed from current recipient.
+        this.recipientInput.dispatchEvent(new Event('input', { bubbles: true }));
+      },
+      (event) => this.handleNewChat(event)
+    ));
+    // Disable submit and clear status immediately so there is no 300ms window where the button stays enabled after input change
+    this.recipientInput.addEventListener('input', () => {
+      this.submitButton.disabled = true;
+      this.usernameAvailable.style.display = 'none';
+    });
     this.recipientInput.addEventListener('input', debounce(this.handleUsernameInput.bind(this), 300));
 
     this.scanButton = document.getElementById('newChatScanQRButton');
@@ -20816,6 +20844,10 @@ class NewChatModal {
     if (contactsScreen.isActive()) {
       footer.openNewChatButton();
     }
+  }
+
+  isActive() {
+    return this.modal?.classList.contains('active') || false;
   }
 
   /**
