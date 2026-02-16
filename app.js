@@ -8277,6 +8277,13 @@ function revalidateButtonStates() {
   if (typeof sendAssetFormModal !== 'undefined' && sendAssetFormModal.isActive()) {
     sendAssetFormModal.refreshSendButtonDisabledState();
   }
+
+  // re-validate chat modal buttons
+  if (typeof chatModal !== 'undefined' && chatModal.isActive() && chatModal.address) {
+    if (chatModal.voiceRecordButton) {
+      chatModal.voiceRecordButton.disabled = chatModal.blockedByRecipient || !isOnline;
+    }
+  }
 }
 
 // Prevent form submissions when offline
@@ -12907,6 +12914,7 @@ class ChatModal {
     editInputInit.value = '';
     this.cancelEditButton.style.display = 'none';
     this.addAttachmentButton.disabled = false;
+    if (this.voiceRecordButton) this.voiceRecordButton.disabled = !isOnline;
 
     friendModal.setAddress(address);
     footer.closeNewChatButton();
@@ -12914,6 +12922,7 @@ class ChatModal {
     // Cache whether the contact has me blocked, and disable attachments accordingly
     this.blockedByRecipient = Number(contact?.tollRequiredToSend) === 2;
     this.addAttachmentButton.disabled = this.blockedByRecipient;
+    if (this.voiceRecordButton) this.voiceRecordButton.disabled = this.blockedByRecipient || !isOnline;
     friendModal.updateFriendButton(contact, 'addFriendButtonChat');
     // Set user info
     this.modalTitle.textContent = getContactDisplayName(contact);
@@ -16799,6 +16808,10 @@ class ChatModal {
       if (this.isActive() && this.address === address) {
         this.updateTollAmountUI(address);
         this.addAttachmentButton.disabled = this.isEncrypting || this.isEditingMessage() || this.blockedByRecipient;
+        // Ensure voice recorder reflects updated blocked/connectivity state as well
+        if (this.voiceRecordButton) {
+          this.voiceRecordButton.disabled = this.blockedByRecipient || !isOnline;
+        }
       }
 
       // console.log(`localContact.tollRequiredToSend: ${localContact.tollRequiredToSend}`);
