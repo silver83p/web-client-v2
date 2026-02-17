@@ -177,6 +177,8 @@ const MIGRATION_ATTACHMENT_KEYS_TO_ENC_KEY_TS = 202602010000;
 let parameters = {
   current: {
     transactionFee: 1n * wei,
+    transactionFeeUsdStr: '',
+    stabilityFactorStr: '',
   },
 };
 
@@ -3183,7 +3185,7 @@ async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   const asset = myData.wallet.assets[assetIndex];
   
   // Check if transaction fee is available from network parameters
-  if (!parameters.current || !parameters.current.transactionFeeUsdStr) {
+  if (!parameters.current || !parameters.current.transactionFeeUsdStr || !parameters.current.stabilityFactorStr) {
     console.error('Transaction fee not available from network parameters');
     if (balanceWarning) {
       balanceWarning.textContent = 'Network error: Cannot determine transaction fee';
@@ -17126,6 +17128,14 @@ class ChatModal {
    * @returns {Promise<void>}
    */
   async sendVoiceMessageTx(voiceMessageUrl, duration, audioPqEncSharedKey, audioSelfKey, replyInfo = null) {
+    const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : this.toll;
+    const sufficientBalance = await validateBalance(tollInLib);
+    if (!sufficientBalance) {
+      throw new Error(
+        `Insufficient balance for fee${tollInLib > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`
+      );
+    }
+
     // Create voice message object
     const messageObj = {
       type: 'vm',
@@ -17188,9 +17198,6 @@ class ChatModal {
     }
 
     payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
-
-    // Calculate toll
-    const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : this.toll;
 
     // Create and send transaction
     const chatMessageObj = await this.createChatMessage(this.address, payload, tollInLib, myAccount.keys);
@@ -17841,6 +17848,12 @@ class CallInviteModal {
     this.inviteSendButton.textContent = 'Sending...';
 
     try {
+      let availableBalanceWei = getLibBalanceWei();
+      const feeInWei = getTransactionFeeWei({ allowNull: true });
+      if (feeInWei === null) {
+        showToast('Network error: Cannot determine transaction fee', 0, 'error');
+        return;
+      }
       const successMessages = [];
       const failureGroups = new Map();
       const addFailure = (reason, name) => {
@@ -17903,6 +17916,14 @@ class CallInviteModal {
           continue;
         }
 
+        const totalRequired = toll + feeInWei;
+        if (availableBalanceWei < totalRequired) {
+          addFailure('insufficientBalance', contact.username || addr);
+          continue;
+        }
+        // Reserve balance locally to prevent over-attempting within this batch.
+        availableBalanceWei -= totalRequired;
+
         const messageObj = await chatModal.createChatMessage(addr, messagePayload, toll, keys);
         // set callType to true if callTime is within 5 minutes of now or after callTime
         if (payload?.callTime <= getCorrectedTimestamp() + 5 * 60 * 1000) {
@@ -17946,6 +17967,8 @@ class CallInviteModal {
         const response = await injectTx(messageObj, txid);
 
         if (!response || !response.result || !response.result.success) {
+          // Refund local reservation when tx broadcast/injection fails.
+          availableBalanceWei += totalRequired;
           console.error('call message failed to send', response);
           updateTransactionStatus(txid, addr, 'failed', 'message');
           if (chatModal.isActive() && chatModal.address === addr) {
@@ -18001,6 +18024,12 @@ class CallInviteModal {
             case 'sendFailed':
               failureItems.push({
                 text: 'Call invite failed to send to:',
+                sublist: nameList
+              });
+              break;
+            case 'insufficientBalance':
+              failureItems.push({
+                text: 'Insufficient LIB balance to invite:',
                 sublist: nameList
               });
               break;
@@ -18242,11 +18271,27 @@ class ShareAttachmentModal {
     this.sendButton.textContent = 'Sending...';
 
     try {
+      let availableBalanceWei = getLibBalanceWei();
+      const feeInWei = getTransactionFeeWei({ allowNull: true });
+      if (feeInWei === null) {
+        showToast('Network error: Cannot determine transaction fee', 0, 'error');
+        return;
+      }
       const keys = myAccount.keys;
       if (!keys) {
         showToast('Keys not found', 0, 'error');
         return;
       }
+      const successMessages = [];
+      const failureGroups = new Map();
+      const addFailure = (reason, name) => {
+        if (!failureGroups.has(reason)) {
+          failureGroups.set(reason, new Set());
+        }
+        if (name) {
+          failureGroups.get(reason).add(name);
+        }
+      };
 
       // Get the file's encryption key (migration ensures all attachments have encKey)
       const encKey = this.attachmentData.encKey;
@@ -18257,9 +18302,10 @@ class ShareAttachmentModal {
 
       for (const addr of addresses) {
         const contact = myData.contacts[addr];
+        const contactName = contact?.username || addr;
         const ok = await ensureContactKeys(addr);
         if (!ok) {
-          showToast(`Skipping ${contact?.username || addr} (cannot get public key)`, 2000, 'warning');
+          addFailure('noPublicKey', contactName);
           continue;
         }
 
@@ -18309,15 +18355,21 @@ class ShareAttachmentModal {
         const tollRequiredToSend = chatIdAccount?.toll?.required?.[toIndex] ?? 1;
 
         if (tollRequiredToSend === 2) {
-          showToast(`You cannot share with ${contact?.username || addr} (you are blocked)`, 0, 'warning');
+          addFailure('blocked', contactName);
           continue;
         }
         
         // Calculate toll amount: 0 for connections, recipient's required toll for others
         let tollInLib = tollRequiredToSend === 0 ? 0n : (contact.toll || 0n);
-        
-        // Add network fee to the toll amount
-        tollInLib = tollInLib + getTransactionFeeWei();
+
+        const totalRequired = tollInLib + feeInWei;
+        if (availableBalanceWei < totalRequired) {
+          addFailure('insufficientBalance', contactName);
+          continue;
+        }
+        // Reserve balance locally to prevent over-attempting within this batch.
+        availableBalanceWei -= totalRequired;
+
         // if (tollRequiredToSend === 1) {
         //   const username = (contact?.username) || `${addr.slice(0, 8)}...${addr.slice(-6)}`;
         //   showToast(`You can only share with people who have added you as a connection. Ask ${username} to add you as a connection`, 0, 'info');
@@ -18369,15 +18421,80 @@ class ShareAttachmentModal {
         const response = await injectTx(chatMessageObj, txid);
 
         if (!response || !response.result || !response.result.success) {
+          // Refund local reservation when tx broadcast/injection fails.
+          availableBalanceWei += totalRequired;
           console.error('attachment share message failed to send', response);
           updateTransactionStatus(txid, addr, 'failed', 'message');
           if (chatModal.isActive() && chatModal.address === addr) {
             chatModal.appendChatModal();
           }
-          showToast(`Failed to share with ${contact?.username || addr}`, 3000, 'error');
+          addFailure('sendFailed', contactName);
         } else {
-          showToast(`Attachment shared with ${contact?.username || addr}`, 3000, 'success');
+          successMessages.push(`Attachment shared with ${contactName}`);
         }
+      }
+
+      if (successMessages.length > 0) {
+        const successNames = successMessages.map((message) => {
+          const match = message.match(/^Attachment shared with (.+)$/);
+          return match ? match[1] : message;
+        });
+        const successHtml = [
+          '<div class="toast-list-content">',
+          '<div class="toast-list-title">Attachment(s) shared with:</div>',
+          '<ul class="toast-list">',
+          ...successNames.map((name) => `<li><strong>${escapeHtml(name)}</strong></li>`),
+          '</ul>',
+          '</div>'
+        ].join('');
+        showToast(successHtml, 3000, 'success', true);
+      }
+
+      if (failureGroups.size > 0) {
+        const failureItems = [];
+        for (const [reason, names] of failureGroups.entries()) {
+          const nameList = Array.from(names);
+          switch (reason) {
+            case 'noPublicKey':
+              failureItems.push({
+                text: 'Cannot get public key for:',
+                sublist: nameList
+              });
+              break;
+            case 'blocked':
+              failureItems.push({
+                text: 'You cannot share with these contacts (you are blocked):',
+                sublist: nameList
+              });
+              break;
+            case 'insufficientBalance':
+              failureItems.push({
+                text: 'Insufficient LIB balance to share with:',
+                sublist: nameList
+              });
+              break;
+            case 'sendFailed':
+              failureItems.push({
+                text: 'Attachment share failed for:',
+                sublist: nameList
+              });
+              break;
+          }
+        }
+        const failureHtml = [
+          '<div class="toast-list-content">',
+          '<div class="toast-list-title">Attachment not shared:</div>',
+          '<ul class="toast-list">',
+          ...failureItems.map((item) => {
+            const sublist = Array.isArray(item.sublist) && item.sublist.length > 0
+              ? `<ul class="toast-sublist">${item.sublist.map((name) => `<li><strong>${escapeHtml(name)}</strong></li>`).join('')}</ul>`
+              : '';
+            return `<li>${item.text}${sublist}</li>`;
+          }),
+          '</ul>',
+          '</div>'
+        ].join('');
+        showToast(failureHtml, 0, 'warning', true);
       }
 
     } catch (err) {
@@ -20197,11 +20314,11 @@ class FailedMessageMenu {
           .sendVoiceMessageTx(voiceUrl, duration, pqEncSharedKeyBin, selfKey)
           .catch((err) => {
             console.error('Voice message retry failed:', err);
-            showToast('Failed to retry voice message', 0, 'error');
+            showToast(err?.message || 'Failed to retry voice message', 0, 'error');
           });
       } catch (err) {
         console.error('Voice message retry failed:', err);
-        showToast('Failed to retry voice message', 0, 'error');
+        showToast(err?.message || 'Failed to retry voice message', 0, 'error');
       }
       return;
     }
@@ -26707,8 +26824,23 @@ function getStabilityFactor() {
 }
 
 // returns transaction fee in wei
-function getTransactionFeeWei() {
+// pass { allowNull: true } to return null when fee params are unavailable
+function getTransactionFeeWei(options = {}) {
+  const { allowNull = false } = options;
+  if (!parameters?.current?.transactionFeeUsdStr || !parameters?.current?.stabilityFactorStr) {
+    return allowNull ? null : 1n * wei;
+  }
   return EthNum.toWei(EthNum.div(parameters.current.transactionFeeUsdStr, parameters.current.stabilityFactorStr)) || 1n * wei;
+}
+
+/**
+ * Returns current LIB balance from local wallet state.
+ * Falls back to first asset for compatibility with existing wallet structure.
+ * @returns {bigint}
+ */
+function getLibBalanceWei() {
+  const libAsset = (myData?.wallet?.assets || []).find((asset) => asset?.symbol === 'LIB') || myData?.wallet?.assets?.[0];
+  return BigInt(libAsset?.balance ?? 0n);
 }
 
 
