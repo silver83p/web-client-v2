@@ -8772,8 +8772,18 @@ class RemoveAccountsModal {
     this.submitButton = document.getElementById('submitRemoveAccounts');
     this.removeAllButton = document.getElementById('removeAllAccountsButton');
     this.closeButton.addEventListener('click', () => this.close());
-    this.submitButton.addEventListener('click', () => this.handleSubmit());
-    this.removeAllButton.addEventListener('click', () => this.handleRemoveAllAccounts());
+    this.submitButton.addEventListener('click', withButtonCooldown(
+      this.submitButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => this.handleSubmit()
+    ));
+    this.removeAllButton.addEventListener('click', withButtonCooldown(
+      this.removeAllButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => this.handleRemoveAllAccounts()
+    ));
   }
 
   open() {
@@ -9021,9 +9031,12 @@ class BackupAccountModal {
     this.storageLocationSelect = document.getElementById('backupStorageLocation');
     
     document.getElementById('closeBackupForm').addEventListener('click', () => this.close());
-    document.getElementById('backupForm').addEventListener('submit', (event) => {
-      this.handleSubmit(event);
-    });
+    document.getElementById('backupForm').addEventListener('submit', withButtonCooldown(
+      this.submitButton,
+      BUTTON_COOLDOWN_MS,
+      () => this.updateButtonState(),
+      (event) => this.handleSubmit(event)
+    ));
 
     this.passwordInput.addEventListener('input', () => this.updateButtonState());
     this.passwordConfirmInput.addEventListener('input', () => this.updateButtonState());
@@ -9546,7 +9559,6 @@ class BackupAccountModal {
     const password = this.passwordInput.value || '';
     const confirmPassword = this.passwordConfirmInput.value || '';
     if (password.length > 0 && confirmPassword !== password) {
-      this.updateButtonState();
       return;
     }
 
@@ -9567,9 +9579,6 @@ class BackupAccountModal {
    * @param {boolean} toGoogleDrive - Whether to upload to Google Drive
    */
   async handleSubmitOne(toGoogleDrive = false) {
-    // Disable button to prevent multiple submissions
-    this.submitButton.disabled = true;
-
     saveState();
 
     const password = this.passwordInput.value;
@@ -9653,8 +9662,6 @@ class BackupAccountModal {
     } catch (error) {
       console.error('Backup failed:', error);
       showToast('Failed to create backup. Please try again.', 0, 'error');
-      // Re-enable button so user can try again
-      this.updateButtonState();
     }
   }
 
@@ -9663,10 +9670,6 @@ class BackupAccountModal {
    * @param {boolean} toGoogleDrive - Whether to upload to Google Drive
    */
   async handleSubmitAll(toGoogleDrive = false) {
-
-    // Disable button to prevent multiple submissions
-    this.submitButton.disabled = true;
-
     const password = this.passwordInput.value;
     const myLocalStore = this.copyLocalStorageToObject();
 
@@ -9733,8 +9736,6 @@ class BackupAccountModal {
     } catch (error) {
       console.error('Backup failed:', error);
       showToast('Failed to create backup. Please try again.', 0, 'error');
-      // Re-enable button so user can try again
-      this.updateButtonState();
     }
   }
 
@@ -9902,7 +9903,12 @@ class RestoreAccountModal {
     this.pickerEmpty = document.getElementById('googleDrivePickerEmpty');
 
     this.closeImportForm.addEventListener('click', () => this.close());
-    this.importForm.addEventListener('submit', (event) => this.handleSubmit(event));
+    this.importForm.addEventListener('submit', withButtonCooldown(
+      this.submitButton,
+      BUTTON_COOLDOWN_MS,
+      () => this.updateButtonState(),
+      (event) => this.handleSubmit(event)
+    ));
 
     // Add new event listeners for developer options
     this.developerOptionsToggle.addEventListener('change', () => this.toggleDeveloperOptions());
@@ -21467,7 +21473,20 @@ class CreateAccountModal {
     this.privateAccountTemplate = document.getElementById('privateAccountHelpMessageTemplate');
 
     // Setup event listeners
-    this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+    this.form.addEventListener('submit', withButtonCooldown(
+      [
+        this.submitButton,
+        this.migrateAccountsButton,
+        this.toggleButton,
+        this.usernameInput,
+        this.privateKeyInput,
+        this.backButton,
+        this.privateAccountCheckbox
+      ],
+      BUTTON_COOLDOWN_MS,
+      null,
+      (e) => this.handleSubmit(e)
+    ));
     this.usernameInput.addEventListener('input', (e) => this.handleUsernameInput(e));
     this.toggleButton.addEventListener('change', () => this.handleTogglePrivateKeyInput());
     this.toggleMoreOptions.addEventListener('change', () => this.handleToggleMoreOptions());
@@ -21660,17 +21679,6 @@ class CreateAccountModal {
   }
 
   async handleSubmit(event) {
-    // Disable submit button
-    this.submitButton.disabled = true;
-    // disable migrate accounts button
-    this.migrateAccountsButton.disabled = true;
-    // Disable input fields, back button, and toggle button
-    this.toggleButton.disabled = true;
-    this.usernameInput.disabled = true;
-    this.privateKeyInput.disabled = true;
-    this.backButton.disabled = true;
-    this.privateAccountCheckbox.disabled = true;
-
     event.preventDefault();
     
     // Validate username at submit time after normalization
@@ -21681,7 +21689,6 @@ class CreateAccountModal {
       this.usernameAvailable.textContent = 'too short';
       this.usernameAvailable.style.color = '#dc3545';
       this.usernameAvailable.style.display = 'inline';
-      this.reEnableControls();
       return;
     }
     
@@ -21708,8 +21715,6 @@ class CreateAccountModal {
         this.privateKeyError.textContent = validation.message;
         this.privateKeyError.style.color = '#dc3545';
         this.privateKeyError.style.display = 'inline';
-        // Re-enable controls on validation failure
-        this.reEnableControls();
         return;
       }
 
@@ -21744,8 +21749,6 @@ class CreateAccountModal {
           this.privateKeyError.textContent = 'An account already exists for this private key.';
           this.privateKeyError.style.color = '#dc3545';
           this.privateKeyError.style.display = 'inline';
-          // Re-enable controls when account already exists
-          this.reEnableControls();
           return; // Stop the account creation process
         } else {
           this.privateKeyError.style.display = 'none';
@@ -21755,8 +21758,6 @@ class CreateAccountModal {
         this.privateKeyError.textContent = 'Network error checking key. Please try again.';
         this.privateKeyError.style.color = '#dc3545';
         this.privateKeyError.style.display = 'inline';
-        // Re-enable controls on network error
-        this.reEnableControls();
         return; // Stop process on error
       }
     }
@@ -21792,7 +21793,6 @@ class CreateAccountModal {
       }
       res = await postRegisterAlias(username, myAccount.keys, myAccount.private || false);
     } catch (error) {
-      this.reEnableControls();
       if (waitingToastId) hideToast(waitingToastId);
       showToast(`Failed to fetch network parameters, try again later.`, 0, 'error');
       console.error('Failed to fetch network parameters, using defaults:', error);
@@ -21819,7 +21819,6 @@ class CreateAccountModal {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         if (waitingToastId) hideToast(waitingToastId);
 //        showToast('Account created successfully!', 3000, 'success');
-        this.reEnableControls();
         this.close();
         welcomeScreen.close();
         // TODO: may not need to get set since gets set in `getChats`. Need to check signin flow.
@@ -21835,7 +21834,6 @@ class CreateAccountModal {
         if (waitingToastId) hideToast(waitingToastId);
         console.error(`DEBUG: handleCreateAccount error`, JSON.stringify(error, null, 2));
         showToast(`account creation failed: ${error}`, 0, 'error');
-        this.reEnableControls();
 
         // Clear interval
         if (checkPendingTransactionsIntervalId) {
@@ -21865,19 +21863,8 @@ class CreateAccountModal {
       clearMyData();
 
       // no toast here since injectTx will show it
-      this.reEnableControls();
       return;
     }
-  }
-
-  reEnableControls() {
-    this.submitButton.disabled = false;
-    this.toggleButton.disabled = false;
-    this.usernameInput.disabled = false;
-    this.privateKeyInput.disabled = false;
-    this.backButton.disabled = false;
-    this.migrateAccountsButton.disabled = false;
-    this.privateAccountCheckbox.disabled = false;
   }
 }
 // Initialize the create account modal
@@ -23596,12 +23583,17 @@ class MigrateAccountsModal {
     this.submitButton = document.getElementById('submitMigrateAccounts');
 
     this.closeButton.addEventListener('click', () => this.close());
-    this.submitButton.addEventListener('click', (event) => this.handleSubmit(event));
+    this.submitButton.addEventListener('click', withButtonCooldown(
+      [this.submitButton, this.closeButton],
+      BUTTON_COOLDOWN_MS,
+      () => {
+        this.refreshSubmitButtonFromCheckboxes();
+        this.closeButton.disabled = false;
+      },
+      (event) => this.handleSubmit(event)
+    ));
 
-    // if no check boxes are checked, disable the submit button
-    this.accountList.addEventListener('change', () => {
-      this.submitButton.disabled = this.accountList.querySelectorAll('input[type="checkbox"]:checked').length === 0;
-    });
+    this.accountList.addEventListener('change', () => this.refreshSubmitButtonFromCheckboxes());
   }
 
   async open() {
@@ -23645,6 +23637,7 @@ class MigrateAccountsModal {
     // Check for inconsistencies and render them
     const inconsistencies = await this.checkAccountsInconsistency();
     this.renderInconsistencies(inconsistencies);
+    this.refreshSubmitButtonFromCheckboxes();
   }
 
   /**
@@ -23781,9 +23774,6 @@ class MigrateAccountsModal {
   async handleSubmit(event) {
     event.preventDefault();
 
-    this.submitButton.disabled = true;
-    this.closeButton.disabled = true;
-      
     const selectedAccounts = this.accountList.querySelectorAll('input[type="checkbox"]:checked');
   
     const results = {}
@@ -23844,9 +23834,7 @@ class MigrateAccountsModal {
         hideToast(loadingToastId);
       }
     }
-    this.populateAccounts();
-    this.submitButton.disabled = false;
-    this.closeButton.disabled = false;
+    await this.populateAccounts();
   }
   
   /**
@@ -23911,10 +23899,14 @@ class MigrateAccountsModal {
     localStorage.setItem('accounts', stringify(accountsObj));
   }
 
+  refreshSubmitButtonFromCheckboxes() {
+    this.submitButton.disabled = this.accountList.querySelectorAll('input[type="checkbox"]:checked').length === 0;
+  }
+
   clearForm() {
     const checkboxes = this.accountList.querySelectorAll('input[type="checkbox"]');
     checkboxes.forEach(checkbox => checkbox.checked = false);
-    this.submitButton.disabled = true;
+    this.refreshSubmitButtonFromCheckboxes();
   }
   
   /**

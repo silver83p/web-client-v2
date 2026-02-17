@@ -303,15 +303,19 @@ export function withButtonCooldown(buttons, ms, revalidateFn, handler) {
         if (inProgress) return;
         inProgress = true;
         liftDone = false;
+        let handlerDone = false;
         list.forEach((b) => { if (b) b.disabled = true; });
         const startTime = Date.now();
         timeoutId = setTimeout(() => {
             timeoutId = null;
-            lift();
+            if (handlerDone) {
+                lift();
+            }
         }, ms);
         try {
             await handler(event);
         } finally {
+            handlerDone = true;
             if (Date.now() - startTime >= ms) {
                 if (timeoutId !== null) clearTimeout(timeoutId);
                 lift();
