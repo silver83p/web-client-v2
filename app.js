@@ -13607,6 +13607,8 @@ class ChatModal {
       this.clearReplyState(contact);
       // Clear attachment draft state
       this.clearAttachmentState(contact);
+      // Clear retry draft state
+      this.clearRetryState(contact);
 
       // Update the chat modal UI immediately
       if (!isEdit) this.appendChatModal(); // This should now display the 'sending' message
@@ -14151,6 +14153,27 @@ class ChatModal {
   }
 
   /**
+   * Saves retry state to a contact object
+   * @param {Object} contact - The contact object to save retry state to
+   */
+  saveRetryState(contact) {
+    const retryTxid = this.retryOfTxId?.value?.trim?.() || '';
+    if (retryTxid) {
+      contact.draftRetryTxid = retryTxid;
+    } else {
+      this.clearRetryState(contact);
+    }
+  }
+
+  /**
+   * Clears retry state from a contact object
+   * @param {Object} contact - The contact object to clear retry state from
+   */
+  clearRetryState(contact) {
+    delete contact.draftRetryTxid;
+  }
+
+  /**
    * Saves attachment state to a contact object
    * @param {Object} contact - The contact object to save attachment state to
    */
@@ -14185,6 +14208,9 @@ class ChatModal {
       
       // Save or clear attachment state
       this.saveAttachmentState(myData.contacts[this.address]);
+
+      // Save or clear retry state
+      this.saveRetryState(myData.contacts[this.address]);
     }
   }
 
@@ -14202,6 +14228,9 @@ class ChatModal {
     // Clear any existing attachments
     this.fileAttachments = [];
     this.showAttachmentPreview();
+
+    // Clear retry state in composer; restored below if contact has one
+    if (this.retryOfTxId) this.retryOfTxId.value = '';
 
     // Load draft if exists
     const contact = myData.contacts[address];
@@ -14233,6 +14262,11 @@ class ChatModal {
     if (contact?.draftAttachments && Array.isArray(contact.draftAttachments) && contact.draftAttachments.length > 0) {
       this.fileAttachments = JSON.parse(JSON.stringify(contact.draftAttachments));
       this.showAttachmentPreview();
+    }
+
+    // Restore retry state if it exists
+    if (contact?.draftRetryTxid && this.retryOfTxId) {
+      this.retryOfTxId.value = contact.draftRetryTxid;
     }
   }
 
@@ -20274,6 +20308,10 @@ class FailedMessageMenu {
   handleFailedMessageRetry(messageEl) {
     const txid = messageEl.dataset.txid;
     const voiceEl = messageEl.querySelector('.voice-message');
+    const contact = myData?.contacts?.[chatModal.address];
+    const message = (txid && contact && Array.isArray(contact.messages))
+      ? contact.messages.find(msg => msg.txid === txid)
+      : null;
 
     // Voice message retry: resend the same voice message (no re-upload)
     if (voiceEl) {
@@ -20286,19 +20324,15 @@ class FailedMessageMenu {
       }
 
       // Get message item to retrieve encryption keys
-      const contact = myData.contacts[chatModal.address];
       if (!contact || !Array.isArray(contact.messages)) {
         console.error('Error preparing voice message retry: Contact/messages not found.');
         return;
       }
-      const messageIndex = contact.messages.findIndex(msg => msg.txid === txid);
       
-      if (messageIndex < 0) {
+      if (!message) {
         console.error('Error preparing voice message retry: Message not found.');
         return;
       }
-
-      const message = contact.messages[messageIndex];
       const pqEncSharedKey = message.audioPqEncSharedKey || message.pqEncSharedKey;
       const selfKey = message.audioSelfKey || message.selfKey;
 
@@ -20323,10 +20357,47 @@ class FailedMessageMenu {
       return;
     }
 
-    // Text message retry: prefill input and store txid so next send removes failed tx
-    const messageContent = messageEl.querySelector('.message-content')?.textContent;
-    if (chatModal.messageInput && chatModal.retryOfTxId && messageContent && txid) {
-      chatModal.messageInput.value = messageContent;
+    // Message/attachment retry: prefill text and restore attachments so next send removes failed tx
+    const messageContent = typeof message?.message === 'string' ? message.message : '';
+    const messageAttachments = Array.isArray(message?.xattach) ? message.xattach : [];
+    const hasRetryableContent = !!txid && (
+      messageAttachments.length > 0
+      || (typeof messageContent === 'string' && messageContent.trim().length > 0)
+    );
+
+    if (chatModal.messageInput && chatModal.retryOfTxId && hasRetryableContent) {
+      // Replace current staged attachments with failed message attachments (if any)
+      // Delete only unsent uploads that are NOT part of the currently staged failed message.
+      // This avoids deleting server files still referenced by failed-message retries.
+      const previousRetryTxId = chatModal.retryOfTxId?.value?.trim?.() || '';
+      let safeUrlsFromPreviousFailedMessage = new Set();
+      if (previousRetryTxId && contact && Array.isArray(contact.messages)) {
+        const previousRetryMessage = contact.messages.find((msg) => msg.txid === previousRetryTxId);
+        const previousRetryAttachments = Array.isArray(previousRetryMessage?.xattach) ? previousRetryMessage.xattach : [];
+        safeUrlsFromPreviousFailedMessage = new Set(
+          previousRetryAttachments.flatMap((att) => [att?.url, att?.pUrl]).filter(Boolean)
+        );
+      }
+
+      const composerAttachments = Array.isArray(chatModal.fileAttachments) ? chatModal.fileAttachments : [];
+      const attachmentsToDeleteFromServer = composerAttachments.filter((att) => {
+        const url = att?.url;
+        const pUrl = att?.pUrl;
+        if (!url && !pUrl) return false;
+        return !(safeUrlsFromPreviousFailedMessage.has(url) || safeUrlsFromPreviousFailedMessage.has(pUrl));
+      });
+
+      chatModal.cancelAllOperations();
+      chatModal.clearComposerAttachments({ deleteFromServer: false });
+      if (attachmentsToDeleteFromServer.length > 0) {
+        chatModal.deleteAttachmentsFromServer(attachmentsToDeleteFromServer);
+      }
+      chatModal.fileAttachments = messageAttachments.length > 0
+        ? JSON.parse(JSON.stringify(messageAttachments))
+        : [];
+      chatModal.showAttachmentPreview();
+
+      chatModal.messageInput.value = messageContent || '';
       chatModal.retryOfTxId.value = txid;
       
       // Trigger input event to ensure all listeners fire (byte counter, draft save, etc.)
@@ -20344,7 +20415,7 @@ class FailedMessageMenu {
       return;
     }
 
-    console.error('Error preparing message retry: Necessary elements or data missing.');
+    console.error('Error preparing message retry: No message text or attachments found.');
   }
 
   /**
