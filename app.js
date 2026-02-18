@@ -10819,7 +10819,12 @@ class TollModal {
     this.tollForm = document.getElementById('tollForm');
     this.tollCurrencySymbol = document.getElementById('tollCurrencySymbol');
 
-    this.tollForm.addEventListener('submit', (event) => this.saveAndPostNewToll(event));
+    this.tollForm.addEventListener('submit', withButtonCooldown(
+      this.saveButton,
+      BUTTON_COOLDOWN_MS,
+      () => {}, // No-op: not null, so the wrapper does not re-enable the button; it stays disabled until the modal is opened again.
+      (event) => this.saveAndPostNewToll(event)
+    ));
     this.closeButton.addEventListener('click', () => this.close());
     this.newTollAmountInputElement.addEventListener('input', () => this.newTollAmountInputElement.value = normalizeUnsignedFloat(this.newTollAmountInputElement.value));
     this.newTollAmountInputElement.addEventListener('input', () => this.updateSaveButtonState());
@@ -10873,9 +10878,6 @@ class TollModal {
   async saveAndPostNewToll(event) {
     event.preventDefault();
     let newTollValue = parseFloat(this.newTollAmountInputElement.value);
-
-    // disable submit button
-    this.saveButton.disabled = true;
 
     if (isNaN(newTollValue) || newTollValue < 0) {
       showToast('Invalid toll amount entered.', 0, 'error');
@@ -22111,7 +22113,12 @@ class SendAssetFormModal {
 
     // TODO add comment about which send form this is for chat or assets
     this.closeSendAssetFormModalButton.addEventListener('click', this.close.bind(this));
-    this.sendForm.addEventListener('submit', this.handleSendFormSubmit.bind(this));
+    this.sendForm.addEventListener('submit', withButtonCooldown(
+      this.submitButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      (e) => this.handleSendFormSubmit(e)
+    ));
     // TODO: need to add check that it's not a back/delete key
     this.usernameInput.addEventListener('input', async (e) => {
       this.handleSendToAddressInput(e);
@@ -22876,7 +22883,6 @@ const sendAssetFormModal = new SendAssetFormModal();
 
 class SendAssetConfirmModal {
   constructor() {
-    this.timestamp = getCorrectedTimestamp();
   }
 
   load() {
@@ -22893,7 +22899,12 @@ class SendAssetConfirmModal {
 
     // Add event listeners for send asset confirmation modal
     this.closeButton.addEventListener('click', this.close.bind(this));
-    this.confirmSendButton.addEventListener('click', this.handleSendAsset.bind(this));
+    this.confirmSendButton.addEventListener('click', withButtonCooldown(
+      [this.confirmSendButton, this.cancelButton],
+      BUTTON_COOLDOWN_MS,
+      () => { this.cancelButton.disabled = false; },
+      (e) => this.handleSendAsset(e)
+    ));
     this.cancelButton.addEventListener('click', this.close.bind(this));
   }
 
@@ -22917,25 +22928,13 @@ class SendAssetConfirmModal {
    */
   async handleSendAsset(event) {
     event.preventDefault();
-    const confirmButton = this.confirmSendButton;
-    const cancelButton = this.cancelButton;
     const username = normalizeUsername(sendAssetFormModal.usernameInput.value);
 
-    // if it's your own username disable the send button
     if (username == myAccount.username) {
-      confirmButton.disabled = true;
       showToast('You cannot send assets to yourself', 0, 'error');
       return;
     }
 
-    if (getCorrectedTimestamp() - this.timestamp < 2000 || confirmButton.disabled) {
-      return;
-    }
-
-    confirmButton.disabled = true;
-    cancelButton.disabled = true;
-
-    this.timestamp = getCorrectedTimestamp();
     const wallet = myData.wallet;
     const assetIndex = sendAssetFormModal.assetSelectDropdown.value; // TODO include the asset id and symbol in the tx
     const amount = bigxnum2big(wei, sendAssetFormModal.amountInput.value);
@@ -22953,19 +22952,16 @@ class SendAssetConfirmModal {
       const feeStr = big2str(txFeeInLIB, 18).slice(0, -16);
       const balanceStr = big2str(balance, 18).slice(0, -16);
       showToast(`Insufficient balance: ${amountStr} + ${feeStr} (fee) > ${balanceStr} LIB. Go to the wallet to add more LIB`, 0, 'error');
-      cancelButton.disabled = false;
       return;
     }
 
     // Validate username - must be username; address not supported
     if (username.startsWith('0x')) {
       showToast('Address not supported; enter username instead.', 0, 'error');
-      cancelButton.disabled = false;
       return;
     }
     if (username.length < 3) {
       showToast('Username too short', 0, 'error');
-      cancelButton.disabled = false;
       return;
     }
     try {
@@ -22980,14 +22976,12 @@ class SendAssetConfirmModal {
       const data = await queryNetwork(`/address/${usernameHash}`);
       if (!data || !data.address) {
         showToast('Username not found', 0, 'error');
-        cancelButton.disabled = false;
         return;
       }
       toAddress = normalizeAddress(data.address);
     } catch (error) {
       console.error('Error looking up username:', error);
       showToast('Error looking up username', 0, 'error');
-      cancelButton.disabled = false;
       return;
     }
 
@@ -23202,7 +23196,6 @@ class SendAssetConfirmModal {
     } catch (error) {
       console.error('Transaction error:', error);
       //showToast('Transaction failed. Please try again.', 0, 'error');
-      cancelButton.disabled = false;
     }
   }
 }
