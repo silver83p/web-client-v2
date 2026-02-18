@@ -3218,6 +3218,11 @@ async function validateBalance(amount, assetIndex = 0, balanceWarning = null) {
   return !hasInsufficientBalance;
 }
 
+const FEE_FAILURE_REASON_INSUFFICIENT_BALANCE = 'insufficient_balance';
+const FEE_FAILURE_REASON_NETWORK_ERROR = 'network_error';
+const FEE_FAILURE_REASON_WALLET_UNAVAILABLE = 'wallet_unavailable';
+const FEE_FAILURE_REASON_CHECK_FAILED = 'fee_check_failed';
+
 /**
  * Check whether the wallet can cover a fee-only transaction.
  * @returns {Promise<{success: boolean, reason: ('insufficient_balance'|'network_error'|'wallet_unavailable'|null)}>}
@@ -3227,22 +3232,63 @@ async function getFeeBalanceStatus() {
 
   if (!parameters.current || !parameters.current.transactionFeeUsdStr || !parameters.current.stabilityFactorStr) {
     console.error('Transaction fee not available from network parameters');
-    return { success: false, reason: 'network_error' };
+    return { success: false, reason: FEE_FAILURE_REASON_NETWORK_ERROR };
   }
 
-  const asset = myData?.wallet?.assets?.[0];
+  const asset =
+    (myData?.wallet?.assets || []).find((walletAsset) => walletAsset?.symbol === 'LIB') ||
+    myData?.wallet?.assets?.[0];
   if (!asset || asset.balance == null) {
     console.error('Wallet asset unavailable while checking fee balance');
-    return { success: false, reason: 'wallet_unavailable' };
+    return { success: false, reason: FEE_FAILURE_REASON_WALLET_UNAVAILABLE };
   }
 
   const feeInWei = getTransactionFeeWei();
   const hasSufficientBalance = BigInt(asset.balance) >= feeInWei;
   if (!hasSufficientBalance) {
-    return { success: false, reason: 'insufficient_balance' };
+    return { success: false, reason: FEE_FAILURE_REASON_INSUFFICIENT_BALANCE };
   }
 
   return { success: true, reason: null };
+}
+
+/**
+ * Resolve fee-failure toast content by reason and UI context.
+ * @param {'insufficient_balance'|'network_error'|'wallet_unavailable'|null} reason
+ * @param {'default'|'claim_fee'|'send_read'} context
+ * @returns {{message: string, type: 'error'|'warning'}}
+ */
+function getFeeFailureToastConfig(reason, context = 'default') {
+  const isClaim = context === 'claim_fee';
+  const isSendRead = context === 'send_read';
+
+  if (reason === FEE_FAILURE_REASON_INSUFFICIENT_BALANCE) {
+    if (isClaim) {
+      return { message: 'Cannot claim fee: insufficient LIB balance for network fee.', type: 'warning' };
+    }
+    if (isSendRead) {
+      return { message: 'Cannot send read transaction: insufficient LIB balance for network fee.', type: 'warning' };
+    }
+    return { message: 'Insufficient balance for fee. Go to the wallet to add more LIB.', type: 'error' };
+  }
+
+  if (reason === FEE_FAILURE_REASON_WALLET_UNAVAILABLE) {
+    if (isClaim) {
+      return { message: 'Cannot claim fee because wallet balance data is unavailable.', type: 'warning' };
+    }
+    if (isSendRead) {
+      return { message: 'Cannot send read transaction because wallet balance data is unavailable right now.', type: 'warning' };
+    }
+    return { message: 'Wallet balance is unavailable right now. Please reopen the wallet and try again.', type: 'error' };
+  }
+
+  if (isClaim) {
+    return { message: 'Cannot claim fee due to a network fee lookup error.', type: 'warning' };
+  }
+  if (isSendRead) {
+    return { message: 'Cannot send read transaction right now due to a network fee lookup error.', type: 'warning' };
+  }
+  return { message: 'Network error: cannot determine transaction fee. Please try again.', type: 'error' };
 }
 
 /**
@@ -3251,13 +3297,8 @@ async function getFeeBalanceStatus() {
  * @returns {void}
  */
 function showFeeBalanceFailureToast(reason) {
-  if (reason === 'insufficient_balance') {
-    showToast('Insufficient balance for fee. Go to the wallet to add more LIB.', 0, 'error');
-  } else if (reason === 'wallet_unavailable') {
-    showToast('Wallet balance is unavailable right now. Please reopen the wallet and try again.', 0, 'error');
-  } else {
-    showToast('Network error: cannot determine transaction fee. Please try again.', 0, 'error');
-  }
+  const { message, type } = getFeeFailureToastConfig(reason, 'default');
+  showToast(message, 0, type);
 }
 
 /**
@@ -3272,23 +3313,9 @@ function showCloseFeeFailureWarningOnce(reason, action, alreadyShown = false) {
     return true;
   }
 
-  if (action === 'claim_fee') {
-    if (reason === 'insufficient_balance') {
-      showToast('Cannot claim fee: insufficient LIB balance for network fee.', 0, 'warning');
-    } else if (reason === 'wallet_unavailable') {
-      showToast('Cannot claim fee because wallet balance data is unavailable.', 0, 'warning');
-    } else {
-      showToast('Cannot claim fee due to a network fee lookup error.', 0, 'warning');
-    }
-  } else {
-    if (reason === 'insufficient_balance') {
-      showToast('Cannot send read transaction: insufficient LIB balance for network fee.', 0, 'warning');
-    } else if (reason === 'wallet_unavailable') {
-      showToast('Cannot send read transaction because wallet balance data is unavailable right now.', 0, 'warning');
-    } else {
-      showToast('Cannot send read transaction right now due to a network fee lookup error.', 0, 'warning');
-    }
-  }
+  const context = action === 'claim_fee' ? 'claim_fee' : 'send_read';
+  const { message, type } = getFeeFailureToastConfig(reason, context);
+  showToast(message, 0, type);
 
   return true;
 }
@@ -4310,7 +4337,7 @@ class FriendModal {
     const feeBalanceStatus = await getFeeBalanceStatus();
     if (!feeBalanceStatus.success) {
       showFeeBalanceFailureToast(feeBalanceStatus.reason);
-      return { result: { success: false, reason: feeBalanceStatus.reason || 'fee_check_failed' }, toastAlreadyShown: true };
+      return { result: { success: false, reason: feeBalanceStatus.reason || FEE_FAILURE_REASON_CHECK_FAILED }, toastAlreadyShown: true };
     }
 
     // 0 = blocked, 1 = Other, 2 = Connection
@@ -6321,7 +6348,7 @@ async function postAssetTransfer(to, amount, memo, keys) {
     // memo: stringify(memo),
     xmemo: memo,
     timestamp: getTransactionTimestamp(),
-    fee: getTransactionFeeWei(), // This is not used by the backend
+    fee: getTransactionFeeWei(),
     networkId: network.netid,
   };
 
@@ -6352,6 +6379,132 @@ async function postRegisterAlias(alias, keys, isPrivate = false) {
   const txid = await signObj(tx, keys);
   const res = await injectTx(tx, txid);
   return res;
+}
+
+const TX_FEE_TOO_LOW_REGEX = /insufficient funds for transaction fee/i;
+const TX_FEE_RETRY_MESSAGE = 'Please retry your transaction.';
+const TX_FEE_REFRESH_FAILED_MESSAGE = 'Transaction fee changed on the network. Please try again in a moment.';
+const TX_ACCOUNT_INSUFFICIENT_FUNDS_REGEX = /from account does not have sufficient funds/i;
+const TX_NETWORK_FEE_GREATER_THAN_PROVIDED_REGEX = /network transaction fee.*greater than the transaction fee provided/i;
+const TX_REASON_TRANSACTION_FEE_WEI_REGEX = /transaction fee(?:\s*:\s*|\s*\(\s*)(\d+)/i;
+
+/**
+ * Returns true when the backend reason explicitly indicates transaction-fee insufficiency.
+ * @param {string} reason
+ * @returns {boolean}
+ */
+function isTxFeeTooLowFailure(reason) {
+  return typeof reason === 'string' && TX_FEE_TOO_LOW_REGEX.test(reason);
+}
+
+/**
+ * Returns true when the backend reason indicates generic account insufficient funds.
+ * @param {string} reason
+ * @returns {boolean}
+ */
+function isTxAccountInsufficientFundsFailure(reason) {
+  return typeof reason === 'string' && TX_ACCOUNT_INSUFFICIENT_FUNDS_REGEX.test(reason);
+}
+
+/**
+ * Returns true when the backend reason indicates cached tx fee is lower than network fee.
+ * @param {string} reason
+ * @returns {boolean}
+ */
+function isTxNetworkFeeGreaterThanProvidedFailure(reason) {
+  return typeof reason === 'string' && TX_NETWORK_FEE_GREATER_THAN_PROVIDED_REGEX.test(reason);
+}
+
+/**
+ * Extract backend-reported transaction fee (wei) from a failure reason string.
+ * @param {string} reason
+ * @returns {bigint|null}
+ */
+function getBackendTransactionFeeWeiFromReason(reason) {
+  if (typeof reason !== 'string') {
+    return null;
+  }
+  const match = reason.match(TX_REASON_TRANSACTION_FEE_WEI_REGEX);
+  if (!match?.[1]) {
+    return null;
+  }
+  try {
+    return BigInt(match[1]);
+  } catch (_error) {
+    return null;
+  }
+}
+
+/**
+ * Detects whether a tx failure likely came from stale fee params (fee mismatch).
+ * A mismatch is assumed when backend-reported fee is greater than cached fee.
+ * @param {string} reason
+ * @returns {boolean}
+ */
+function isTxFeeMismatchFailure(reason) {
+  const potentialFeeReason =
+    isTxFeeTooLowFailure(reason) ||
+    isTxAccountInsufficientFundsFailure(reason) ||
+    isTxNetworkFeeGreaterThanProvidedFailure(reason);
+  if (!potentialFeeReason) {
+    return false;
+  }
+
+  const backendFeeWei = getBackendTransactionFeeWeiFromReason(reason);
+  if (backendFeeWei == null) {
+    // Backends may omit the fee amount; keep behavior for explicit fee mismatch reasons.
+    return isTxFeeTooLowFailure(reason) || isTxNetworkFeeGreaterThanProvidedFailure(reason);
+  }
+
+  const cachedFeeWei = getTransactionFeeWei({ allowNull: true });
+  if (cachedFeeWei == null) {
+    return true;
+  }
+
+  return backendFeeWei > cachedFeeWei;
+}
+
+function getInsufficientFundsFailureMessage(reason) {
+  if (typeof reason !== 'string') {
+    return 'Insufficient balance for fee. Go to the wallet to add more LIB.';
+  }
+
+  const tollMatch = reason.match(/toll\s*\(\s*([0-9]+)\s*\)/i);
+  if (!tollMatch) {
+    return 'Insufficient balance for fee. Go to the wallet to add more LIB.';
+  }
+
+  return tollMatch[1] === '0'
+    ? 'Insufficient balance for fee. Go to the wallet to add more LIB.'
+    : 'Insufficient balance for fee and toll. Go to the wallet to add more LIB.';
+}
+
+function getUserFacingTxFailureReason(reason, feeMismatchStatus = null) {
+  if (feeMismatchStatus?.detected) {
+    return feeMismatchStatus.refreshed ? TX_FEE_RETRY_MESSAGE : TX_FEE_REFRESH_FAILED_MESSAGE;
+  }
+  if (isTxAccountInsufficientFundsFailure(reason)) {
+    return getInsufficientFundsFailureMessage(reason);
+  }
+  return typeof reason === 'string' && reason.length > 0 ? reason : 'Transaction failed';
+}
+
+/**
+ * Attempts to refresh network params when a tx fails due to fee mismatch.
+ * @param {string} reason
+ * @returns {Promise<{detected: boolean, refreshed: boolean}>}
+ */
+async function refreshNetworkParamsOnTxFeeMismatch(reason) {
+  if (!isTxFeeMismatchFailure(reason)) {
+    return { detected: false, refreshed: false };
+  }
+  try {
+    const refreshed = await getNetworkParams(true);
+    return { detected: true, refreshed: refreshed === true };
+  } catch (error) {
+    console.warn('Failed to refresh network params after fee mismatch:', error);
+    return { detected: true, refreshed: false };
+  }
 }
 
 /**
@@ -6421,7 +6574,22 @@ async function injectTx(tx, txid) {
     const data = await response.json();
     data.txid = txid;
 
-    if (data?.result?.success) {
+    // Support both response shapes:
+    // - { result: { success, reason } }
+    // - { success, reason }
+    const normalizedSuccess = data?.result?.success ?? data?.success;
+    const normalizedReason = data?.result?.reason || data?.reason || '';
+    if (!data.result || typeof data.result !== 'object') {
+      data.result = {};
+    }
+    if (typeof data.result.success === 'undefined' && typeof normalizedSuccess !== 'undefined') {
+      data.result.success = normalizedSuccess;
+    }
+    if (!data.result.reason && normalizedReason) {
+      data.result.reason = normalizedReason;
+    }
+
+    if (normalizedSuccess === true) {
       const pendingTxData = {
         txid: txid,
         type: tx.type,
@@ -6447,14 +6615,20 @@ async function injectTx(tx, txid) {
         maybeShowLowLibToast();
       }
     } else {
-      let toastMessage = 'Error injecting transaction: ' + data?.result?.reason;
-      console.error('Error injecting transaction:', data?.result?.reason);
-      if (data?.result?.reason?.includes('timestamp out of range')) {
+      const failureReason = normalizedReason;
+      const feeMismatchStatus = await refreshNetworkParamsOnTxFeeMismatch(failureReason);
+      const userFailureReason = getUserFacingTxFailureReason(failureReason, feeMismatchStatus);
+      let toastMessage = userFailureReason === failureReason
+        ? 'Error injecting transaction: ' + failureReason
+        : userFailureReason;
+      console.error('Error injecting transaction:', failureReason);
+      logsModal.log('Error injecting transaction:', failureReason);
+      if (!feeMismatchStatus.detected && failureReason?.includes('timestamp out of range')) {
         console.error('Timestamp out of range, updating timestamp');
         timeDifference()
         toastMessage += ' (Please try again)';
       }
-      showToast(toastMessage, 0, 'error');
+      showToast(toastMessage, 0, feeMismatchStatus.detected ? 'warning' : 'error');
     }
     return data;
   } catch (error) {
@@ -6465,7 +6639,12 @@ async function injectTx(tx, txid) {
       showToast('Error injecting transaction: ' + error, 0, 'error');
     }
     console.error('Error injecting transaction:', error);
-    return null;
+    const errorReason = typeof error === 'string' ? error : (error?.message || String(error) || 'inject_failed');
+    return {
+      result: { success: false, reason: errorReason },
+      txid,
+      toastAlreadyShown: true,
+    };
   } finally {
     setTimeout(() => {
       saveState();
@@ -10822,7 +11001,7 @@ class TollModal {
     const feeBalanceStatus = await getFeeBalanceStatus();
     if (!feeBalanceStatus.success) {
       showFeeBalanceFailureToast(feeBalanceStatus.reason);
-      return { result: { success: false, reason: feeBalanceStatus.reason || 'fee_check_failed' } };
+      return { result: { success: false, reason: feeBalanceStatus.reason || FEE_FAILURE_REASON_CHECK_FAILED } };
     }
 
     const tollTx = {
@@ -11872,7 +12051,7 @@ class ValidatorStakingModal {
     const feeBalanceStatus = await getFeeBalanceStatus();
     if (!feeBalanceStatus.success) {
       showFeeBalanceFailureToast(feeBalanceStatus.reason);
-      return { result: { success: false, reason: feeBalanceStatus.reason || 'fee_check_failed' } };
+      return { result: { success: false, reason: feeBalanceStatus.reason || FEE_FAILURE_REASON_CHECK_FAILED } };
     }
 
     // TODO: need to query network for the correct nominator address
@@ -13919,7 +14098,7 @@ class ChatModal {
       message: 'x',
       xmessage: payload,
       timestamp: getTransactionTimestamp(),
-      fee: getTransactionFeeWei(), // This is not used by the backend
+      fee: getTransactionFeeWei(),
       networkId: network.netid,
     };
     return tx;
@@ -25381,16 +25560,18 @@ async function checkPendingTransactions() {
         console.log(`DEBUG: txid ${txid} failed, removing completely`);
         // Check for failure reason in the transaction receipt
         const failureReason = res?.transaction?.reason || 'Transaction failed';
+        const feeMismatchStatus = await refreshNetworkParamsOnTxFeeMismatch(failureReason);
+        const userFailureReason = getUserFacingTxFailureReason(failureReason, feeMismatchStatus);
         console.log(`DEBUG: failure reason: ${failureReason}`);
 
         if (type === 'register') {
-          pendingPromiseService.reject(txid, new Error(failureReason));
+          pendingPromiseService.reject(txid, new Error(userFailureReason));
         } else {
           // Show toast notification with the failure reason
           if (type === 'withdraw_stake') {
-            showToast(`Unstake failed: ${failureReason}`, 0, 'error');
+            showToast(`Unstake failed: ${userFailureReason}`, 0, 'error');
           } else if (type === 'deposit_stake') {
-            showToast(`Stake failed: ${failureReason}`, 0, 'error');
+            showToast(`Stake failed: ${userFailureReason}`, 0, 'error');
           } else if (type === 'message') {
             if (chatModal.isActive()) {
               await chatModal.reopen();
@@ -25402,7 +25583,7 @@ async function checkPendingTransactions() {
           }
           else if (type === 'toll') {
             showToast(
-              `Toll submission failed! Reverting to old toll: ${tollModal.oldToll}. Failure reason: ${failureReason}. `,
+              `Toll submission failed! Reverting to old toll: ${tollModal.oldToll}. Failure reason: ${userFailureReason}. `,
               0,
               'error'
             );
@@ -25415,7 +25596,7 @@ async function checkPendingTransactions() {
               tollModal.tollAmountUSD = tollModal.oldToll;
             }
           } else if (type === 'update_toll_required') {
-            showToast(`Update contact status failed: ${failureReason}. Reverting contact to old status.`, 0, 'error');
+            showToast(`Update contact status failed: ${userFailureReason}. Reverting contact to old status.`, 0, 'error');
             const currentFriendStatus = Number(myData.contacts?.[pendingTxInfo.to]?.friend);
             const previousFriendStatus = Number(myData.contacts?.[pendingTxInfo.to]?.friendOld);
             // revert the local myData.contacts[toAddress].friend to the old value
@@ -25427,16 +25608,16 @@ async function checkPendingTransactions() {
               await chatsScreen.updateChatList();
             }
           } else if (type === 'read') {
-            showToast(`Read transaction failed: ${failureReason}`, 0, 'error');
+            showToast(`Read transaction failed: ${userFailureReason}`, 0, 'error');
             // revert the local myData.contacts[toAddress].timestamp to the old value
             myData.contacts[pendingTxInfo.to].timestamp = pendingTxInfo.oldContactTimestamp;
           } else if (type === 'reclaim_toll') {
             if (failureReason !== 'user is trying to reclaim toll but the toll pool is empty') {
-              showToast(`Reclaim toll failed: ${failureReason}`, 0, 'error');
+              showToast(`Reclaim toll failed: ${userFailureReason}`, 0, 'error');
             }
           } else {
             // for messages, transfer etc.
-            showToast(failureReason, 0, 'error');
+            showToast(userFailureReason, 0, 'error');
           }
 
           const toAddress = pendingTxInfo.to;
@@ -25553,14 +25734,15 @@ function ignoreShiftTabKey(e) {
 
 /**
  * Fetches and caches network account data if it's stale or not yet fetched.
- * @returns {Promise<void>} - Resolves when the network account data is updated or not needed
+ * @param {boolean} forceRefresh - If true, bypass staleness interval and fetch immediately.
+ * @returns {Promise<boolean>} - True when params are usable (fresh/cache/fetched), false otherwise
  */
-async function getNetworkParams() {
+async function getNetworkParams(forceRefresh = false) {
   const now = getCorrectedTimestamp();
 
   // Check if data is fresh; (this.networkAccountTimeStamp || 0) handles initial undefined state
-  if (now - (getNetworkParams.timestamp || 0) < NETWORK_ACCOUNT_UPDATE_INTERVAL_MS) {
-    return;
+  if (!forceRefresh && now - (getNetworkParams.timestamp || 0) < NETWORK_ACCOUNT_UPDATE_INTERVAL_MS) {
+    return true;
   }
 
   // If offline, try to use cached parameters
@@ -25569,13 +25751,13 @@ async function getNetworkParams() {
     if (cachedParams) {
       try {
         parameters = parse(cachedParams);
-        return;
+        return true;
       } catch (e) {
         console.warn('Failed to parse cached network parameters:', e);
       }
     }
     console.warn('No cached network parameters available (offline)');
-    return;
+    return false;
   }
 
   console.log(`getNetworkParams: Data for account ${NETWORK_ACCOUNT_ID} is stale or missing. Attempting to fetch...`);
@@ -25599,14 +25781,16 @@ async function getNetworkParams() {
         console.log(parameters)
         // show toast notification with the error message
         showToast(`Network ID mismatch. Check network configuration in network.js.`, 0, 'error');
+        return false;
       }
-      return;
+      return true;
     } else {
       isOnline = false;
       updateUIForConnectivity();
       console.warn(
         `getNetworkParams: Received null or undefined data from queryNetwork for account ${NETWORK_ACCOUNT_ID}. Cached data (if any) will remain unchanged.`
       );
+      return false;
     }
   } catch (error) {
     isOnline = false;
@@ -25616,6 +25800,7 @@ async function getNetworkParams() {
       error
     );
     // Optional: Clear data or reset timestamp to force retry on next call
+    return false;
   }
 }
 getNetworkParams.timestamp = 0;
