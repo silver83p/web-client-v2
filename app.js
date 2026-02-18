@@ -12621,7 +12621,6 @@ class ChatModal {
 
     // used by updateTollValue and updateTollRequired
     this.toll = null;
-    this.tollUnit = null;
     this.address = null;
 
     // True when the active chat recipient has blocked me (tollRequiredToSend === 2)
@@ -12978,7 +12977,7 @@ class ChatModal {
     // Voice recording event listeners
     if (this.voiceRecordButton) {
       this.voiceRecordButton.addEventListener('click', async () => {
-        const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : this.toll;
+        const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : getEffectiveTollLibWei(this.toll);
         const sufficientBalance = await validateBalance(tollInLib);
         if (!sufficientBalance) {
           const msg = `Insufficient balance for fee${tollInLib > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`;
@@ -13660,7 +13659,7 @@ class ChatModal {
         return;
       }
 
-      const amount = myData.contacts[this.address].tollRequiredToSend == 1 ? this.toll : 0n;
+      const amount = myData.contacts[this.address].tollRequiredToSend == 1 ? getEffectiveTollLibWei(this.toll) : 0n;
       const sufficientBalance = await validateBalance(amount);
       if (!sufficientBalance) {
         const msg = `Insufficient balance for fee${amount > 0n ? ' and toll' : ''}. Go to the wallet to add more LIB.`;
@@ -13813,8 +13812,10 @@ class ChatModal {
       // can create a function to query the account and get the receivers toll they've set
       // TODO: will need to query network and receiver account where we validate
       // TODO: decided to query everytime we do chatModal.open and save as global variable. We don't need to clear it but we can clear it when closing the modal but should get reset when opening the modal again anyway
-      let tollInLib =
-        myData.contacts[currentAddress].tollRequiredToSend == 0 ? 0n : this.toll
+      const tollInLib =
+        myData.contacts[currentAddress].tollRequiredToSend == 0
+          ? 0n
+          : getEffectiveTollLibWei(this.toll)
 
       const chatMessageObj = await this.createChatMessage(currentAddress, payload, tollInLib, keys);
       await signObj(chatMessageObj, keys);
@@ -16965,7 +16966,7 @@ class ChatModal {
         return;
       }
 
-      const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : this.toll;
+      const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : getEffectiveTollLibWei(this.toll);
 
       const sufficientBalance = await validateBalance(tollInLib);
       if (!sufficientBalance) {
@@ -17099,7 +17100,6 @@ class ChatModal {
       tollLabel.textContent = 'Toll:';
       tollValue.textContent = 'offline';
       this.toll = 0n;
-      this.tollUnit = 'LIB';
       return;
     }
 
@@ -17108,14 +17108,16 @@ class ChatModal {
       contact.toll,
       contact.tollUnit
     );
+    const effectiveTollLibWei = getEffectiveTollLibWei(libWei);
+    const { text: effectiveUsdString } = this.formatTollDisplay(effectiveTollLibWei, 'LIB');
 
     let display;
     if (contact.tollRequiredToSend == 1) {
       // Toll is required - show as "Toll cost:" with amount in red
       tollLabel.textContent = 'Toll cost:';
-      display = usdString;
-      // if the value of toll is 0, use toll-free class instead
-      if(contact.toll == 0n) {  
+      display = effectiveUsdString;
+      // if the effective toll is 0, use toll-free class instead
+      if (effectiveTollLibWei == 0n) {
         tollValue.classList.add('toll-free');
       } else {
         tollValue.classList.add('toll-cost');
@@ -17133,9 +17135,8 @@ class ChatModal {
     }
     tollValue.textContent = display;
 
-    // Store the toll in LIB format for message creation (chat messages expect LIB wei)
+    // Store the toll in LIB for message creation (chat messages expect LIB wei)
     this.toll = typeof libWei === 'bigint' ? libWei : 0n;
-    this.tollUnit = contact.tollUnit || 'LIB';
   }
 
   /**
@@ -17399,7 +17400,7 @@ class ChatModal {
       payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
 
       // Create and send the call message transaction
-      const tollInLib = myData.contacts[currentAddress].tollRequiredToSend == 0 ? 0n : this.toll;
+      const tollInLib = myData.contacts[currentAddress].tollRequiredToSend == 0 ? 0n : getEffectiveTollLibWei(this.toll);
       const chatMessageObj = await this.createChatMessage(currentAddress, payload, tollInLib, keys);
       // if there's a callobj.calltime is present and is 0 set callType to true to make recipient phone ring
       if (callObj?.callTime === 0) {
@@ -17483,7 +17484,7 @@ class ChatModal {
    * @returns {Promise<void>}
    */
   async sendVoiceMessageTx(voiceMessageUrl, duration, audioPqEncSharedKey, audioSelfKey, replyInfo = null) {
-    const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : this.toll;
+    const tollInLib = myData.contacts[this.address].tollRequiredToSend == 0 ? 0n : getEffectiveTollLibWei(this.toll);
     const sufficientBalance = await validateBalance(tollInLib);
     if (!sufficientBalance) {
       throw new Error(
@@ -18715,7 +18716,7 @@ class ShareAttachmentModal {
         }
         
         // Calculate toll amount: 0 for connections, recipient's required toll for others
-        let tollInLib = tollRequiredToSend === 0 ? 0n : (contact.toll || 0n);
+        let tollInLib = tollRequiredToSend === 0 ? 0n : getEffectiveTollLibWei(normalizeTollToLibWei(contact.toll || 0n, contact.tollUnit || 'LIB'));
 
         const totalRequired = tollInLib + feeInWei;
         if (availableBalanceWei < totalRequired) {
@@ -22321,14 +22322,12 @@ class SendAssetFormModal {
    */
   updateMemoTollUI() {
     this.tollMemoSpan.style.color = 'black';
-    let toll = this.tollInfo.toll || 0n;
-    const tollUnit = this.tollInfo.tollUnit || 'LIB';
-    const decimals = 18;
+    const toll = this.tollInfo.toll || 0n;
     const factor = getStabilityFactor();
-    const mainValue = parseFloat(big2str(toll, decimals));
-    const usd = tollUnit === 'USD' ? mainValue : (mainValue * factor);
-    const lib = factor > 0 ? (usd / factor) : NaN;
-    const usdString = lib ? `${usd.toFixed(6)} USD (≈ ${lib.toFixed(6)} LIB)` : `${usd.toFixed(6)} USD`;
+    const tollInLibWei = normalizeTollToLibWei(toll, this.tollInfo.tollUnit);
+    const effectiveTollLibWei = getEffectiveTollLibWei(tollInLibWei);
+    const effectiveTollUsd = parseFloat(big2str(effectiveTollLibWei, 18)) * factor;
+    const usdString = `${effectiveTollUsd.toFixed(6)} USD (≈ ${parseFloat(big2str(effectiveTollLibWei, 18)).toFixed(6)} LIB)`;
     let display;
     if (this.tollInfo.required == 1) {
       display = `${usdString}`;
@@ -22591,12 +22590,8 @@ class SendAssetFormModal {
     // check if user is required to pay a toll
     if (this.tollInfo.required == 1) {
       if (this.memoInput.value.trim() != '') {
-        const factor = getStabilityFactor();
         let amountInLIB = amount;
-        let tollInLIB = this.tollInfo.toll;
-        if (this.tollInfo.tollUnit !== 'LIB') {
-          tollInLIB = bigxnum2big(this.tollInfo.toll, (1.0 / factor).toString());
-        }
+        const tollInLIB = getEffectiveTollLibWei(normalizeTollToLibWei(this.tollInfo.toll, this.tollInfo.tollUnit));
         if (tollInLIB > amountInLIB) {
           this.balanceWarning.textContent = 'less than toll for memo';
           this.balanceWarning.style.display = 'inline';
@@ -27223,6 +27218,42 @@ async function downloadAndDecryptAvatar(url, key) {
 
 function getStabilityFactor() {
   return parseFloat(parameters.current.stabilityFactorStr);
+}
+
+function getNetworkMinTollLibWei() {
+  if (!parameters?.current?.minTollUsdStr || !parameters?.current?.stabilityFactorStr) {
+    return 0n;
+  }
+
+  return EthNum.toWei(EthNum.div(parameters.current.minTollUsdStr, parameters.current.stabilityFactorStr)) || 0n;
+}
+
+function normalizeTollToLibWei(tollWei, tollUnit = 'LIB') {
+  const safeToll = typeof tollWei === 'bigint' ? tollWei : 0n;
+  if (safeToll === 0n) {
+    return 0n;
+  }
+
+  if (tollUnit !== 'USD') {
+    return safeToll;
+  }
+
+  const factor = getStabilityFactor();
+  if (!Number.isFinite(factor) || factor <= 0) {
+    return safeToll;
+  }
+
+  return bigxnum2big(safeToll, (1 / factor).toString());
+}
+
+function getEffectiveTollLibWei(tollWei) {
+  const safeToll = typeof tollWei === 'bigint' ? tollWei : 0n;
+  if (safeToll === 0n) {
+    return 0n;
+  }
+
+  const minTollInLib = getNetworkMinTollLibWei();
+  return safeToll < minTollInLib ? minTollInLib : safeToll;
 }
 
 // returns transaction fee in wei
