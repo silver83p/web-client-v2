@@ -7259,7 +7259,12 @@ class AvatarEditModal {
     this.backButton.addEventListener('click', () => this.close());
     this.uploadButton.addEventListener('click', () => this.handleUploadButton());
     this.deleteButton.addEventListener('click', () => this.handleDelete());
-    this.saveActionButton.addEventListener('click', () => this.handleSave());
+    this.saveActionButton.addEventListener('click', withButtonCooldown(
+      this.saveActionButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => this.handleSave()
+    ));
     this.cancelButton.addEventListener('click', () => this.handleCancel());
     this.fileInput.addEventListener('change', (e) => this.handleFileSelected(e));
 
@@ -7513,7 +7518,7 @@ class AvatarEditModal {
     if (this.avatarOptionUploaded) this.avatarOptionUploaded.onclick = () => selectOption('mine', this.avatarOptionUploaded);
     if (this.avatarOptionIdenticon) this.avatarOptionIdenticon.onclick = () => selectOption('identicon', this.avatarOptionIdenticon);
 
-    useBtn.onclick = async () => {
+    useBtn.onclick = withButtonCooldown(useBtn, BUTTON_COOLDOWN_MS, null, async () => {
       if (!this._avatarEditSelected || !address) return;
       if (this.isOwnAvatar) {
         // Own-avatar options are not shown; do not persist an account-level preference.
@@ -7551,7 +7556,7 @@ class AvatarEditModal {
       }
       // Close modal
       this.close();
-    };
+    });
 
     // wire close button to hide our controls when closed
     const closeBtn = document.getElementById('closeAvatarEditModal');
@@ -11331,7 +11336,12 @@ class UpdateWarningModal {
     // Set up event listeners
     this.closeButton.addEventListener('click', () => this.close());
     this.backupFirstBtn.addEventListener('click', () => backupAccountModal.open());
-    this.proceedToStoreBtn.addEventListener('click', () => this.proceedToStore());
+    this.proceedToStoreBtn.addEventListener('click', withButtonCooldown(
+      this.proceedToStoreBtn,
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => this.proceedToStore()
+    ));
 
     // Event delegation for dynamically created update toast button
     document.addEventListener('click', (event) => {
@@ -11381,12 +11391,18 @@ class HelpModal {
     this.joinDiscordButton = document.getElementById('joinDiscord');
 
     this.closeButton.addEventListener('click', () => this.close());
-    this.submitFeedbackButton.addEventListener('click', () => {
-      window.open('https://github.com/liberdus/web-client-v2/issues', '_blank');
-    });
-    this.joinDiscordButton.addEventListener('click', () => {
-      window.open('https://discord.gg/2cpJzFnwCR', '_blank');
-    });
+    this.submitFeedbackButton.addEventListener('click', withButtonCooldown(
+      this.submitFeedbackButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => { window.open('https://github.com/liberdus/web-client-v2/issues', '_blank'); }
+    ));
+    this.joinDiscordButton.addEventListener('click', withButtonCooldown(
+      this.joinDiscordButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => { window.open('https://discord.gg/2cpJzFnwCR', '_blank'); }
+    ));
   }
 
   open() {
@@ -17979,7 +17995,12 @@ class CallInviteModal {
 
     this.contactsList.addEventListener('change', this.updateCounter.bind(this));
     this.contactsList.addEventListener('click', this.handleContactClick.bind(this));
-    this.inviteSendButton.addEventListener('click', this.sendInvites.bind(this));
+    this.inviteSendButton.addEventListener('click', withButtonCooldown(
+      [this.inviteSendButton, this.cancelButton],
+      BUTTON_COOLDOWN_MS,
+      null,
+      (e) => this.sendInvites(e)
+    ));
     this.cancelButton.addEventListener('click', () => {
       this.close();
     });
@@ -18202,7 +18223,6 @@ class CallInviteModal {
     const msgCallLink = anchorHref.split('#')[0];
     if (!msgCallLink) return showToast('Call link not found', 2000, 'error');
     let msgCallTime = Number(this.messageEl.getAttribute('data-call-time')) || 0;
-    this.inviteSendButton.disabled = true;
     this.inviteSendButton.textContent = 'Sending...';
 
     try {
@@ -18413,7 +18433,6 @@ class CallInviteModal {
       console.error('Invite send error', err);
       showToast('Failed to send invites', 0, 'error');
     } finally {
-      this.inviteSendButton.disabled = false;
       this.inviteSendButton.textContent = 'Invite';
       this.close();
     }
@@ -18443,7 +18462,12 @@ class ShareAttachmentModal {
 
     this.contactsList.addEventListener('change', this.updateCounter.bind(this));
     this.contactsList.addEventListener('click', this.handleContactClick.bind(this));
-    this.sendButton.addEventListener('click', this.sendAttachments.bind(this));
+    this.sendButton.addEventListener('click', withButtonCooldown(
+      [this.sendButton, this.cancelButton],
+      BUTTON_COOLDOWN_MS,
+      null,
+      (e) => this.sendAttachments(e)
+    ));
     this.cancelButton.addEventListener('click', () => {
       this.close();
     });
@@ -18624,8 +18648,6 @@ class ShareAttachmentModal {
       showToast('No attachment data found', 2000, 'error');
       return;
     }
-
-    this.sendButton.disabled = true;
     this.sendButton.textContent = 'Sending...';
 
     try {
@@ -18859,7 +18881,6 @@ class ShareAttachmentModal {
       console.error('Share send error', err);
       showToast('Failed to share attachment', 0, 'error');
     } finally {
-      this.sendButton.disabled = false;
       this.sendButton.textContent = 'Share';
       this.close();
     }
@@ -20184,8 +20205,8 @@ class CallScheduleChoiceModal {
     const onSchedule = () => this._select('schedule');
     const onCancel = () => this._select(null);
 
-    if (this.nowBtn) this.nowBtn.addEventListener('click', onNow);
-    if (this.scheduleBtn) this.scheduleBtn.addEventListener('click', onSchedule);
+    if (this.nowBtn) this.nowBtn.addEventListener('click', withButtonCooldown(this.nowBtn, BUTTON_COOLDOWN_MS, null, onNow));
+    if (this.scheduleBtn) this.scheduleBtn.addEventListener('click', withButtonCooldown(this.scheduleBtn, BUTTON_COOLDOWN_MS, null, onSchedule));
     if (this.cancelBtn) this.cancelBtn.addEventListener('click', onCancel);
     if (this.closeBtn) this.closeBtn.addEventListener('click', onCancel);
   }
@@ -20263,8 +20284,6 @@ class CallScheduleDateModal {
     this.DEFAULT_OFFSET_MINUTES = 0;
     this.maxDaysOut = 400;
     this.clockTimer = new ClockTimer('callScheduleCurrentTime');
-    this._onSubmit = this._onSubmit.bind(this);
-    this._onSubmitBtn = this._onSubmitBtn.bind(this);
     this._onCancel = this._onCancel.bind(this);
     this._onInputChange = this._onInputChange.bind(this);
   }
@@ -20282,8 +20301,11 @@ class CallScheduleDateModal {
     this.cancelBtn = document.getElementById('cancelCallScheduleDate');
     this.closeBtn = document.getElementById('closeCallScheduleDateModal');
 
-    if (this.form) this.form.addEventListener('submit', this._onSubmit);
-    if (this.submitBtn) this.submitBtn.addEventListener('click', this._onSubmitBtn);
+    const wrappedConfirm = withButtonCooldown(this.submitBtn, BUTTON_COOLDOWN_MS, null, async () => {
+      this._submitValue();
+    });
+    if (this.form) this.form.addEventListener('submit', wrappedConfirm);
+    if (this.submitBtn) this.submitBtn.addEventListener('click', wrappedConfirm);
     if (this.cancelBtn) this.cancelBtn.addEventListener('click', this._onCancel);
     if (this.closeBtn) this.closeBtn.addEventListener('click', this._onCancel);
 
@@ -20358,14 +20380,6 @@ class CallScheduleDateModal {
     this._updateConvertedTimePreview();
   }
 
-  _onSubmit(e) {
-    if (e) e.preventDefault();
-    this._submitValue();
-  }
-  _onSubmitBtn(e) {
-    if (e) e.preventDefault();
-    this._submitValue();
-  }
   _onCancel() {
     this._closeWith(null);
   }
@@ -20779,6 +20793,7 @@ class VoiceRecordingModal {
     this.recordingInterval = null;
     this.currentAudio = null;
     this.playbackStartTime = null;
+    this.voiceMessageSendStarted = false;
   }
 
   load() {
@@ -20820,9 +20835,12 @@ class VoiceRecordingModal {
     this.stopListeningButton.addEventListener('click', () => {
       this.stopListening();
     });
-    this.sendVoiceMessageButton.addEventListener('click', () => {
-      this.sendVoiceMessage();
-    });
+    this.sendVoiceMessageButton.addEventListener('click', withButtonCooldown(
+      [this.sendVoiceMessageButton, this.cancelVoiceMessageButton, this.listenVoiceMessageButton],
+      BUTTON_COOLDOWN_MS,
+      null,
+      () => this.sendVoiceMessage()
+    ));
     // Close voice recording modal when clicking outside (only in initial state)
     this.modal.addEventListener('click', (e) => {
       if (e.target === this.modal && this.canCloseModal()) {
@@ -20837,7 +20855,7 @@ class VoiceRecordingModal {
    * @returns {boolean}
    */
   canCloseModal() {
-    return this.initialControls.style.display !== 'none';
+    return this.initialControls.style.display !== 'none' || this.voiceMessageSendStarted;
   }
 
   /**
@@ -20855,6 +20873,7 @@ class VoiceRecordingModal {
    */
   close() {
     this.modal.style.display = 'none';
+    this.voiceMessageSendStarted = false;
     this.cleanup();
   }
 
@@ -20869,6 +20888,7 @@ class VoiceRecordingModal {
     this.listeningControls.style.display = 'none';
     this.recordingTimer.textContent = '00:00';
     this.recordingIndicator.classList.remove('recording');
+    this.voiceMessageSendStarted = false;
   }
 
   /**
@@ -21129,10 +21149,10 @@ class VoiceRecordingModal {
   async sendVoiceMessage() {
     if (!this.recordedBlob) return;
 
+    this.voiceMessageSendStarted = true;
+    const blobToSend = this.recordedBlob;
     const loadingToastId = showToast('Sending voice message...', 0, 'loading');
     
-    this.sendVoiceMessageButton.disabled = true;
-
     try {
       // Calculate duration
       const duration = this.getRecordingDuration();
@@ -21142,8 +21162,8 @@ class VoiceRecordingModal {
       const password = myAccount.keys.secret + myAccount.keys.pqSeed;
       const selfKey = encryptData(bin2hex(dhkey), password, true);
 
-      // Encrypt the audio file similar to attachments
-      const audioArrayBuffer = await this.recordedBlob.arrayBuffer();
+      // Encrypt the audio file similar to attachments (use blobToSend so cleanup() cannot invalidate in-flight send)
+      const audioArrayBuffer = await blobToSend.arrayBuffer();
       const audioData = new Uint8Array(audioArrayBuffer);
       
       // Encrypt the audio data
@@ -21213,9 +21233,9 @@ class VoiceRecordingModal {
     } catch (error) {
       console.error('Error sending voice message:', error);
       showToast(`Failed to send voice message: ${error.message}`, 0, 'error');
+      this.voiceMessageSendStarted = false;
     } finally {
       hideToast(loadingToastId);
-      this.sendVoiceMessageButton.disabled = false;
     }
   }
 
