@@ -18732,9 +18732,9 @@ class ShareAttachmentModal {
 
         const encMessage = encryptChacha(recipientDhkey, stringify(messageObj));
         
-        // For ourselves: re-encrypt encKey with our password for local storage
+        // For ourselves: store message encryption key (recipientDhkey) for local decryption
         const password = keys.secret + keys.pqSeed;
-        const selfKey = encryptData(bin2hex(base642bin(encKey)), password, true);
+        const selfKey = encryptData(bin2hex(recipientDhkey), password, true);
 
         const messagePayload = {
           message: encMessage,
