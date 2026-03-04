@@ -129,6 +129,7 @@ import {
   debounce,
   withButtonCooldown,
   BUTTON_COOLDOWN_MS,
+  FAUCET_COOLDOWN_MS,
   truncateMessage,
   normalizeUnsignedFloat,
   EthNum,
@@ -1671,7 +1672,7 @@ class WalletScreen {
     });
 
     // Faucet/Bridge button handler
-    this.openFaucetBridgeButton.addEventListener('click', async () => {
+    const handleOpenFaucetBridge = async () => {
       if (this.isMainnet()) {
         // Mainnet: open bridge modal
         bridgeModal.open();
@@ -1679,14 +1680,19 @@ class WalletScreen {
         // Not mainnet: request from faucet API
         await this.requestFromFaucet();
       }
-    });
+    };
+    this.openFaucetBridgeButton.addEventListener('click', withButtonCooldown(
+      this.openFaucetBridgeButton,
+      FAUCET_COOLDOWN_MS,
+      null,
+      handleOpenFaucetBridge
+    ));
 
     // Add refresh balance button handler
-    this.refreshBalanceButton.addEventListener('click', async () => {
-      
+    const handleRefreshBalance = async () => {
       // Add active class for animation
       this.refreshBalanceButton.classList.add('active');
-      
+
       // Remove active class after animation completes
       setTimeout(() => {
         this.refreshBalanceButton.classList.remove('active');
@@ -1695,7 +1701,13 @@ class WalletScreen {
       }, 300);
 
       this.updateWalletView();
-    });
+    };
+    this.refreshBalanceButton.addEventListener('click', withButtonCooldown(
+      this.refreshBalanceButton,
+      BUTTON_COOLDOWN_MS,
+      null,
+      handleRefreshBalance
+    ));
   }
 
   open() {
@@ -1833,16 +1845,6 @@ class WalletScreen {
    * @returns {Promise<void>}
    */
   async requestFromFaucet() {
-    // Disable button immediately to prevent spam clicking
-    if (this.openFaucetBridgeButton.disabled) {
-      return;
-    }
-    this.openFaucetBridgeButton.disabled = true;
-    // Re-enable button after 5 seconds
-    setTimeout(() => {
-      this.openFaucetBridgeButton.disabled = false;
-    }, 5000);
-
     if (this.isFaucetRequestInProgress) {
       return;
     }
@@ -1938,17 +1940,16 @@ class MenuModal {
     this.aboutButton = document.getElementById('openAbout');
     this.aboutButton.addEventListener('click', () => aboutModal.open());
     this.signOutButton = document.getElementById('handleSignOut');
-    this.signOutButton.addEventListener('click', async () => await this.handleSignOut());
+    this.signOutHeaderButton = document.getElementById('signOutMenuHeader');
+    const menuWrappedSignOut = withButtonCooldown([this.signOutButton, this.signOutHeaderButton], BUTTON_COOLDOWN_MS, null, async () => await this.handleSignOut());
+    this.signOutButton.addEventListener('click', menuWrappedSignOut);
+    this.signOutHeaderButton.addEventListener('click', menuWrappedSignOut);
     this.bridgeButton = document.getElementById('openBridge');
     this.bridgeButton.addEventListener('click', () => bridgeModal.open());
     this.logsButton = document.getElementById('openLogs');
     this.logsButton.addEventListener('click', () => logsModal.open());
     this.farmButton = document.getElementById('openFarm');
     this.farmButton.addEventListener('click', () => farmModal.open());
-    
-    // Header sign out button
-    this.signOutHeaderButton = document.getElementById('signOutMenuHeader');
-    this.signOutHeaderButton.addEventListener('click', async () => await this.handleSignOut());
     
     
     // Show launch button if ReactNativeWebView is available
@@ -2364,14 +2365,18 @@ class AddProposalModal {
     this.summaryInput = document.getElementById('addProposalSummary');
     this.typeFieldsContainer = document.getElementById('addProposalTypeFields');
 
+    this.submitButton = this.form?.querySelector('button[type="submit"]');
+
     if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
     if (this.cancelButton) this.cancelButton.addEventListener('click', () => this.close());
 
-    if (this.form) {
-      this.form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        this.handleCreate();
-      });
+    if (this.form && this.submitButton) {
+      this.form.addEventListener('submit', withButtonCooldown(
+        this.submitButton,
+        BUTTON_COOLDOWN_MS,
+        null,
+        () => this.handleCreate()
+      ));
     }
 
     if (this.typeSelect) {
@@ -2709,11 +2714,10 @@ class SettingsModal {
     this.secretButton.addEventListener('click', () => secretModal.open());
     
     this.signOutButton = document.getElementById('handleSignOutSettings');
-    this.signOutButton.addEventListener('click', async () => await menuModal.handleSignOut());
-    
-    // Header sign out button
     this.signOutHeaderButton = document.getElementById('signOutSettingsHeader');
-    this.signOutHeaderButton.addEventListener('click', async () => await menuModal.handleSignOut());
+    const settingsWrappedSignOut = withButtonCooldown([this.signOutButton, this.signOutHeaderButton], BUTTON_COOLDOWN_MS, null, async () => await menuModal.handleSignOut());
+    this.signOutButton.addEventListener('click', settingsWrappedSignOut);
+    this.signOutHeaderButton.addEventListener('click', settingsWrappedSignOut);
   }
 
   enableSignOutButtonWithDelay() {
@@ -2766,7 +2770,7 @@ class ManageContactsModal {
     this.closeButton.addEventListener('click', () => this.close());
     this.fileInput.addEventListener('change', (e) => this.handleFileSelected(e));
     this.clearFileBtn.addEventListener('click', () => this.clearFile());
-    this.importBtn.addEventListener('click', () => this.handleImport());
+    this.importBtn.addEventListener('click', withButtonCooldown(this.importBtn, BUTTON_COOLDOWN_MS, null, () => this.handleImport()));
   }
 
   /**
@@ -3335,14 +3339,28 @@ class SignInModal {
     this.signInModalLastItem = document.getElementById('signInModalLastItem');
     this.backButton = document.getElementById('closeSignInModal');
 
-    // Sign in form submission
-    document.getElementById('signInForm').addEventListener('submit', (event) => this.handleSignIn(event));
-    
+    // Sign in form submission (2s cooldown; both buttons disabled; revalidate restores state)
+    const signInRevalidate = () => {
+      this.removeButton.disabled = false;
+      if (this.isActive()) this.handleUsernameChange();
+    };
+    document.getElementById('signInForm').addEventListener('submit', withButtonCooldown(
+      [this.submitButton, this.removeButton],
+      BUTTON_COOLDOWN_MS,
+      signInRevalidate,
+      (event) => this.handleSignIn(event)
+    ));
+
     // Username selection change
     this.usernameSelect.addEventListener('change', () => this.handleUsernameChange());
-    
-    // Remove account button
-    this.removeButton.addEventListener('click', () => this.handleRemoveAccount());
+
+    // Remove account button (2s cooldown; both buttons disabled)
+    this.removeButton.addEventListener('click', withButtonCooldown(
+      [this.removeButton, this.submitButton],
+      BUTTON_COOLDOWN_MS,
+      signInRevalidate,
+      () => this.handleRemoveAccount()
+    ));
 
     // Back button
     this.backButton.addEventListener('click', () => this.close());
@@ -12325,7 +12343,7 @@ class StakeValidatorModal {
     this.stakeQRFileInput.addEventListener('change', (event) => sendAssetFormModal.handleQRFileSelect(event, this));
     this.faucetButton.addEventListener('click', withButtonCooldown(
       this.faucetButton,
-      5000,
+      FAUCET_COOLDOWN_MS,
       null,
       () => this.requestFromFaucet()
     ));
@@ -18897,7 +18915,6 @@ class ShareContactsModal {
   constructor() {
     this.selectedContacts = new Set();
     this.warningShown = false;
-    this.isUploading = false;
     this.recipientAddress = null;
   }
 
@@ -18913,7 +18930,7 @@ class ShareContactsModal {
     // Event listeners
     this.closeButton.addEventListener('click', () => this.handleClose());
     this.allNoneButton.addEventListener('click', () => this.toggleAllNone());
-    this.doneButton.addEventListener('click', () => this.handleDone());
+    this.doneButton.addEventListener('click', withButtonCooldown(this.doneButton, BUTTON_COOLDOWN_MS, null, () => this.handleDone()));
     this.contactsList.addEventListener('click', (e) => this.handleContactClick(e));
     this.actionButton.addEventListener('click', () => {
       if (this.recipientAddress) {
@@ -18932,7 +18949,6 @@ class ShareContactsModal {
     // Reset state
     this.selectedContacts.clear();
     this.warningShown = false;
-    this.isUploading = false;
     this.recipientAddress = recipientAddress;
     this.doneButton.classList.remove('loading');
     this.doneButton.disabled = true;
@@ -19338,11 +19354,7 @@ class ShareContactsModal {
       return;
     }
 
-    if (this.isUploading) return;
-    this.isUploading = true;
     this.doneButton.classList.add('loading');
-    this.doneButton.disabled = true;
-
     try {
       // Generate VCF content
       const vcfContent = await this.generateVcfContent();
@@ -19377,9 +19389,7 @@ class ShareContactsModal {
       console.error('Failed to generate/upload VCF:', err);
       showToast('Failed to share contacts', 0, 'error');
     } finally {
-      this.isUploading = false;
       this.doneButton.classList.remove('loading');
-      this.doneButton.disabled = false;
     }
   }
 }
@@ -19394,7 +19404,6 @@ class ImportContactsModal {
   constructor() {
     this.selectedContacts = new Set();
     this.warningShown = false;
-    this.isImporting = false;
     this.parsedContacts = [];
     this.currentAttachment = null;
     this.recipientAddress = null;
@@ -19413,7 +19422,7 @@ class ImportContactsModal {
     // Event listeners
     this.closeButton.addEventListener('click', () => this.handleClose());
     this.allNoneButton.addEventListener('click', () => this.toggleAllNone());
-    this.doneButton.addEventListener('click', () => this.handleDone());
+    this.doneButton.addEventListener('click', withButtonCooldown(this.doneButton, BUTTON_COOLDOWN_MS, null, () => this.handleDone()));
     this.contactsList.addEventListener('click', (e) => this.handleContactClick(e));
     this.actionButton.addEventListener('click', () => {
       if (this.recipientAddress) {
@@ -19435,7 +19444,6 @@ class ImportContactsModal {
     // Reset state
     this.selectedContacts.clear();
     this.warningShown = false;
-    this.isImporting = false;
     this.parsedContacts = [];
     this.currentAttachment = isLocalUpload ? null : attachment;
     this.recipientAddress = isLocalUpload ? null : (attachment?.senderAddress || null);
@@ -19968,11 +19976,7 @@ class ImportContactsModal {
       return;
     }
 
-    if (this.isImporting) return;
-    this.isImporting = true;
     this.doneButton.classList.add('loading');
-    this.doneButton.disabled = true;
-
     try {
       let importedCount = 0;
       let failedCount = 0;
@@ -20140,9 +20144,7 @@ class ImportContactsModal {
       logsModal.log('❌ Failed to import contacts:', err?.message || String(err));
       showToast('Failed to import contacts', 0, 'error');
     } finally {
-      this.isImporting = false;
       this.doneButton.classList.remove('loading');
-      this.doneButton.disabled = false;
     }
   }
 }
