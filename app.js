@@ -202,6 +202,16 @@ function isDeletedForAll(recordOrValue) {
   return getDeletedState(recordOrValue) === MESSAGE_DELETED_STATE_ALL;
 }
 
+function getDeletedRecordIsMine(record) {
+  if (typeof record?.my === 'boolean') {
+    return record.my;
+  }
+  if (typeof record?.sign === 'number') {
+    return record.sign < 0;
+  }
+  return undefined;
+}
+
 function inferDeletedStateFromLegacyText(text) {
   const normalized = typeof text === 'string' ? text.trim().toLowerCase() : '';
   if (normalized === DELETED_MESSAGE_FOR_ALL_TEXT.toLowerCase()) {
@@ -216,19 +226,50 @@ function inferDeletedStateFromLegacyText(text) {
   return MESSAGE_DELETED_STATE_LOCAL;
 }
 
-function getDeletedPlaceholderText(record) {
-  const textCandidates = [record?.memo, record?.message];
-  for (const value of textCandidates) {
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
+function getDeletedTextForState(deletedState, isMine, preferredText) {
+  const normalized = typeof preferredText === 'string' ? preferredText.trim().toLowerCase() : '';
 
-  if (isDeletedForAll(record)) {
-    return record?.my === false ? DELETED_MESSAGE_BY_SENDER_TEXT : DELETED_MESSAGE_FOR_ALL_TEXT;
+  if (deletedState === MESSAGE_DELETED_STATE_ALL) {
+    if (normalized === DELETED_MESSAGE_BY_SENDER_TEXT.toLowerCase()) {
+      return DELETED_MESSAGE_BY_SENDER_TEXT;
+    }
+    if (normalized === DELETED_MESSAGE_FOR_ALL_TEXT.toLowerCase()) {
+      return DELETED_MESSAGE_FOR_ALL_TEXT;
+    }
+    if (isMine === false) {
+      return DELETED_MESSAGE_BY_SENDER_TEXT;
+    }
+    return DELETED_MESSAGE_FOR_ALL_TEXT;
   }
 
   return DELETED_MESSAGE_LOCAL_TEXT;
+}
+
+function getDeletedPlaceholderText(record) {
+  const preferredText =
+    (typeof record?.message === 'string' && record.message.trim())
+      ? record.message
+      : record?.memo;
+  return getDeletedTextForState(getDeletedState(record), getDeletedRecordIsMine(record), preferredText);
+}
+
+function updateDeletedWalletHistoryEntry(txid, deletedState, memoText) {
+  if (!txid || !Array.isArray(myData?.wallet?.history)) return false;
+
+  const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === txid);
+  if (txIndex === -1) return false;
+
+  const historyEntry = myData.wallet.history[txIndex];
+  Object.assign(historyEntry, {
+    deleted: deletedState,
+    memo: memoText
+  });
+  delete historyEntry.amount;
+  delete historyEntry.symbol;
+  delete historyEntry.payment;
+  delete historyEntry.sign;
+  delete historyEntry.address;
+  return true;
 }
 
 let parameters = {
@@ -534,6 +575,8 @@ function migrateDeletedMessageStates(data) {
     return false;
   }
 
+  const deletedMessagesByTxid = new Map();
+
   if (data.contacts && typeof data.contacts === 'object') {
     for (const contact of Object.values(data.contacts)) {
       if (!contact || typeof contact !== 'object' || !Array.isArray(contact.messages)) continue;
@@ -549,6 +592,22 @@ function migrateDeletedMessageStates(data) {
             ? message.message
             : message.memo;
         message.deleted = inferDeletedStateFromLegacyText(legacyText);
+
+        const canonicalDeleteText = getDeletedTextForState(
+          message.deleted,
+          getDeletedRecordIsMine(message),
+          legacyText
+        );
+        message.message = canonicalDeleteText;
+        if (typeof message.memo === 'string') {
+          message.memo = canonicalDeleteText;
+        }
+        if (message.txid) {
+          deletedMessagesByTxid.set(message.txid, {
+            deleted: message.deleted,
+            text: canonicalDeleteText
+          });
+        }
       }
     }
   }
@@ -560,11 +619,19 @@ function migrateDeletedMessageStates(data) {
       if (deletedState <= 0) continue;
       if (deletedState === MESSAGE_DELETED_STATE_ALL) continue;
 
+      const linkedMessage = tx.txid ? deletedMessagesByTxid.get(tx.txid) : null;
+      if (linkedMessage) {
+        tx.deleted = linkedMessage.deleted;
+        tx.memo = linkedMessage.text;
+        continue;
+      }
+
       const legacyText =
         (typeof tx.memo === 'string' && tx.memo.trim())
           ? tx.memo
           : tx.message;
       tx.deleted = inferDeletedStateFromLegacyText(legacyText);
+      tx.memo = getDeletedTextForState(tx.deleted, getDeletedRecordIsMine(tx), legacyText);
     }
   }
 
@@ -5866,6 +5933,9 @@ async function processChats(chats, keys) {
                     // Mark the message as deleted
                     messageToDelete.deleted = MESSAGE_DELETED_STATE_ALL;
                     messageToDelete.message = DELETED_MESSAGE_BY_SENDER_TEXT;
+                    if (typeof messageToDelete.memo === 'string') {
+                      messageToDelete.memo = DELETED_MESSAGE_BY_SENDER_TEXT;
+                    }
                     didDeleteMessage = true;
                     // Remove attachments so we don't keep references around
                     delete messageToDelete.xattach;
@@ -5873,24 +5943,14 @@ async function processChats(chats, keys) {
                     // Remove payment-specific fields if present
                     if (messageToDelete.amount) {
                       if (messageToDelete.payment) delete messageToDelete.payment;
-                      if (messageToDelete.memo) messageToDelete.memo = DELETED_MESSAGE_BY_SENDER_TEXT;
                       if (messageToDelete.amount) delete messageToDelete.amount;
                       if (messageToDelete.symbol) delete messageToDelete.symbol;
-                      
-                      // Update corresponding transaction in wallet history
-                      const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === messageToDelete.txid);
-                      if (txIndex !== -1) {
-                        Object.assign(myData.wallet.history[txIndex], {
-                          deleted: MESSAGE_DELETED_STATE_ALL,
-                          memo: DELETED_MESSAGE_BY_SENDER_TEXT
-                        });
-                        delete myData.wallet.history[txIndex].amount;
-                        delete myData.wallet.history[txIndex].symbol;
-                        delete myData.wallet.history[txIndex].payment;
-                        delete myData.wallet.history[txIndex].sign;
-                        delete myData.wallet.history[txIndex].address;
-                      }
                     }
+                    updateDeletedWalletHistoryEntry(
+                      messageToDelete.txid,
+                      MESSAGE_DELETED_STATE_ALL,
+                      DELETED_MESSAGE_BY_SENDER_TEXT
+                    );
                   } else if (messageToDelete.my && normalizeAddress(keys.address) === normalizeAddress(tx.from)) {
                     // This is our own message, and we're deleting it - valid
                     // Purge cached thumbnails for image attachments, if any
@@ -5899,6 +5959,9 @@ async function processChats(chats, keys) {
                     // Mark the message as deleted
                     messageToDelete.deleted = MESSAGE_DELETED_STATE_ALL;
                     messageToDelete.message = DELETED_MESSAGE_FOR_ALL_TEXT;
+                    if (typeof messageToDelete.memo === 'string') {
+                      messageToDelete.memo = DELETED_MESSAGE_FOR_ALL_TEXT;
+                    }
                     didDeleteMessage = true;
                     // Remove attachments so we don't keep references around
                     delete messageToDelete.xattach;
@@ -5906,24 +5969,14 @@ async function processChats(chats, keys) {
                     // Remove payment-specific fields if present - same logic as above
                     if (messageToDelete.amount) {
                       if (messageToDelete.payment) delete messageToDelete.payment;
-                      if (messageToDelete.memo) messageToDelete.memo = DELETED_MESSAGE_FOR_ALL_TEXT;
                       if (messageToDelete.amount) delete messageToDelete.amount;
                       if (messageToDelete.symbol) delete messageToDelete.symbol;
-                      
-                      // Update corresponding transaction in wallet history
-                      const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === messageToDelete.txid);
-                      if (txIndex !== -1) {
-                        Object.assign(myData.wallet.history[txIndex], {
-                          deleted: MESSAGE_DELETED_STATE_ALL,
-                          memo: DELETED_MESSAGE_FOR_ALL_TEXT
-                        });
-                        delete myData.wallet.history[txIndex].amount;
-                        delete myData.wallet.history[txIndex].symbol;
-                        delete myData.wallet.history[txIndex].payment;
-                        delete myData.wallet.history[txIndex].sign;
-                        delete myData.wallet.history[txIndex].address;
-                      }
                     }
+                    updateDeletedWalletHistoryEntry(
+                      messageToDelete.txid,
+                      MESSAGE_DELETED_STATE_ALL,
+                      DELETED_MESSAGE_FOR_ALL_TEXT
+                    );
                   }
 
                   if (reactNativeApp.isReactNativeWebView && messageToDelete.type === 'call' && Number(messageToDelete.callTime) > 0) {
@@ -17063,20 +17116,13 @@ class ChatModal {
         if (message.memo) message.memo = DELETED_MESSAGE_LOCAL_TEXT;
         if (message.amount) delete message.amount;
         if (message.symbol) delete message.symbol;
-        
+
         // Update corresponding transaction in wallet history
-        const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === message.txid);
-        if (txIndex !== -1) {
-          Object.assign(myData.wallet.history[txIndex], {
-            deleted: MESSAGE_DELETED_STATE_LOCAL,
-            memo: DELETED_MESSAGE_LOCAL_TEXT
-          });
-          delete myData.wallet.history[txIndex].amount;
-          delete myData.wallet.history[txIndex].symbol;
-          delete myData.wallet.history[txIndex].payment;
-          delete myData.wallet.history[txIndex].sign;
-          delete myData.wallet.history[txIndex].address;
-        }
+        updateDeletedWalletHistoryEntry(
+          message.txid,
+          MESSAGE_DELETED_STATE_LOCAL,
+          DELETED_MESSAGE_LOCAL_TEXT
+        );
       }
       // Remove cached thumbnails for image attachments, then remove attachments
       this.purgeThumbnail(message.xattach);
