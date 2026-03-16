@@ -167,6 +167,11 @@ const NETWORK_ACCOUNT_ID = '0'.repeat(64);
 const MAX_TOLL = 1_000_000; // 1M limit
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minute limit for editing messages
+const MESSAGE_DELETED_STATE_LOCAL = 1;
+const MESSAGE_DELETED_STATE_ALL = 2;
+const DELETED_MESSAGE_LOCAL_TEXT = 'Deleted on this device';
+const DELETED_MESSAGE_FOR_ALL_TEXT = 'Deleted for all';
+const DELETED_MESSAGE_BY_SENDER_TEXT = 'Deleted by sender';
 
 // Migration for attachment encryption keys.
 // Set this numeric timestamp (YYYYMMDDHHMM) to force re-running the
@@ -174,6 +179,57 @@ const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minute limit for editing messages
 // Use YYYYMMDDHHMM (year, month, day, hour, minute) so migrations
 // can be re-run multiple times per day by bumping this value.
 const MIGRATION_ATTACHMENT_KEYS_TO_ENC_KEY_TS = 202602010000;
+const MIGRATION_DELETE_STATES_TS = 202603160000;
+
+function getDeletedState(recordOrValue) {
+  const rawDeleted =
+    recordOrValue && typeof recordOrValue === 'object' && !Array.isArray(recordOrValue)
+      ? recordOrValue.deleted
+      : recordOrValue;
+  const deletedNum = Number(rawDeleted);
+  return Number.isFinite(deletedNum) && deletedNum > 0 ? deletedNum : 0;
+}
+
+function isDeleted(recordOrValue) {
+  return getDeletedState(recordOrValue) > 0;
+}
+
+function isDeletedForMeOnly(recordOrValue) {
+  return getDeletedState(recordOrValue) === MESSAGE_DELETED_STATE_LOCAL;
+}
+
+function isDeletedForAll(recordOrValue) {
+  return getDeletedState(recordOrValue) === MESSAGE_DELETED_STATE_ALL;
+}
+
+function inferDeletedStateFromLegacyText(text) {
+  const normalized = typeof text === 'string' ? text.trim().toLowerCase() : '';
+  if (normalized === DELETED_MESSAGE_FOR_ALL_TEXT.toLowerCase()) {
+    return MESSAGE_DELETED_STATE_ALL;
+  }
+  if (normalized === DELETED_MESSAGE_BY_SENDER_TEXT.toLowerCase()) {
+    return MESSAGE_DELETED_STATE_ALL;
+  }
+  if (normalized === DELETED_MESSAGE_LOCAL_TEXT.toLowerCase()) {
+    return MESSAGE_DELETED_STATE_LOCAL;
+  }
+  return MESSAGE_DELETED_STATE_LOCAL;
+}
+
+function getDeletedPlaceholderText(record) {
+  const textCandidates = [record?.memo, record?.message];
+  for (const value of textCandidates) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  if (isDeletedForAll(record)) {
+    return record?.my === false ? DELETED_MESSAGE_BY_SENDER_TEXT : DELETED_MESSAGE_FOR_ALL_TEXT;
+  }
+
+  return DELETED_MESSAGE_LOCAL_TEXT;
+}
 
 let parameters = {
   current: {
@@ -450,6 +506,70 @@ async function migrateAttachmentKeysToEncKey(data) {
   data.account.migrations = migrations && typeof migrations === 'object' ? migrations : {};
   // Record the migration application timestamp so future runs can be gated.
   data.account.migrations.attachmentKeysToEncKey = MIGRATION_ATTACHMENT_KEYS_TO_ENC_KEY_TS;
+  return true;
+}
+
+/**
+ * One-time migration: split legacy deleted state into local-only (1) and for-all (2)
+ * @param {Object} data
+ * @returns {boolean} True if migration flag was applied
+ */
+function migrateDeletedMessageStates(data) {
+  if (!data?.account) return false;
+
+  const migrations =
+    data.account.migrations && typeof data.account.migrations === 'object'
+      ? data.account.migrations
+      : null;
+
+  const appliedTsRaw = migrations?.deleteStates;
+  let appliedTs = 0;
+  if (typeof appliedTsRaw === 'number') {
+    appliedTs = appliedTsRaw;
+  } else if (appliedTsRaw === true) {
+    appliedTs = 0;
+  }
+
+  if (appliedTs >= MIGRATION_DELETE_STATES_TS) {
+    return false;
+  }
+
+  if (data.contacts && typeof data.contacts === 'object') {
+    for (const contact of Object.values(data.contacts)) {
+      if (!contact || typeof contact !== 'object' || !Array.isArray(contact.messages)) continue;
+
+      for (const message of contact.messages) {
+        if (!message || typeof message !== 'object') continue;
+        const deletedState = getDeletedState(message);
+        if (deletedState <= 0) continue;
+        if (deletedState === MESSAGE_DELETED_STATE_ALL) continue;
+
+        const legacyText =
+          (typeof message.message === 'string' && message.message.trim())
+            ? message.message
+            : message.memo;
+        message.deleted = inferDeletedStateFromLegacyText(legacyText);
+      }
+    }
+  }
+
+  if (Array.isArray(data.wallet?.history)) {
+    for (const tx of data.wallet.history) {
+      if (!tx || typeof tx !== 'object') continue;
+      const deletedState = getDeletedState(tx);
+      if (deletedState <= 0) continue;
+      if (deletedState === MESSAGE_DELETED_STATE_ALL) continue;
+
+      const legacyText =
+        (typeof tx.memo === 'string' && tx.memo.trim())
+          ? tx.memo
+          : tx.message;
+      tx.deleted = inferDeletedStateFromLegacyText(legacyText);
+    }
+  }
+
+  data.account.migrations = migrations && typeof migrations === 'object' ? migrations : {};
+  data.account.migrations.deleteStates = MIGRATION_DELETE_STATES_TS;
   return true;
 }
 
@@ -1377,8 +1497,8 @@ class ChatsScreen {
 
       let previewHTML = '';
       // Check if the latest activity is a payment/transfer message
-      if (latestActivity.deleted === 1) {
-        previewHTML = `<span><i>${latestActivity.message}</i></span>`;
+      if (isDeleted(latestActivity)) {
+        previewHTML = `<span><i>${escapeHtml(getDeletedPlaceholderText(latestActivity))}</i></span>`;
       } else if (typeof latestActivity.amount === 'bigint') {
         // Latest item is a payment/transfer
         const amountStr = parseFloat(big2str(latestActivity.amount, 18)).toFixed(6);
@@ -3657,6 +3777,11 @@ class SignInModal {
       saveState();
     }
 
+    // One-time migration: split deleted state into local-only vs for-all
+    if (migrateDeletedMessageStates(myData)) {
+      saveState();
+    }
+
     // Clear notification address for this account when signing in
     // Notification storage is only for accounts the user is NOT signed in to
     if (reactNativeApp.isReactNativeWebView && myAccount?.keys?.address) {
@@ -4837,7 +4962,7 @@ class HistoryModal {
         const statusAttr = tx?.status ? `data-status="${tx.status}"` : '';
         
         // Check if transaction was deleted
-        if (tx?.deleted > 0) {
+        if (isDeleted(tx)) {
           return `
             <div class="transaction-item deleted-transaction" ${txidAttr} ${statusAttr}>
               <div class="transaction-info">
@@ -4847,7 +4972,7 @@ class HistoryModal {
                 </div>
                 <div class="transaction-amount">-- --</div>
               </div>
-              <div class="transaction-memo">${tx.memo || "Deleted on this device"}</div>
+              <div class="transaction-memo">${escapeHtml(getDeletedPlaceholderText(tx))}</div>
             </div>
           `;
         }
@@ -5150,7 +5275,7 @@ class CallsModal {
       for (const msg of messages) {
         if (msg?.type !== 'call') continue;
         // Skip deleted messages
-        if (msg?.deleted === 1) continue;
+        if (isDeleted(msg)) continue;
         // Skip messages that failed to send
         if (msg?.status === 'failed') continue;
         const callTime = Number(msg.callTime);
@@ -5739,8 +5864,8 @@ async function processChats(chats, keys) {
                     chatModal.purgeThumbnail(messageToDelete.xattach);
 
                     // Mark the message as deleted
-                    messageToDelete.deleted = 1;
-                    messageToDelete.message = "Deleted by sender";
+                    messageToDelete.deleted = MESSAGE_DELETED_STATE_ALL;
+                    messageToDelete.message = DELETED_MESSAGE_BY_SENDER_TEXT;
                     didDeleteMessage = true;
                     // Remove attachments so we don't keep references around
                     delete messageToDelete.xattach;
@@ -5748,14 +5873,17 @@ async function processChats(chats, keys) {
                     // Remove payment-specific fields if present
                     if (messageToDelete.amount) {
                       if (messageToDelete.payment) delete messageToDelete.payment;
-                      if (messageToDelete.memo) messageToDelete.memo = "Deleted by sender";
+                      if (messageToDelete.memo) messageToDelete.memo = DELETED_MESSAGE_BY_SENDER_TEXT;
                       if (messageToDelete.amount) delete messageToDelete.amount;
                       if (messageToDelete.symbol) delete messageToDelete.symbol;
                       
                       // Update corresponding transaction in wallet history
                       const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === messageToDelete.txid);
                       if (txIndex !== -1) {
-                        Object.assign(myData.wallet.history[txIndex], { deleted: 1, memo: 'Deleted by sender' });
+                        Object.assign(myData.wallet.history[txIndex], {
+                          deleted: MESSAGE_DELETED_STATE_ALL,
+                          memo: DELETED_MESSAGE_BY_SENDER_TEXT
+                        });
                         delete myData.wallet.history[txIndex].amount;
                         delete myData.wallet.history[txIndex].symbol;
                         delete myData.wallet.history[txIndex].payment;
@@ -5769,8 +5897,8 @@ async function processChats(chats, keys) {
                     chatModal.purgeThumbnail(messageToDelete.xattach);
 
                     // Mark the message as deleted
-                    messageToDelete.deleted = 1;
-                    messageToDelete.message = "Deleted for all";
+                    messageToDelete.deleted = MESSAGE_DELETED_STATE_ALL;
+                    messageToDelete.message = DELETED_MESSAGE_FOR_ALL_TEXT;
                     didDeleteMessage = true;
                     // Remove attachments so we don't keep references around
                     delete messageToDelete.xattach;
@@ -5778,14 +5906,17 @@ async function processChats(chats, keys) {
                     // Remove payment-specific fields if present - same logic as above
                     if (messageToDelete.amount) {
                       if (messageToDelete.payment) delete messageToDelete.payment;
-                      if (messageToDelete.memo) messageToDelete.memo = "Deleted for all";
+                      if (messageToDelete.memo) messageToDelete.memo = DELETED_MESSAGE_FOR_ALL_TEXT;
                       if (messageToDelete.amount) delete messageToDelete.amount;
                       if (messageToDelete.symbol) delete messageToDelete.symbol;
                       
                       // Update corresponding transaction in wallet history
                       const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === messageToDelete.txid);
                       if (txIndex !== -1) {
-                        Object.assign(myData.wallet.history[txIndex], { deleted: 1, memo: 'Deleted for all' });
+                        Object.assign(myData.wallet.history[txIndex], {
+                          deleted: MESSAGE_DELETED_STATE_ALL,
+                          memo: DELETED_MESSAGE_FOR_ALL_TEXT
+                        });
                         delete myData.wallet.history[txIndex].amount;
                         delete myData.wallet.history[txIndex].symbol;
                         delete myData.wallet.history[txIndex].payment;
@@ -5812,7 +5943,7 @@ async function processChats(chats, keys) {
                   const newText = parsedMessage.text;
                   if (txidToEdit && typeof newText === 'string') {
                     const messageToEdit = contact.messages.find(msg => msg.txid === txidToEdit);
-                    if (messageToEdit && !messageToEdit.deleted) {
+                    if (messageToEdit && !isDeleted(messageToEdit)) {
                       // Allow editing only if original sender matches editor and it's their own message OR
                       // we receive someone else's edit for their own message
                       const originalSender = normalizeAddress(tx.from);
@@ -6768,7 +6899,7 @@ class SearchMessagesModal {
       contact.messages.forEach((message) => {
         if (!message.message) return; // some messages like calls have no message field
         // Skip deleted messages and call messages
-        if (message.deleted > 0) return;
+        if (isDeleted(message)) return;
         if (message.type === 'call') return;
         if (message.message.toLowerCase().includes(searchLower)) {
           // Highlight matching text
@@ -13763,7 +13894,7 @@ class ChatModal {
           console.warn('Edit target message not found locally; sending as new message');
         } else if (!originalMsg.my) {
           console.warn('Attempt to edit a message not owned by user');
-        } else if (originalMsg.deleted) {
+        } else if (isDeleted(originalMsg)) {
           console.warn('Attempt to edit a deleted message');
         } else if ((Date.now() - Number(originalMsg.timestamp || 0)) > EDIT_WINDOW_MS) {
           showToast('Edit window expired', 3000, 'info');
@@ -14204,7 +14335,7 @@ class ChatModal {
         // --- Render Payment Transaction ---
         const directionText = item.my ? '-' : '+';
         const messageClass = item.my ? 'sent' : 'received';
-    const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !item.deleted;
+    const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !isDeleted(item);
     messageHTML = `
           <div class="message ${messageClass} payment-info" ${timestampAttribute} ${txidAttribute} ${statusAttribute}>
             <div class="payment-header">
@@ -14223,7 +14354,7 @@ class ChatModal {
         let replyHTML = '';
         
         // Check if message was deleted
-        if (item?.deleted > 0) {
+        if (isDeleted(item)) {
           // Render deleted message with special styling
           messageHTML = `
                     <div class="message ${messageClass} deleted-message" ${timestampAttribute} ${txidAttribute} ${statusAttribute}>
@@ -14364,7 +14495,7 @@ class ChatModal {
           }
           
           const callTimeAttribute = item.type === 'call' && item.callTime ? `data-call-time="${item.callTime}"` : '';
-      const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !item.deleted;
+      const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !isDeleted(item);
       messageHTML = `
             <div class="message ${messageClass}" ${timestampAttribute} ${txidAttribute} ${statusAttribute} ${callTimeAttribute}>
               ${replyHTML}
@@ -16909,7 +17040,7 @@ class ChatModal {
       const message = contact.messages[messageIndex];
       const shouldRefreshCallsUi = message.type === 'call' && shouldRefreshUpcomingCallsUiForCallTime(message.callTime);
       
-      if (message.deleted) {
+      if (isDeleted(message)) {
         return showToast('Message already deleted', 2000, 'info');
       }
       
@@ -16923,20 +17054,23 @@ class ChatModal {
 
       // Mark as deleted and clear payment info if present
       Object.assign(message, {
-        deleted: 1,
-        message: "Deleted on this device"
+        deleted: MESSAGE_DELETED_STATE_LOCAL,
+        message: DELETED_MESSAGE_LOCAL_TEXT
       });
       // Remove payment-specific fields if present
       if (message?.amount) {
         if (message.payment) delete message.payment;
-        if (message.memo) message.memo = "Deleted on this device";
+        if (message.memo) message.memo = DELETED_MESSAGE_LOCAL_TEXT;
         if (message.amount) delete message.amount;
         if (message.symbol) delete message.symbol;
         
         // Update corresponding transaction in wallet history
         const txIndex = myData.wallet.history.findIndex((tx) => tx.txid === message.txid);
         if (txIndex !== -1) {
-          Object.assign(myData.wallet.history[txIndex], { deleted: 1, memo: 'Deleted on this device' });
+          Object.assign(myData.wallet.history[txIndex], {
+            deleted: MESSAGE_DELETED_STATE_LOCAL,
+            memo: DELETED_MESSAGE_LOCAL_TEXT
+          });
           delete myData.wallet.history[txIndex].amount;
           delete myData.wallet.history[txIndex].symbol;
           delete myData.wallet.history[txIndex].payment;
@@ -16986,8 +17120,8 @@ class ChatModal {
       
       const message = contact.messages[messageIndex];
       
-      if (message.deleted) {
-        return showToast('Message already deleted', 2000, 'info');
+      if (isDeletedForAll(message)) {
+        return showToast('Message already deleted for everyone', 2000, 'info');
       }
 
       // Check if the message was sent by the current user
@@ -18066,7 +18200,7 @@ class CallInviteModal {
     if (!comparableCallUrl) return false;
     return (contact?.messages || []).some((message) => {
       if (!message || message.type !== 'call') return false;
-      if (message.deleted === 1 || message.status === 'failed') return false;
+      if (isDeleted(message) || message.status === 'failed') return false;
       return this.getComparableCallUrl(message.message) === comparableCallUrl;
     });
   }
