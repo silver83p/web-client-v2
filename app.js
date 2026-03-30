@@ -12872,6 +12872,10 @@ class ChatModal {
     this.attachmentLoadingToastsByContact = new Map();
     // Prevent multiple fee-failure warnings when close triggers read + reclaim checks.
     this.closeFeeFailureToastShown = false;
+    
+    // Drag and drop state
+    this.dragCounter = 0;
+    this.dropOverlay = null;
   }
 
   /**
@@ -12938,6 +12942,171 @@ class ChatModal {
     if (!toastSet || toastSet.size === 0) return;
     toastSet.forEach((toastId) => hideToast(toastId));
     this.attachmentLoadingToastsByContact.delete(contactAddress);
+  }
+
+  /**
+   * Extract image files from clipboard items
+   * @param {DataTransferItemList} items - Clipboard items
+   * @returns {File[]} Array of image files
+   */
+  getImageFilesFromClipboard(items) {
+    const imageFiles = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles.push(file);
+        }
+      }
+    }
+    return imageFiles;
+  }
+
+  /**
+   * Process multiple image files for attachment
+   * @param {File[]} files - Array of image files to process
+   * @returns {Promise<void>}
+   */
+  async processIncomingAttachmentFiles(files) {
+    // Short-circuit if in edit mode - edit flow is text-only
+    if (this.isEditingMessage()) {
+      return;
+    }
+
+    for (const file of files) {
+      if (this.fileAttachments.length >= 5) {
+        showToast('You can only attach up to 5 files.', 0, 'error');
+        break;
+      }
+      // Create synthetic event for handleFileAttachment
+      const syntheticEvent = { target: { files: [file], value: '' } };
+      try {
+        await this.handleFileAttachment(syntheticEvent);
+      } catch (error) {
+        console.error('Failed to process attachment:', file.name, error);
+        // Continue processing remaining files even if one fails
+      }
+    }
+  }
+
+  /**
+   * Handle paste event on message input
+   * @param {ClipboardEvent} e - Paste event
+   * @returns {Promise<void>}
+   */
+  async handleMessageInputPaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // Find image items in clipboard
+    const imageFiles = this.getImageFilesFromClipboard(items);
+
+    // If images found, process them
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      await this.processIncomingAttachmentFiles(imageFiles);
+    }
+  }
+
+  /**
+   * Create drop overlay element
+   * @returns {HTMLElement} The drop overlay element
+   */
+  createDropOverlay() {
+    // Use the HTML-defined overlay instead of creating dynamically
+    this.dropOverlay = document.getElementById('dropOverlay');
+    return this.dropOverlay;
+  }
+
+  /**
+   * Show the drop overlay
+   * @returns {void}
+   */
+  showDropOverlay() {
+    if (!this.dropOverlay) this.createDropOverlay();
+    if (this.dropOverlay) {
+      this.dropOverlay.style.display = 'flex';
+    }
+  }
+
+  /**
+   * Hide the drop overlay
+   * @returns {void}
+   */
+  hideDropOverlay() {
+    if (this.dropOverlay) {
+      this.dropOverlay.style.display = 'none';
+    }
+  }
+
+  /**
+   * Handle drag enter event for attachments
+   * @param {DragEvent} e - Drag event
+   * @returns {void}
+   */
+  handleAttachmentDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (this.isEditingMessage()) {
+      this.dragCounter = 0;
+      this.hideDropOverlay();
+      return;
+    }
+    this.dragCounter++;
+    if (e.dataTransfer.types.includes('Files')) {
+      this.showDropOverlay();
+    }
+  }
+
+  /**
+   * Handle drag over event for attachments
+   * @param {DragEvent} e - Drag event
+   * @returns {void}
+   */
+  handleAttachmentDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (this.isEditingMessage()) {
+      return;
+    }
+  }
+
+  /**
+   * Handle drag leave event for attachments
+   * @param {DragEvent} e - Drag event
+   * @returns {void}
+   */
+  handleAttachmentDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (this.isEditingMessage()) {
+      this.dragCounter = 0;
+      this.hideDropOverlay();
+      return;
+    }
+    this.dragCounter--;
+    if (this.dragCounter === 0) {
+      this.hideDropOverlay();
+    }
+  }
+
+  /**
+   * Handle drop event for attachments
+   * @param {DragEvent} e - Drop event
+   * @returns {Promise<void>}
+   */
+  async handleAttachmentDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.dragCounter = 0;
+    this.hideDropOverlay();
+    if (this.isEditingMessage()) return;
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    // Process all files (no type restriction - app handles all supported types)
+    await this.processIncomingAttachmentFiles(Array.from(files));
   }
 
   /**
@@ -13192,6 +13361,19 @@ class ChatModal {
       this.chatFilesInput.addEventListener('change', (e) => {
         this.handleFileAttachment(e);
       });
+    }
+
+    // Paste image from clipboard (PC and mobile)
+    if (this.messageInput) {
+      this.messageInput.addEventListener('paste', (e) => this.handleMessageInputPaste(e));
+    }
+
+    // Drag and drop image support (PC only) - attach to modal for broader drop area
+    if (this.modal) {
+      this.modal.addEventListener('dragenter', (e) => this.handleAttachmentDragEnter(e));
+      this.modal.addEventListener('dragover', (e) => this.handleAttachmentDragOver(e));
+      this.modal.addEventListener('dragleave', (e) => this.handleAttachmentDragLeave(e));
+      this.modal.addEventListener('drop', (e) => this.handleAttachmentDrop(e));
     }
 
     // Voice recording event listeners
@@ -14942,24 +15124,27 @@ class ChatModal {
       }
     };
     
-    try {
-      this.isEncrypting = true;
-      this.sendButton.disabled = true; // Disable send button during encryption
-      this.addAttachmentButton.disabled = true;
-      loadingToastId = showToast(
-        `Attaching "${file.name}" to ${uploadContactName}...`,
-        0,
-        'loading',
-        false,
-        { dedupe: false }
-      );
-      this.trackAttachmentLoadingToast(uploadContactAddress, loadingToastId);
-      
-      // Generate random encryption key for this attachment
-      const encKey = generateRandomBytes(32);
+    // Return a Promise that resolves when the worker completes
+    // This ensures processIncomingAttachmentFiles can properly await each upload
+    return new Promise((resolve, reject) => {
+      try {
+        this.isEncrypting = true;
+        this.sendButton.disabled = true; // Disable send button during encryption
+        this.addAttachmentButton.disabled = true;
+        loadingToastId = showToast(
+          `Attaching "${file.name}" to ${uploadContactName}...`,
+          0,
+          'loading',
+          false,
+          { dedupe: false }
+        );
+        this.trackAttachmentLoadingToast(uploadContactAddress, loadingToastId);
+        
+        // Generate random encryption key for this attachment
+        const encKey = generateRandomBytes(32);
 
-      const worker = new Worker('encryption.worker.js', { type: 'module' });
-      worker.onmessage = async (e) => {
+        const worker = new Worker('encryption.worker.js', { type: 'module' });
+        worker.onmessage = async (e) => {
         this.isEncrypting = false;
         if (e.data.error) {
           clearLoadingToast();
@@ -15061,6 +15246,7 @@ class ChatModal {
               );
             }
             refreshChatsScreenIfActive();
+            resolve(); // Successfully completed upload
           } catch (fetchError) {
             // Handle fetch errors (including AbortError) inside the worker callback
             if (fetchError.name === 'AbortError') {
@@ -15081,6 +15267,7 @@ class ChatModal {
             this.isEncrypting = false;
 
             this.addAttachmentButton.disabled = this.isEditingMessage() || this.blockedByRecipient;
+            reject(fetchError); // Upload failed
           }
         }
         worker.terminate();
@@ -15102,6 +15289,7 @@ class ChatModal {
 
             this.addAttachmentButton.disabled = this.isEditingMessage() || this.blockedByRecipient;
         worker.terminate();
+        reject(err); // Worker error
       };
       
       // read the file and send it to the worker for encryption
@@ -15132,9 +15320,11 @@ class ChatModal {
       this.isEncrypting = false;
 
       this.addAttachmentButton.disabled = this.isEditingMessage() || this.blockedByRecipient;
+      reject(error); // Outer error
     } finally {
       event.target.value = ''; // Reset the file input value
     }
+    }); // End of Promise wrapper
   }
 
   /**
