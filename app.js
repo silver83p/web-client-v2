@@ -859,6 +859,12 @@ function handleBeforeUnload(e) {
   if (menuModal.isSignoutExit){
     return;
   }
+  // Check if backup is in progress
+  if (backupAccountModal.isUploading) {
+    e.preventDefault();
+    e.returnValue = 'A backup is currently being uploaded to Google Drive. Leaving the page will interrupt the backup. Are you sure you want to leave?';
+    return e.returnValue;
+  }
   if (myData){
     e.preventDefault();
     saveState();    // This save might not work if the amount of data to save is large and user quickly clicks on Leave button
@@ -2186,6 +2192,12 @@ class MenuModal {
   }
   
   async handleSignOut() {
+    // Check if backup is in progress
+    if (backupAccountModal.isUploading) {
+      showToast('Please wait for the backup to complete before signing out.', 0, 'warning');
+      return;
+    }
+    
     logsModal.log(`Signout ${myAccount.username}`)
     this.isSignoutExit = true;
 
@@ -9409,6 +9421,7 @@ class BackupAccountModal {
     this.GOOGLE_TOKEN_STORAGE_KEY = 'google_drive_token';
     this.GDRIVE_BACKUP_TS_KEY = 'googleDriveBackupTimestamp';
     this.GDRIVE_REMINDER_TS_KEY = 'googleDriveReminderTimestamp';
+    this.isUploading = false; // Track upload state
   }
 
   load() {
@@ -9459,6 +9472,12 @@ class BackupAccountModal {
   }
 
   close() {
+    // Check if upload is in progress
+    if (this.isUploading) {
+      showToast('Please wait for the backup to complete before closing.', 0, 'warning');
+      return;
+    }
+    
     // called when the modal needs to be closed
     this.modal.classList.remove('active');
     // Clear passwords for security
@@ -10154,13 +10173,33 @@ class BackupAccountModal {
       }
     }
 
+    // Shared loading toast ID for both upload attempts
+    let loadingToastId = null;
+
+    // Helper to show loading toast
+    const showLoadingToast = () => {
+      loadingToastId = showToast('Uploading backup to Google Drive... Please stay on this page. Closing or signing out may interrupt the backup.', 0, 'loading');
+    };
+
+    // Helper to hide loading toast
+    const hideLoadingToast = () => {
+      if (loadingToastId !== null) {
+        hideToast(loadingToastId);
+        loadingToastId = null;
+      }
+    };
+
+    // Track whether to close modal after cleanup
+    let shouldClose = false;
+
     // Now upload with the token
     try {
-      showToast('Uploading backup to Google Drive...', 3000, 'info');
+      this.isUploading = true;
+      showLoadingToast();
       await this.uploadToGoogleDrive(data, filename, tokenData);
       showToast('Backup uploaded to Google Drive successfully!', 5000, 'success');
       this.setGDriveBackupTs();
-      this.close();
+      shouldClose = true;
     } catch (error) {
       console.error('Google Drive upload failed:', error);
       // Token might be invalid, clear it and retry auth
@@ -10170,11 +10209,12 @@ class BackupAccountModal {
         // Retry with fresh authentication
         try {
           tokenData = await this.startGoogleDriveAuth();
-          showToast('Uploading backup to Google Drive...', 3000, 'info');
+          this.isUploading = true;
+          showLoadingToast();
           await this.uploadToGoogleDrive(data, filename, tokenData);
           showToast('Backup uploaded to Google Drive successfully!', 5000, 'success');
           this.setGDriveBackupTs();
-          this.close();
+          shouldClose = true;
         } catch (retryError) {
           console.error('Retry failed:', retryError);
           showToast(retryError.message || 'Upload failed.', 0, 'error');
@@ -10183,6 +10223,12 @@ class BackupAccountModal {
       } else {
         showToast('Failed to upload to Google Drive: ' + error.message, 5000, 'error');
         this.updateButtonState();
+      }
+    } finally {
+      hideLoadingToast();
+      this.isUploading = false;
+      if (shouldClose) {
+        this.close();
       }
     }
   }
