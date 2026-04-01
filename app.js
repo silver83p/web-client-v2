@@ -13204,6 +13204,7 @@ class ChatModal {
 
     // Initialize context menu
     this.contextMenu = document.getElementById('messageContextMenu');
+    this.contextMenuReactions = document.getElementById('messageContextReactions');
     // Initialize image attachment context menu
     this.imageAttachmentContextMenu = document.getElementById('imageAttachmentContextMenu');
     // Initialize attachment options context menu
@@ -13235,6 +13236,12 @@ class ChatModal {
     
     // Add context menu option listeners
     this.contextMenu.addEventListener('click', (e) => {
+      const reactionButton = e.target.closest('.message-context-reaction-button');
+      if (reactionButton) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (e.target.closest('.context-menu-option')) {
         const action = e.target.closest('.context-menu-option').dataset.action;
         this.handleContextMenuAction(action);
@@ -13243,6 +13250,12 @@ class ChatModal {
     // Add image attachment context menu option listeners
     if (this.imageAttachmentContextMenu) {
       this.imageAttachmentContextMenu.addEventListener('click', (e) => {
+        const reactionButton = e.target.closest('.message-context-reaction-button');
+        if (reactionButton) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         const option = e.target.closest('.context-menu-option');
         if (!option) return;
         const action = option.dataset.action;
@@ -16069,6 +16082,11 @@ class ChatModal {
     const editOption = this.contextMenu.querySelector('[data-action="edit"]');
     const saveOption = this.contextMenu.querySelector('[data-action="save"]');
     const isFailedPayment = messageEl.dataset.status === 'failed' && messageEl.classList.contains('payment-info');
+    const canShowReactionRow = !isDeletedLocalOnly && !isFailedPayment;
+
+    if (this.contextMenuReactions) {
+      this.contextMenuReactions.style.display = canShowReactionRow ? 'flex' : 'none';
+    }
 
     if (isDeletedLocalOnly) {
       if (!canDeleteForAll) {
@@ -16160,11 +16178,18 @@ class ChatModal {
 
     const rect = messageEl.getBoundingClientRect();
     const container = messageEl.closest('.messages-container');
+    const visualViewport = window.visualViewport;
+    const viewportRect = {
+      left: visualViewport?.offsetLeft ?? 0,
+      top: visualViewport?.offsetTop ?? 0,
+      right: (visualViewport?.offsetLeft ?? 0) + (visualViewport?.width ?? window.innerWidth),
+      bottom: (visualViewport?.offsetTop ?? 0) + (visualViewport?.height ?? window.innerHeight)
+    };
     const containerRect = container?.getBoundingClientRect() || {
-      left: 0,
-      top: 0,
-      right: window.innerWidth,
-      bottom: window.innerHeight
+      left: viewportRect.left,
+      top: viewportRect.top,
+      right: viewportRect.right,
+      bottom: viewportRect.bottom
     };
 
     const margin = 10;
@@ -16179,8 +16204,8 @@ class ChatModal {
     }
 
     let menuRect = menu.getBoundingClientRect();
-    let menuWidth = menuRect.width || 200;
-    let menuHeight = menuRect.height || 100;
+    let menuWidth = menu.offsetWidth || menuRect.width || 200;
+    let menuHeight = menu.offsetHeight || menuRect.height || 100;
 
     // Keep long menus usable in small viewports by making them internally scrollable.
     const availableHeight = Math.max(80, containerRect.bottom - containerRect.top - margin * 2);
@@ -16188,22 +16213,22 @@ class ChatModal {
       menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
       menu.style.overflowY = 'auto';
       menuRect = menu.getBoundingClientRect();
-      menuWidth = menuRect.width || menuWidth;
-      menuHeight = menuRect.height || availableHeight;
+      menuWidth = menu.offsetWidth || menuRect.width || menuWidth;
+      menuHeight = menu.offsetHeight || menuRect.height || availableHeight;
     } else {
       menu.style.maxHeight = '';
       menu.style.overflowY = '';
     }
 
     // Center horizontally, then clamp to container bounds.
-    const minLeft = containerRect.left + margin;
-    const maxLeft = containerRect.right - menuWidth - margin;
+    const minLeft = Math.max(containerRect.left, viewportRect.left) + margin;
+    const maxLeft = Math.min(containerRect.right, viewportRect.right) - menuWidth - margin;
     let left = rect.left + rect.width / 2 - menuWidth / 2;
     left = maxLeft < minLeft ? minLeft : Math.max(minLeft, Math.min(maxLeft, left));
 
     // Prefer below, otherwise above; finally clamp to bounds.
-    const minTop = containerRect.top + margin;
-    const maxTop = containerRect.bottom - menuHeight - margin;
+    const minTop = Math.max(containerRect.top, viewportRect.top) + margin;
+    const maxTop = Math.min(containerRect.bottom, viewportRect.bottom) - menuHeight - margin;
     const belowTop = rect.bottom + margin;
     const aboveTop = rect.top - menuHeight - margin;
     let top;
@@ -16233,6 +16258,7 @@ class ChatModal {
   closeContextMenu() {
     if (!this.contextMenu) return;
     this.contextMenu.style.display = 'none';
+    if (this.contextMenuReactions) this.contextMenuReactions.style.display = '';
     this.currentContextMessage = null;
   }
 
