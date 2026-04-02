@@ -14141,6 +14141,7 @@ class ChatModal {
             */
       const currentAddress = this.address;
       if (!currentAddress) return;
+      const contact = chatsData.contacts[currentAddress];
 
       // Check if trying to message self
       if (currentAddress === myAccount.address) {
@@ -14154,26 +14155,16 @@ class ChatModal {
         return;
       }
 
-      // Ensure recipient's keys are available
-      const keysOk = await ensureContactKeys(currentAddress);
-      let recipientPubKey = myData.contacts[currentAddress]?.public;
-      let pqRecPubKey = myData.contacts[currentAddress]?.pqPublic;
-      if (!keysOk || !recipientPubKey || !pqRecPubKey) {
-        console.warn(`no public/PQ key found for recipient ${currentAddress}`);
-        return;
+      let chatCryptoContext;
+      try {
+        chatCryptoContext = await this.prepareEncryptedChatContext(currentAddress, keys);
+      } catch (error) {
+        if (error?.code === 'CHAT_CRYPTO_PREPARATION') {
+          console.warn(error.message);
+          return;
+        }
+        throw error;
       }
-
-      /*
-      // Generate shared secret using ECDH and take first 32 bytes
-      let dhkey = ecSharedKey(keys.secret, recipientPubKey);
-      const { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey);
-      const combined = new Uint8Array(dhkey.length + sharedSecret.length);
-      combined.set(dhkey);
-      combined.set(sharedSecret, dhkey.length);
-      dhkey = deriveDhKey(combined);
-      */
-      const {dhkey, cipherText} = dhkeyCombined(keys.secret, recipientPubKey, pqRecPubKey)
-      const selfKey = encryptData(bin2hex(dhkey), keys.secret+keys.pqSeed, true)  // used to decrypt our own message
 
       // Determine if this is an edit of an existing message
       editInput = document.getElementById('editOfTxId');
@@ -14230,48 +14221,6 @@ class ChatModal {
         messageObj.attachments = this.fileAttachments;
       }
 
-      // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
-      // Encrypt the JSON message using shared secret
-      const encMessage = encryptChacha(dhkey, stringify(messageObj));
-
-      // Create message payload
-      const payload = {
-        message: encMessage,
-        encrypted: true,
-        encryptionMethod: 'xchacha20poly1305',
-        pqEncSharedKey: bin2base64(cipherText),
-        selfKey: selfKey,
-        sent_timestamp: getCorrectedTimestamp()
-      };
-
-      // Always include username, but only include other info if recipient is a friend
-      const contact = myData.contacts[currentAddress];
-      // Create basic sender info with just username
-      const senderInfo = {
-        username: myAccount.username,
-      };
-
-      // Add additional info only if recipient is a connection
-      if (contact && contact?.friend && contact?.friend >= 2) {
-        // Add more personal details for connections
-        senderInfo.name = myData.account.name;
-        senderInfo.linkedin = myData.account.linkedin;
-        senderInfo.x = myData.account.x;
-        // Add avatar info if available
-        if (myData.account.avatarId && myData.account.avatarKey) {
-          senderInfo.avatarId = myData.account.avatarId;
-          senderInfo.avatarKey = myData.account.avatarKey;
-        }
-        // Add timezone if available
-        const tz = getLocalTimeZone();
-        if (tz) {
-          senderInfo.timezone = tz;
-        }
-      }
-
-      // Always encrypt and send senderInfo (which will contain at least the username)
-      payload.senderInfo = encryptChacha(dhkey, stringify(senderInfo));
-
       // can create a function to query the account and get the receivers toll they've set
       // TODO: will need to query network and receiver account where we validate
       // TODO: decided to query everytime we do chatModal.open and save as global variable. We don't need to clear it but we can clear it when closing the modal but should get reset when opening the modal again anyway
@@ -14280,9 +14229,22 @@ class ChatModal {
           ? 0n
           : getEffectiveTollLibWei(this.toll)
 
-      const chatMessageObj = await this.createChatMessage(currentAddress, payload, tollInLib, keys);
-      await signObj(chatMessageObj, keys);
-      const txid = getTxid(chatMessageObj)
+      let payload, chatMessageObj, txid;
+      try {
+        ({ payload, chatMessageObj, txid } = await this.buildEncryptedStructuredChatTx(
+          currentAddress,
+          messageObj,
+          tollInLib,
+          keys,
+          chatCryptoContext
+        ));
+      } catch (error) {
+        if (error?.code === 'CHAT_CRYPTO_PREPARATION') {
+          console.warn(error.message);
+          return;
+        }
+        throw error;
+      }
 
       // if there a hidden txid input, get the value to be used to delete that txid from relevant data stores
       const retryTxId = this.retryOfTxId.value;
@@ -14566,6 +14528,115 @@ class ChatModal {
       networkId: network.netid,
     };
     return tx;
+  }
+
+  /**
+   * Build sender info for an encrypted chat message.
+   * Always includes username; adds profile details only for established connections.
+   * @param {Object} contact
+   * @returns {Object}
+   */
+  buildChatSenderInfo(contact) {
+    // Create basic sender info with just username
+    const senderInfo = {
+      username: myAccount.username,
+    };
+
+    if (contact?.friend >= 2) {
+      // Add more personal details for connections
+      senderInfo.name = myData.account.name;
+      senderInfo.linkedin = myData.account.linkedin;
+      senderInfo.x = myData.account.x;
+      // Add avatar info if available
+      if (myData.account.avatarId && myData.account.avatarKey) {
+        senderInfo.avatarId = myData.account.avatarId;
+        senderInfo.avatarKey = myData.account.avatarKey;
+      }
+      // Add timezone if available
+      const tz = getLocalTimeZone();
+      if (tz) {
+        senderInfo.timezone = tz;
+      }
+    }
+
+    return senderInfo;
+  }
+
+  /**
+   * Resolve recipient contact and derive the shared chat crypto context.
+   * @param {string} to
+   * @param {Object} keys
+   * @returns {Promise<{contact: Object, dhkey: Uint8Array, cipherText: Uint8Array}>}
+   */
+  async prepareEncryptedChatContext(to, keys) {
+    const contact = myData.contacts[to];
+    if (!contact) {
+      const error = new Error(`Contact not found for ${to}`);
+      error.code = 'CHAT_CRYPTO_PREPARATION';
+      throw error;
+    }
+
+    const keysOk = await ensureContactKeys(to);
+    const recipientPubKey = contact.public;
+    const pqRecPubKey = contact.pqPublic;
+    if (!keysOk || !recipientPubKey || !pqRecPubKey) {
+      const error = new Error(`No public/PQ key found for recipient ${to}`);
+      error.code = 'CHAT_CRYPTO_PREPARATION';
+      throw error;
+    }
+
+    /*
+    // Generate shared secret using ECDH and take first 32 bytes
+    let dhkey = ecSharedKey(keys.secret, recipientPubKey);
+    const { cipherText, sharedSecret } = pqSharedKey(pqRecPubKey);
+    const combined = new Uint8Array(dhkey.length + sharedSecret.length);
+    combined.set(dhkey);
+    combined.set(sharedSecret, dhkey.length);
+    dhkey = deriveDhKey(combined);
+    */
+    const { dhkey, cipherText } = dhkeyCombined(keys.secret, recipientPubKey, pqRecPubKey);
+
+    return { contact, dhkey, cipherText };
+  }
+
+  /**
+   * Build, encrypt, and sign a structured chat message transaction.
+   * Shared by composer sends and quick reaction sends.
+   * @param {string} to
+   * @param {Object} messageObj
+   * @param {bigint} tollInLib
+   * @param {Object} keys
+   * @param {{contact: Object, dhkey: Uint8Array, cipherText: Uint8Array}|null} cryptoContext
+   * @returns {Promise<{payload: Object, chatMessageObj: Object, txid: string}>}
+   */
+  async buildEncryptedStructuredChatTx(to, messageObj, tollInLib, keys, cryptoContext = null) {
+    const context = cryptoContext || await this.prepareEncryptedChatContext(to, keys);
+    const { contact, dhkey, cipherText } = context;
+
+    // We purposely do not encrypt/decrypt using browser native crypto functions; all crypto functions must be readable
+    // Encrypt the JSON message using shared secret
+    const payload = {
+      message: encryptChacha(dhkey, stringify(messageObj)),
+      encrypted: true,
+      encryptionMethod: 'xchacha20poly1305',
+      pqEncSharedKey: bin2base64(cipherText),
+      // used to decrypt our own message
+      selfKey: encryptData(bin2hex(dhkey), keys.secret + keys.pqSeed, true),
+      sent_timestamp: getCorrectedTimestamp()
+    };
+
+    // Always include username, but only include other info if recipient is a friend
+    // Always encrypt and send senderInfo (which will contain at least the username)
+    payload.senderInfo = encryptChacha(dhkey, stringify(this.buildChatSenderInfo(contact)));
+
+    const chatMessageObj = await this.createChatMessage(to, payload, tollInLib, keys);
+    await signObj(chatMessageObj, keys);
+
+    return {
+      payload,
+      chatMessageObj,
+      txid: getTxid(chatMessageObj)
+    };
   }
 
   /**
