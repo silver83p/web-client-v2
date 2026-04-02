@@ -29,9 +29,9 @@ on:
           - firefox
           - webkit
       test_path:
-        description: Test file/glob to run
-        required: true
-        default: tests/smoke.e2e.test.js
+        description: Optional test file/glob to run; leave blank for the full suite
+        required: false
+        default: ""
         type: string
       workers:
         description: Number of Playwright workers
@@ -53,7 +53,7 @@ jobs:
       WEB_CLIENT_REF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.web_client_ref || github.sha }}
       CLIENT_TESTING_REF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.client_testing_ref || 'main' }}
       BROWSER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.browser || 'chromium' }}
-      TEST_PATH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.test_path || 'tests/smoke.e2e.test.js' }}
+      TEST_PATH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.test_path || '' }}
       WORKERS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.workers || '4' }}
       PORT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.port || '4173' }}
 
@@ -139,11 +139,15 @@ jobs:
           BASE_URL: http://127.0.0.1:${{ env.PORT }}
           PW_WORKERS: ${{ env.WORKERS }}
         run: |
-          npx playwright test \
-            --config=playwright.ci.local.config.ts \
-            --project=${{ env.BROWSER }} \
-            ${{ env.TEST_PATH }} \
-            --reporter=github,html
+          set -euo pipefail
+          CMD=(npx playwright test --config=playwright.ci.local.config.ts "--project=${BROWSER}" --reporter=github,html)
+          if [ -n "${TEST_PATH}" ]; then
+            echo "Running targeted tests: ${TEST_PATH}"
+            CMD+=("${TEST_PATH}")
+          else
+            echo "Running full test suite"
+          fi
+          "${CMD[@]}"
 
       - name: Upload Playwright HTML report
         if: always()
@@ -182,6 +186,11 @@ jobs:
       - name: Job summary
         if: always()
         run: |
+          if [ -n "${TEST_PATH}" ]; then
+            TEST_SCOPE="${TEST_PATH}"
+          else
+            TEST_SCOPE="(full suite)"
+          fi
           if [ "${{ job.status }}" = "success" ]; then
             RESULT="PASS"
           else
@@ -196,6 +205,6 @@ jobs:
             echo "- Base URL under test: \`http://127.0.0.1:${{ env.PORT }}/\`"
             echo "- Browser: \`${{ env.BROWSER }}\`"
             echo "- Workers: \`${{ env.WORKERS }}\`"
-            echo "- Test path: \`${{ env.TEST_PATH }}\`"
+            echo "- Test scope: \`${TEST_SCOPE}\`"
             echo "- Artifacts: Playwright HTML report, raw test results, localhost server log."
           } >> "$GITHUB_STEP_SUMMARY"
