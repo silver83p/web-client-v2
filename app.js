@@ -5825,6 +5825,49 @@ async function ensureContactKeys(address) {
   }
 }
 
+/**
+ * @param {Array<Object>} messages
+ * @param {{ sender: string, reactId: string, action: 'remove' } | { sender: string, reactId: string, action: 'set', emoji: string }} reaction
+ * @returns {boolean}
+ */
+function applyIncomingReaction(messages, reaction) {
+  const targetMessage = messages.find((message) => message.txid === reaction.reactId);
+  if (!targetMessage || isDeleted(targetMessage)) {
+    console.warn('Reaction target not found locally', reaction);
+    return false;
+  }
+
+  const reactions = targetMessage.reactions ? { ...targetMessage.reactions } : {};
+  const currentEmoji = reactions[reaction.sender];
+
+  if (reaction.action === 'remove') {
+    if (!currentEmoji) {
+      return false;
+    }
+
+    delete reactions[reaction.sender];
+    if (Object.keys(reactions).length === 0) {
+      delete targetMessage.reactions;
+      return true;
+    }
+
+    targetMessage.reactions = reactions;
+    return true;
+  }
+
+  if (reaction.action === 'set') {
+    if (currentEmoji === reaction.emoji) {
+      return false;
+    }
+
+    reactions[reaction.sender] = reaction.emoji;
+    targetMessage.reactions = reactions;
+    return true;
+  }
+
+  throw new Error(`Unknown reaction action: ${reaction.action}`);
+}
+
 // Actually payments also appear in the chats, so we can add these to
 async function processChats(chats, keys) {
   let newTimestamp = 0;
@@ -5853,6 +5896,7 @@ async function processChats(chats, keys) {
       let mine = false;
       // Count of edits (from the other party) applied while user not viewing this chat
       let editIncrements = 0;
+      const pendingReactionControls = [];
 
       // This check determines if we're currently chatting with the sender
       // We ONLY want to avoid notifications if we're actively viewing this exact chat
@@ -6077,9 +6121,56 @@ async function processChats(chats, keys) {
                     payload.replyOwnerIsMine = parsedMessage.replyOwnerIsMine;
                   }
                 } else if (parsedMessage.type === 'message') {
-                  if (parsedMessage.reactId) {
-                    console.log('Reaction message received', parsedMessage, stringify(parsedMessage));
-                    continue; // recognize reaction control messages without adding them to chat history yet
+                  const hasReactionFields =
+                    typeof parsedMessage.reactId !== 'undefined' ||
+                    typeof parsedMessage.reactAction !== 'undefined' ||
+                    typeof parsedMessage.reactMessage !== 'undefined';
+                  if (hasReactionFields) {
+                    const reactId = typeof parsedMessage.reactId === 'string'
+                      ? parsedMessage.reactId.trim()
+                      : '';
+                    if (!reactId) {
+                      console.error('Reaction message is missing reactId');
+                      continue;
+                    }
+
+                    const sender = normalizeAddress(tx.from);
+                    const reactAction = typeof parsedMessage.reactAction === 'string'
+                      ? parsedMessage.reactAction.trim()
+                      : '';
+                    if (reactAction === 'set') {
+                      const emoji = typeof parsedMessage.reactMessage === 'string'
+                        ? parsedMessage.reactMessage.trim()
+                        : '';
+                      if (!emoji) {
+                        console.error('Reaction set is missing emoji');
+                        continue;
+                      }
+
+                      pendingReactionControls.push({
+                        sender,
+                        reactId,
+                        action: 'set',
+                        emoji,
+                        timestamp: Number(tx.timestamp),
+                        order: Number(i)
+                      });
+                      continue; // reaction control messages update target state instead of adding a chat bubble
+                    }
+
+                    if (reactAction === 'remove') {
+                      pendingReactionControls.push({
+                        sender,
+                        reactId,
+                        action: 'remove',
+                        timestamp: Number(tx.timestamp),
+                        order: Number(i)
+                      });
+                      continue; // reaction control messages update target state instead of adding a chat bubble
+                    }
+
+                    console.error('Unknown reaction action', reactAction);
+                    continue;
                   }
                   // Regular message format processing
                   payload.message = parsedMessage.message;
@@ -6359,6 +6450,17 @@ async function processChats(chats, keys) {
           }
         }
       }
+
+      if (pendingReactionControls.length > 0) {
+        pendingReactionControls.sort((left, right) => {
+          return left.timestamp - right.timestamp || left.order - right.order;
+        });
+
+        for (const pendingReaction of pendingReactionControls) {
+          applyIncomingReaction(contact.messages, pendingReaction);
+        }
+      }
+
       if (hasNewTransfer){ hasAnyTransfer = true; }
       // If messages were added to contact.messages, update myData.chats
       if (added > 0) {
