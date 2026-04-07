@@ -17400,6 +17400,27 @@ class ChatModal {
       reactAction: reaction.reactAction
     });
 
+    const localReaction = reaction.reactAction === 'remove'
+      ? {
+          sender: normalizeAddress(keys.address),
+          reactId: reaction.reactId,
+          action: 'remove'
+        }
+      : {
+          sender: normalizeAddress(keys.address),
+          reactId: reaction.reactId,
+          action: 'set',
+          emoji: reaction.reactMessage
+        };
+    const didApplyLocally = applyIncomingReaction(contact.messages, localReaction);
+    if (didApplyLocally) {
+      if (this.isActive() && this.address === currentAddress) {
+        this.appendChatModal();
+      }
+    } else {
+      console.warn('Reaction sent but local optimistic apply was skipped', localReaction);
+    }
+
     const response = await injectTx(chatMessageObj, txid);
     if (!response?.result?.success) {
       console.error('reaction message failed to send', response);
