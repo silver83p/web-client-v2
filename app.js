@@ -38,6 +38,7 @@ async function checkVersion() {
       'app.js',
       'dao.repo.js',
       'dao.mock-data.js',
+      'data/emoji-picker-data.js',
       'lib.js',
       'network.js',
       'crypto.js',
@@ -134,6 +135,8 @@ import {
   normalizeUnsignedFloat,
   EthNum,
 } from './lib.js';
+
+import { CHAT_REACTION_SHEET_CATEGORIES } from './data/emoji-picker-data.js';
 
 const weiDigits = 18;
 const wei = 10n ** BigInt(weiDigits);
@@ -5841,7 +5844,7 @@ async function ensureContactKeys(address) {
  */
 
 /**
- * @typedef {{ action: 'set', targetTxid: string, previousReactionTxId: string | null }} PendingReactionSet
+ * @typedef {{ targetTxid: string, previousReactionTxId: string | null }} PendingReactionSet
  */
 
 /**
@@ -6186,7 +6189,6 @@ function reconcilePendingReactionSet(pendingTxInfo, result) {
 
   /** @type {PendingReactionSet} */
   const { reactionPending } = pendingTxInfo;
-  assert(reactionPending.action === 'set', `Unknown pending reaction action: ${reactionPending.action}`);
 
   const contact = myData.contacts[pendingTxInfo.to];
   assert(contact, `Missing contact for pending reaction: ${pendingTxInfo.to}`);
@@ -13432,6 +13434,23 @@ class StakeValidatorModal {
 }
 const stakeValidatorModal = new StakeValidatorModal();
 
+const CHAT_REACTION_SHEET_CATEGORY_MAP = new Map(
+  CHAT_REACTION_SHEET_CATEGORIES.map((category) => [category.key, category])
+);
+const CHAT_REACTION_SHEET_DEFAULT_CATEGORY = CHAT_REACTION_SHEET_CATEGORIES[0].key;
+const CHAT_REACTION_SHEET_CLOSE_DRAG_PX = 120;
+const CHAT_REACTION_SHEET_TAB_ICONS = {
+  smileys: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>',
+  people: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg>',
+  nature: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+  food: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z"/><path d="M7 21h10"/><path d="M19.5 12 22 6"/><path d="M16.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.73 1.62"/><path d="M11.25 3c.27.1.8.53.74 1.36-.05.83-.93 1.2-.98 2.02-.06.78.33 1.24.72 1.62"/><path d="M6.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.74 1.62"/></svg>',
+  activity: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>',
+  travel: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>',
+  objects: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>',
+  symbols: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/></svg>',
+  flags: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></svg>'
+};
+
 class ChatModal {
   constructor() {
     this.newestReceivedMessage = null;
@@ -13471,6 +13490,13 @@ class ChatModal {
     this.attachmentLoadingToastsByContact = new Map();
     // Prevent multiple fee-failure warnings when close triggers read + reclaim checks.
     this.closeFeeFailureToastShown = false;
+
+    // Expanded emoji picker state
+    this.reactionSheetTargetMessage = null;
+    this.reactionSheetActiveCategory = CHAT_REACTION_SHEET_DEFAULT_CATEGORY;
+    this.reactionSheetDragStartY = 0;
+    this.reactionSheetDragOffset = 0;
+    this.reactionSheetPointerId = null;
     
     // Drag and drop state
     this.dragCounter = 0;
@@ -13618,6 +13644,72 @@ class ChatModal {
   }
 
   /**
+   * Returns the active reaction sheet category config.
+   * @param {string} categoryKey
+   * @returns {{key: string, label: string, emojis: string[]}}
+   */
+  getReactionSheetCategory(categoryKey) {
+    const category = CHAT_REACTION_SHEET_CATEGORY_MAP.get(categoryKey);
+    assert(category, `Unknown reaction sheet category: ${categoryKey}`);
+    return category;
+  }
+
+  /**
+   * Finds which reaction sheet category contains the provided emoji.
+   * @param {string} emoji
+   * @returns {string}
+   */
+  getReactionSheetCategoryKeyForEmoji(emoji) {
+    if (!emoji) return '';
+
+    const category = CHAT_REACTION_SHEET_CATEGORIES.find((entry) => entry.emojis.includes(emoji));
+    return category?.key || '';
+  }
+
+  /**
+   * Renders the reaction sheet tab strip.
+   * @returns {void}
+   */
+  renderReactionSheetTabs() {
+    this.reactionSheetTabs.innerHTML = CHAT_REACTION_SHEET_CATEGORIES.map((category) => {
+      const isActive = category.key === this.reactionSheetActiveCategory;
+      const icon = CHAT_REACTION_SHEET_TAB_ICONS[category.key];
+      assert(icon, `Missing reaction sheet tab icon: ${category.key}`);
+      return `
+        <button
+          class="chat-reaction-sheet-tab${isActive ? ' active' : ''}"
+          type="button"
+          data-category-key="${category.key}"
+          aria-pressed="${isActive ? 'true' : 'false'}"
+          aria-label="${category.label}"
+        >
+          <span class="chat-reaction-sheet-tab-icon" aria-hidden="true">${icon}</span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Sets the active tab and redraws the emoji grid for that category.
+   * @param {string} categoryKey
+   * @returns {void}
+   */
+  setReactionSheetCategory(categoryKey) {
+    const category = this.getReactionSheetCategory(categoryKey);
+    this.reactionSheetActiveCategory = category.key;
+    this.renderReactionSheetTabs();
+
+    this.reactionSheetGrid.innerHTML = category.emojis.map((emoji) => `
+      <button class="chat-reaction-sheet-button message-context-reaction-button" type="button" data-emoji="${emoji}" aria-label="React with ${emoji}">${emoji}</button>
+    `).join('');
+    this.reactionSheetGrid.scrollTop = 0;
+    this.syncReactionPickerActiveState(this.reactionSheetGrid, this.reactionSheetTargetMessage);
+    if (this.reactionSheetOverlay.classList.contains('active')) {
+      requestAnimationFrame(() => this.updateReactionSheetViewport());
+    }
+  }
+
+  /**
    * Show the drop overlay
    * @returns {void}
    */
@@ -13714,6 +13806,7 @@ class ChatModal {
    */
   load() {
     this.modal = document.getElementById('chatModal');
+    assert(this.modal, 'chatModal element is required');
     this.closeButton = document.getElementById('closeChatModal');
     this.messagesList = document.querySelector('.messages-list');
     this.sendButton = document.getElementById('handleSendMessage');
@@ -13739,6 +13832,14 @@ class ChatModal {
     this.chatFileInput = document.getElementById('chatFileInput');
     this.chatPhotoLibraryInput = document.getElementById('chatPhotoLibraryInput');
     this.chatFilesInput = document.getElementById('chatFilesInput');
+    this.reactionSheetOverlay = document.getElementById('chatReactionSheetOverlay');
+    this.reactionSheet = document.getElementById('chatReactionSheet');
+    this.reactionSheetDragRegion = document.getElementById('chatReactionSheetDragRegion');
+    this.reactionSheetTabs = document.getElementById('chatReactionSheetTabs');
+    this.reactionSheetGrid = document.getElementById('chatReactionSheetGrid');
+    this.closeReactionSheetButton = document.getElementById('closeChatReactionSheet');
+    this.renderReactionSheetTabs();
+    this.setReactionSheetCategory(this.reactionSheetActiveCategory);
     
     // Camera capture modal elements
     this.cameraCaptureOverlay = document.getElementById('cameraCaptureOverlay');
@@ -13827,6 +13928,32 @@ class ChatModal {
         this.handleAttachmentOptionsContextMenuAction(action);
       });
     }
+    this.reactionSheetOverlay.addEventListener('click', (e) => {
+      if (e.target === this.reactionSheetOverlay) {
+        this.closeReactionSheet();
+      }
+    });
+    this.closeReactionSheetButton.addEventListener('click', () => this.closeReactionSheet());
+    this.reactionSheetDragRegion.addEventListener('pointerdown', this.handleReactionSheetDragStart.bind(this));
+    this.reactionSheetDragRegion.addEventListener('pointermove', this.handleReactionSheetDragMove.bind(this));
+    this.reactionSheetDragRegion.addEventListener('pointerup', this.handleReactionSheetDragEnd.bind(this));
+    this.reactionSheetDragRegion.addEventListener('pointercancel', this.handleReactionSheetDragEnd.bind(this));
+    this.reactionSheetDragRegion.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    this.reactionSheetTabs.addEventListener('click', (e) => {
+      const tabButton = e.target.closest('.chat-reaction-sheet-tab');
+      if (!tabButton) return;
+      const { categoryKey } = tabButton.dataset;
+      assert(categoryKey, 'Reaction sheet tab categoryKey is required');
+      this.setReactionSheetCategory(categoryKey);
+    });
+    this.reactionSheetGrid.addEventListener('click', (e) => {
+      const reactionButton = e.target.closest('.chat-reaction-sheet-button');
+      if (!reactionButton) return;
+      void this.handleExpandedReactionPickerClick(reactionButton);
+    });
     
     // Close context menu when clicking outside
     document.addEventListener('click', (e) => {
@@ -13893,6 +14020,10 @@ class ChatModal {
         this.isKeyboardVisible = false;
         /* console.log('⌨️ Keyboard detected as closed (viewport height difference:', heightDifference, 'px)'); */
         this.unlockBackgroundScroll();
+      }
+
+      if (this.reactionSheetOverlay.classList.contains('active')) {
+        requestAnimationFrame(() => this.updateReactionSheetViewport());
       }
     });
 
@@ -14219,6 +14350,8 @@ class ChatModal {
    * @returns {Promise<void>}
    */
   async open(address, skipAutoScroll = false) {
+    this.closeReactionSheet();
+
     // Set active chat address early so async refreshes target the correct chat.
     this.address = address;
 
@@ -14404,6 +14537,7 @@ class ChatModal {
    * @returns {void}
    */
   close() {
+    this.closeReactionSheet();
     const closingAddress = this.address;
     this.hideAttachmentLoadingToastsForContact(closingAddress);
 
@@ -16901,6 +17035,113 @@ class ChatModal {
     this.closeImageAttachmentContextMenu();
     this.closeAttachmentOptionsContextMenu();
     this.closeHeaderContextMenu();
+    this.closeReactionSheet();
+  }
+
+  /**
+   * Reserves vertical space for the reaction sheet while it is open.
+   * @returns {void}
+   */
+  updateReactionSheetViewport() {
+    const isOpen = this.reactionSheetOverlay.classList.contains('active');
+    if (!isOpen) {
+      this.modal.style.setProperty('--chat-reaction-sheet-space', '0px');
+      return;
+    }
+
+    const sheetHeight = Math.ceil(this.reactionSheet.getBoundingClientRect().height);
+    this.modal.style.setProperty('--chat-reaction-sheet-space', `${sheetHeight + 12}px`);
+  }
+
+  /**
+   * Resets the reaction sheet drag state and transform offset.
+   * @returns {void}
+   */
+  resetReactionSheetDragState() {
+    this.reactionSheetDragStartY = 0;
+    this.reactionSheetDragOffset = 0;
+    this.reactionSheetPointerId = null;
+    this.reactionSheet.classList.remove('dragging');
+    this.reactionSheet.style.removeProperty('--chat-reaction-sheet-drag-offset');
+  }
+
+  /**
+   * Begins dragging the reaction sheet downward from its handle.
+   * @param {PointerEvent} event
+   * @returns {void}
+   */
+  handleReactionSheetDragStart(event) {
+    if (!this.reactionSheetOverlay.classList.contains('active')) return;
+    if (event.button !== undefined && event.button !== 0) return;
+    if (event.target?.closest?.('.chat-reaction-sheet-close')) return;
+
+    event.stopPropagation();
+    this.reactionSheetDragStartY = event.clientY;
+    this.reactionSheetDragOffset = 0;
+    this.reactionSheetPointerId = event.pointerId;
+    this.reactionSheet.classList.add('dragging');
+    this.reactionSheetDragRegion.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  /**
+   * Updates the reaction sheet drag offset as the pointer moves.
+   * @param {PointerEvent} event
+   * @returns {void}
+   */
+  handleReactionSheetDragMove(event) {
+    if (event.pointerId !== this.reactionSheetPointerId) return;
+
+    event.stopPropagation();
+    const offset = Math.max(0, event.clientY - this.reactionSheetDragStartY);
+    this.reactionSheetDragOffset = offset;
+    this.reactionSheet.style.setProperty('--chat-reaction-sheet-drag-offset', `${offset}px`);
+    event.preventDefault();
+  }
+
+  /**
+   * Ends a reaction sheet drag and either closes or snaps the sheet back open.
+   * @param {PointerEvent} event
+   * @returns {void}
+   */
+  handleReactionSheetDragEnd(event) {
+    if (event.pointerId !== this.reactionSheetPointerId) return;
+
+    event.stopPropagation();
+    this.reactionSheetDragRegion.releasePointerCapture(event.pointerId);
+    const shouldClose = this.reactionSheetDragOffset >= CHAT_REACTION_SHEET_CLOSE_DRAG_PX;
+
+    this.resetReactionSheetDragState();
+    if (shouldClose) {
+      this.closeReactionSheet();
+      return;
+    }
+  }
+
+  openReactionSheet(messageEl) {
+    assert(messageEl, 'Reaction sheet target message is required');
+    this.resetReactionSheetDragState();
+    this.reactionSheetTargetMessage = messageEl;
+    const currentReaction = this.getCurrentUserReactionForMessage(messageEl);
+    const categoryKey = this.getReactionSheetCategoryKeyForEmoji(currentReaction) || CHAT_REACTION_SHEET_DEFAULT_CATEGORY;
+    this.setReactionSheetCategory(categoryKey);
+    this.reactionSheetOverlay.classList.add('active');
+    this.reactionSheetOverlay.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this.updateReactionSheetViewport());
+    });
+  }
+
+  closeReactionSheet() {
+    this.resetReactionSheetDragState();
+    if (this.reactionSheetOverlay.contains(document.activeElement)) {
+      this.closeButton.focus({ preventScroll: true });
+    }
+    this.reactionSheetOverlay.classList.remove('active');
+    this.reactionSheetOverlay.setAttribute('aria-hidden', 'true');
+    this.syncReactionPickerActiveState(this.reactionSheetGrid, null);
+    this.updateReactionSheetViewport();
+    this.reactionSheetTargetMessage = null;
   }
 
   /**
@@ -17906,6 +18147,20 @@ class ChatModal {
   }
 
   /**
+   * Handles expanded emoji sheet clicks.
+   * @param {HTMLElement} reactionButton
+   */
+  async handleExpandedReactionPickerClick(reactionButton) {
+    const messageEl = this.reactionSheetTargetMessage;
+    if (!reactionButton || !messageEl) return;
+
+    const selectedReaction = (reactionButton.dataset.emoji || reactionButton.textContent || '').trim();
+    if (!selectedReaction) return;
+
+    await this.submitReactionSelection(messageEl, selectedReaction, () => this.closeReactionSheet());
+  }
+
+  /**
    * Resolves a quick reaction picker press into a target txid and a minimal send flow.
    * @param {HTMLElement} reactionButton
    * @param {HTMLElement | null} messageEl
@@ -17915,22 +18170,30 @@ class ChatModal {
     if (!reactionButton) return;
     if (!messageEl) return;
 
-    const txid = messageEl.dataset.txid;
-    assert(txid, 'Reaction target txid is required');
-    const isMorePickerTrigger = reactionButton.dataset.reactionPickerTrigger === 'true';
-    const selectedReaction = isMorePickerTrigger
-      ? '+'
-      : (reactionButton.dataset.emoji || reactionButton.textContent || '').trim();
-    const currentReaction = this.getCurrentUserReactionForMessage(messageEl);
-
-    console.log('Reaction picker pressed', {
-      reaction: selectedReaction,
-      txid
-    });
-
-    if (isMorePickerTrigger) {
+    if (reactionButton.dataset.reactionPickerTrigger === 'true') {
+      closeMenu();
+      this.openReactionSheet(messageEl);
       return;
     }
+
+    const selectedReaction = (reactionButton.dataset.emoji || reactionButton.textContent || '').trim();
+    await this.submitReactionSelection(messageEl, selectedReaction, closeMenu);
+  }
+
+  /**
+   * Resolves a chosen emoji into either a set or remove reaction action.
+   * @param {HTMLElement | null} messageEl
+   * @param {string} selectedReaction
+   * @param {Function} closeUi
+   * @returns {Promise<void>}
+   */
+  async submitReactionSelection(messageEl, selectedReaction, closeUi) {
+    if (!messageEl || !selectedReaction) return;
+    assert(typeof closeUi === 'function', 'Reaction close callback is required');
+
+    const txid = messageEl.dataset.txid;
+    assert(txid, 'Reaction target txid is required');
+    const currentReaction = this.getCurrentUserReactionForMessage(messageEl);
 
     const isRemovingCurrentReaction = !!currentReaction && selectedReaction === currentReaction;
     if (isRemovingCurrentReaction) {
@@ -17939,7 +18202,7 @@ class ChatModal {
         return;
       }
 
-      closeMenu();
+      closeUi();
       await this.sendReactionMessage({
         reactId: txid,
         reactAction: 'remove'
@@ -17947,7 +18210,7 @@ class ChatModal {
       return;
     }
 
-    closeMenu();
+    closeUi();
     await this.sendReactionMessage({
       reactId: txid,
       reactMessage: selectedReaction,
@@ -18051,7 +18314,6 @@ class ChatModal {
       const optimisticApply = applyOptimisticReactionSet(contact, localReaction);
       if (optimisticApply.didApply) {
         reactionPendingState = {
-          action: 'set',
           targetTxid: reaction.reactId,
           previousReactionTxId: optimisticApply.previousReactionTxId
         };
