@@ -82,6 +82,103 @@ const DAO_PROPOSALS_META_ID_STRING = 'dao proposals meta';
 export const DAO_PROPOSAL_TITLE_MAX_LENGTH = 100;
 export const DAO_PROPOSAL_CREATE_TYPE = 'dao_proposal_create';
 
+export const DAO_ACTION_TYPES = Object.freeze({
+  COMMITTEE_VOTE: 'dao_committee_vote',
+  COMMITTEE_RESULT: 'dao_committee_result',
+  VOTE: 'dao_vote',
+  VOTE_RESULT: 'dao_vote_result',
+  CLAIM_REWARD: 'dao_claim_reward',
+  BURN_REWARD: 'dao_burn_reward',
+  APPLY_PARAMETERS: 'dao_apply_parameters',
+});
+
+const DAO_LIFECYCLE_KIND_TO_TYPE = Object.freeze({
+  vote_result: DAO_ACTION_TYPES.VOTE_RESULT,
+  claim_reward: DAO_ACTION_TYPES.CLAIM_REWARD,
+  burn_reward: DAO_ACTION_TYPES.BURN_REWARD,
+  apply_parameters: DAO_ACTION_TYPES.APPLY_PARAMETERS,
+});
+
+const DAO_TRANSACTION_MESSAGES = Object.freeze({
+  [DAO_PROPOSAL_CREATE_TYPE]: {
+    pending: 'Proposal submitted—pending confirmation',
+    success: 'Proposal confirmed',
+    failure: 'Proposal creation failed',
+    timeout: 'Proposal confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.COMMITTEE_VOTE]: {
+    pending: 'Committee review submitted—pending confirmation',
+    success: 'Committee review confirmed',
+    failure: 'Committee review failed',
+    timeout: 'Committee review confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.COMMITTEE_RESULT]: {
+    pending: 'Review result submitted—pending confirmation',
+    success: 'Review result confirmed',
+    failure: 'Review result failed',
+    timeout: 'Review result confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.VOTE]: {
+    pending: 'Vote submitted—pending confirmation',
+    success: 'Vote confirmed',
+    failure: 'Vote failed',
+    timeout: 'Vote confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.VOTE_RESULT]: {
+    pending: 'Vote result submitted—pending confirmation',
+    success: 'Vote result confirmed',
+    failure: 'Vote result failed',
+    timeout: 'Vote result confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.CLAIM_REWARD]: {
+    pending: 'Reward claim submitted—pending confirmation',
+    success: 'Reward claim confirmed',
+    failure: 'Reward claim failed',
+    timeout: 'Reward claim confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.BURN_REWARD]: {
+    pending: 'Reward burn submitted—pending confirmation',
+    success: 'Reward burn confirmed',
+    failure: 'Reward burn failed',
+    timeout: 'Reward burn confirmation is taking longer than expected',
+  },
+  [DAO_ACTION_TYPES.APPLY_PARAMETERS]: {
+    pending: 'Parameter apply submitted—pending confirmation',
+    success: 'Parameters applied',
+    failure: 'Parameter apply failed',
+    timeout: 'Parameter apply confirmation is taking longer than expected',
+  },
+});
+
+const DAO_TRANSACTION_TYPE_SET = new Set(Object.keys(DAO_TRANSACTION_MESSAGES));
+
+export function isDaoTransactionType(type) {
+  return DAO_TRANSACTION_TYPE_SET.has(type);
+}
+
+export function getDaoTypeForLifecycleKind(kind) {
+  return DAO_LIFECYCLE_KIND_TO_TYPE[kind] || '';
+}
+
+export function hasPendingDaoAction(pendingList, type, proposalStoreId, from) {
+  if (!Array.isArray(pendingList) || !type || !proposalStoreId || !from) return false;
+
+  return pendingList.some((entry) => {
+    if (!entry || entry.type !== type) return false;
+    if (entry.proposalStoreId !== proposalStoreId) return false;
+    return entry.from === from;
+  });
+}
+
+export function getDaoTransactionMessage(type, outcome) {
+  const messages = DAO_TRANSACTION_MESSAGES[type];
+  if (!messages) throw new Error(`Unknown DAO transaction type: ${type}`);
+
+  const message = messages[outcome];
+  if (!message) throw new Error(`Unknown DAO transaction outcome: ${outcome}`);
+
+  return message;
+}
 export function getDaoTypeLabel(typeKey) {
   return DAO_TYPE_OPTIONS.find((t) => t.key === typeKey)?.label || typeKey || '';
 }
@@ -293,7 +390,7 @@ export function buildDaoCommitteeVoteTransaction({
   if (txTimestamp <= 0) throw new Error('Committee review timestamp is required');
 
   const transaction = {
-    type: 'dao_committee_vote',
+    type: DAO_ACTION_TYPES.COMMITTEE_VOTE,
     timestamp: txTimestamp,
     networkId: requireDaoDraftString(networkId, 'Network ID'),
     from: requireDaoDraftString(from, 'Committee review sender'),
@@ -317,7 +414,7 @@ export function buildDaoCommitteeResultTransaction({
   networkId,
 } = {}) {
   return buildDaoProposalActionTransaction({
-    type: 'dao_committee_result',
+    type: DAO_ACTION_TYPES.COMMITTEE_RESULT,
     from,
     proposal,
     timestamp,
@@ -361,7 +458,7 @@ export function buildDaoVoteTransaction({
   }
 
   return {
-    type: 'dao_vote',
+    type: DAO_ACTION_TYPES.VOTE,
     timestamp: txTimestamp,
     networkId: requireDaoDraftString(networkId, 'Network ID'),
     from: requireDaoDraftString(from, 'Vote sender'),
@@ -378,7 +475,7 @@ export function buildDaoVoteResultTransaction({
   networkId,
 } = {}) {
   return buildDaoProposalActionTransaction({
-    type: 'dao_vote_result',
+    type: DAO_ACTION_TYPES.VOTE_RESULT,
     from,
     proposal,
     timestamp,
@@ -395,7 +492,7 @@ export function buildDaoClaimRewardTransaction({
   networkId,
 } = {}) {
   return buildDaoProposalActionTransaction({
-    type: 'dao_claim_reward',
+    type: DAO_ACTION_TYPES.CLAIM_REWARD,
     from,
     proposal,
     timestamp,
@@ -412,7 +509,7 @@ export function buildDaoBurnRewardTransaction({
   networkId,
 } = {}) {
   return buildDaoProposalActionTransaction({
-    type: 'dao_burn_reward',
+    type: DAO_ACTION_TYPES.BURN_REWARD,
     from,
     proposal,
     timestamp,
@@ -429,7 +526,7 @@ export function buildDaoApplyParametersTransaction({
   networkId,
 } = {}) {
   return buildDaoProposalActionTransaction({
-    type: 'dao_apply_parameters',
+    type: DAO_ACTION_TYPES.APPLY_PARAMETERS,
     from,
     proposal,
     timestamp,
