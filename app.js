@@ -5587,6 +5587,15 @@ class ProposalInfoModal {
       }
     }
 
+    const reviewWindow = getDaoProposalReviewWindow(proposal);
+    if (!reviewWindow.canCommitteeVote) {
+      showToast(reviewWindow.label, 2500, 'warning');
+      return;
+    }
+
+    const decision = this.formatCommitteeChoice(this.committeeChoice);
+    if (!window.confirm(`Submit review decision: ${decision}?`)) return;
+
     this.setSubmitting(true);
     const loadingToastId = showToast('Submitting committee review...', 0, 'loading');
 
@@ -5761,7 +5770,16 @@ class ProposalInfoModal {
       return;
     }
 
-    const submission = this.getVoteSubmission(proposal);
+    let submission = this.getVoteSubmission(proposal);
+    if (!submission.ok) {
+      showToast(submission.message, 3000, 'warning');
+      this.updateVotePreview(proposal);
+      return;
+    }
+
+    if (!window.confirm(`Submit this vote and spend ${EthNum.toStr(submission.spendWei)} LIB?`)) return;
+
+    submission = this.getVoteSubmission(proposal);
     if (!submission.ok) {
       showToast(submission.message, 3000, 'warning');
       this.updateVotePreview(proposal);
