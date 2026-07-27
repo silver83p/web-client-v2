@@ -4954,35 +4954,19 @@ class ProposalInfoModal {
     `;
   }
 
-  getParameterChangeRowClass(parts, isSingleRow) {
-    const normalizedParts = parts.map((part) => String(part ?? '').trim());
-    const shouldUseWideRow = normalizedParts.some((part) => part.length > 22)
-      || normalizedParts.join(' ').length > 52;
-    return [
-      'proposal-change-row',
-      shouldUseWideRow ? 'proposal-change-row--wide' : '',
-      !shouldUseWideRow && isSingleRow ? 'proposal-change-row--single' : '',
-    ].filter(Boolean).join(' ');
-  }
-
   renderPayloadRows(payload, payloadTitle) {
     const titleHtml = payloadTitle
       ? `<div class="proposal-payload-title">${escapeHtml(payloadTitle)}</div>`
       : '';
 
     if (Array.isArray(payload?.changes)) {
-      const changes = payload.changes;
-      return changes
-        .map((change, index) => {
+      return payload.changes
+        .map((change) => {
           const key = change?.key || 'Unknown key';
           const current = formatDaoDetailValue(change?.current);
           const next = formatDaoDetailValue(change?.value);
-          const rowClass = this.getParameterChangeRowClass(
-            [key, `Current: ${current}`, `New: ${next}`],
-            index === changes.length - 1 && changes.length % 2 === 1,
-          );
           return `
-          <div class="${rowClass}">
+          <div class="proposal-change-row">
             ${titleHtml}
             <span>${escapeHtml(key)}</span>
             <div class="proposal-change-values">
@@ -5000,14 +4984,10 @@ class ProposalInfoModal {
       .filter(([, value]) => value !== undefined && value !== null && String(value).length > 0);
 
     return entries
-      .map(([key, value], index) => {
+      .map(([key, value]) => {
         const displayValue = formatDaoDetailValue(value);
-        const rowClass = this.getParameterChangeRowClass(
-          [key, displayValue],
-          index === entries.length - 1 && entries.length % 2 === 1,
-        );
         return `
-        <div class="${rowClass}">
+        <div class="proposal-change-row">
           ${titleHtml}
           <span>${escapeHtml(key)}</span>
           <strong>${escapeHtml(displayValue)}</strong>
