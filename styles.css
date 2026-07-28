@@ -2159,6 +2159,49 @@ input[type='file'].form-control::file-selector-button {
   justify-content: center;
 }
 
+#proposalInfoModal .proposal-option-cards {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#proposalInfoModal .proposal-option-card {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(28, 28, 33, 0.05);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+#proposalInfoModal .proposal-option-card-number {
+  align-items: center;
+  background: var(--input-background);
+  border-radius: 999px;
+  color: var(--secondary-text-color);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 24px;
+  padding: 0 4px;
+}
+
+#proposalInfoModal .proposal-option-card-label {
+  color: var(--text-color);
+  font-size: 13px;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 #confirmProposalModal .dao-confirm-row,
 #proposalInfoModal .proposal-info-row {
   background: var(--input-background);
@@ -2179,19 +2222,13 @@ input[type='file'].form-control::file-selector-button {
   box-shadow: 0 1px 2px rgba(28, 28, 33, 0.05);
 }
 
-#confirmProposalModal .dao-confirm-row--full,
-#proposalInfoModal .proposal-info-row--full {
+#confirmProposalModal .dao-confirm-row--full {
   flex-basis: 100%;
 }
 
 #proposalInfoModal .proposal-info-row--accept {
   background: rgba(30, 126, 52, 0.16);
   border: 1px solid rgba(30, 126, 52, 0.34);
-}
-
-#proposalInfoModal .proposal-info-row--withhold {
-  background: rgba(196, 45, 45, 0.14);
-  border: 1px solid rgba(196, 45, 45, 0.32);
 }
 
 #confirmProposalModal .dao-confirm-label,
@@ -2209,10 +2246,6 @@ input[type='file'].form-control::file-selector-button {
 
 #proposalInfoModal .proposal-info-row--accept span {
   color: #1e7e34;
-}
-
-#proposalInfoModal .proposal-info-row--withhold span {
-  color: #b42318;
 }
 
 #confirmProposalModal .dao-confirm-value,
@@ -2243,10 +2276,6 @@ input[type='file'].form-control::file-selector-button {
   color: #0f5f27;
 }
 
-#proposalInfoModal .proposal-info-row--withhold .proposal-info-value {
-  color: #8f1d16;
-}
-
 #confirmProposalModal .dao-confirm-label,
 #proposalInfoModal .proposal-info-row > span:not(.proposal-info-value) {
   align-self: start;
@@ -2274,9 +2303,7 @@ input[type='file'].form-control::file-selector-button {
 
 #proposalInfoModal .proposal-result-card {
   background: rgba(255, 255, 255, 0.92);
-  border: 0 solid var(--border-color);
   border-radius: 0 0 8px 8px;
-  border-width: 0 1px 1px;
   box-shadow: 0 2px 2px rgba(28, 28, 33, 0.04);
   display: grid;
   gap: 6px;
@@ -2336,12 +2363,12 @@ input[type='file'].form-control::file-selector-button {
 #proposalInfoModal .proposal-result-meter-label > span {
   color: var(--secondary-text-color);
   font-size: 12px;
-  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
 #proposalInfoModal .proposal-result-meter-label > span,
 #proposalInfoModal .proposal-result-meter-label > small {
+  font-weight: var(--font-weight-bold);
   max-width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -2349,14 +2376,6 @@ input[type='file'].form-control::file-selector-button {
 
 #proposalInfoModal .proposal-result-meter-label--winner > span {
   color: var(--text-color);
-}
-
-#proposalInfoModal .proposal-result-meter-label--accept.proposal-result-meter-label--winner > span {
-  color: #0f5f27;
-}
-
-#proposalInfoModal .proposal-result-meter-label--withhold.proposal-result-meter-label--winner > span {
-  color: #8f1d16;
 }
 
 #proposalInfoModal .proposal-result-meter-label--palette-0 > span {
@@ -2427,26 +2446,14 @@ input[type='file'].form-control::file-selector-button {
   background: #8d949e;
 }
 
-#proposalInfoModal .proposal-result-meter-segment--accept {
-  background: #1e7e34;
-}
-
-#proposalInfoModal .proposal-result-meter-segment--withhold {
-  background: #c42d2d;
-}
-
-#proposalInfoModal .proposal-result-meter-segment--empty {
-  background: rgba(101, 103, 107, 0.18);
-}
-
-#proposalInfoModal .proposal-withhold-reasons {
+#proposalInfoModal .proposal-committee-votes {
   border-top: 1px solid var(--border-color);
   display: grid;
   gap: 8px;
   padding-top: 10px;
 }
 
-#proposalInfoModal .proposal-withhold-reasons h4 {
+#proposalInfoModal .proposal-committee-votes h4 {
   color: var(--text-color);
   font-size: 13px;
   font-weight: var(--font-weight-semibold);
@@ -2454,7 +2461,7 @@ input[type='file'].form-control::file-selector-button {
   margin: 0;
 }
 
-#proposalInfoModal .proposal-withhold-reason-list {
+#proposalInfoModal .proposal-committee-vote-list {
   display: grid;
   gap: 6px;
   list-style: none;
@@ -2462,30 +2469,62 @@ input[type='file'].form-control::file-selector-button {
   padding: 0;
 }
 
-#proposalInfoModal .proposal-withhold-reason-row {
-  align-items: start;
+#proposalInfoModal .proposal-committee-vote-row {
+  align-items: center;
   background: var(--input-background);
   border-radius: 8px;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 8px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 6px 10px;
 }
 
-#proposalInfoModal .proposal-withhold-reason-text {
+#proposalInfoModal .proposal-committee-vote-address {
+  align-self: stretch;
   color: var(--text-color);
+  display: flex;
+  flex-direction: column;
   font-size: 13px;
+  gap: 2px;
+  justify-content: flex-start;
+  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 4px 0 2px;
+}
+
+#proposalInfoModal .proposal-committee-vote-address > strong {
+  font-weight: var(--font-weight-medium);
+}
+
+#proposalInfoModal .proposal-committee-vote-address > small {
+  color: var(--secondary-text-color);
+  font-size: 11px;
+  line-height: 1.1;
+  margin: 0;
+  padding: 0;
+}
+
+#proposalInfoModal .proposal-committee-vote-choice {
+  color: var(--secondary-text-color);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
   min-width: 0;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
+  text-align: right;
 }
 
-#proposalInfoModal .proposal-withhold-reason-count {
-  color: var(--secondary-text-color);
-  font-size: 11px;
-  line-height: 1.35;
-  white-space: nowrap;
+#proposalInfoModal .proposal-result-meter-label--accept.proposal-result-meter-label--winner > span,
+#proposalInfoModal .proposal-vote-current-label--accept.proposal-vote-current-label--winner > span,
+#proposalInfoModal .proposal-committee-vote-choice--accept {
+  color: #0f5f27;
+}
+
+#proposalInfoModal .proposal-result-meter-label--withhold.proposal-result-meter-label--winner > span,
+#proposalInfoModal .proposal-vote-current-label--withhold.proposal-vote-current-label--winner > span,
+#proposalInfoModal .proposal-committee-vote-choice--withhold {
+  color: #8f1d16;
 }
 
 #confirmProposalModal .dao-confirm-change,
@@ -2595,8 +2634,7 @@ input[type='file'].form-control::file-selector-button {
     flex-basis: calc((100% - 8px) / 2);
   }
 
-  #confirmProposalModal .dao-confirm-row--full,
-  #proposalInfoModal .proposal-info-row--full {
+  #confirmProposalModal .dao-confirm-row--full {
     flex-basis: 100%;
   }
 }
@@ -2855,6 +2893,7 @@ input[type='file'].form-control::file-selector-button {
 
 #proposalInfoModal .proposal-vote-current-label > span,
 #proposalInfoModal .proposal-vote-current-label > small {
+  font-weight: var(--font-weight-bold);
   max-width: 100%;
   min-width: 0;
   overflow-wrap: break-word;
@@ -2863,7 +2902,6 @@ input[type='file'].form-control::file-selector-button {
 #proposalInfoModal .proposal-vote-current-label > span {
   color: var(--secondary-text-color);
   font-size: 12px;
-  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -2901,6 +2939,17 @@ input[type='file'].form-control::file-selector-button {
   background: var(--primary-color);
 }
 
+#proposalInfoModal .proposal-result-meter-segment--accept,
+#proposalInfoModal .proposal-vote-current-segment--accept {
+  background: #1e7e34;
+}
+
+#proposalInfoModal .proposal-result-meter-segment--withhold,
+#proposalInfoModal .proposal-vote-current-segment--withhold {
+  background: #c42d2d;
+}
+
+#proposalInfoModal .proposal-result-meter-segment--empty,
 #proposalInfoModal .proposal-vote-current-segment--empty {
   background: rgba(101, 103, 107, 0.18);
 }
