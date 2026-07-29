@@ -1355,7 +1355,7 @@ class WelcomeMenuModal {
       this.launchButton.addEventListener('click', () => launchModal.open());
       this.launchButton.style.display = 'block';
       this.updateButton.addEventListener('click', () => aboutModal.openStore());
-      this.updateButton.style.display = 'block';
+      this.updateButton.style.display = 'flex';
     }
   }
 
@@ -2314,7 +2314,7 @@ class MenuModal {
     this.validatorButton.addEventListener('click', () => validatorStakingModal.open());
     this.daoButton = document.getElementById('openDao');
     if (network.name === 'Devnet') {
-      this.daoButton.style.display = 'block';
+      this.daoButton.style.display = 'flex';
       this.daoButton.addEventListener('click', () => daoModal.open());
     }
     this.inviteButton = document.getElementById('openInvite');
@@ -2348,7 +2348,7 @@ class MenuModal {
 
       this.updateButton = document.getElementById('openUpdate');
       this.updateButton.addEventListener('click', () => updateWarningModal.open());
-      this.updateButton.style.display = 'block';
+      this.updateButton.style.display = 'flex';
     }
   }
 
