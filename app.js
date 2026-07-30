@@ -5243,9 +5243,11 @@ class ProposalInfoModal {
       this.voteSpendInput.value = this.voteSpendLib;
     }
     if (this.voteOptions) {
+      const totalWeight = this.getVoteWeightsTotal();
       this.voteOptions.innerHTML = `
         <div class="proposal-vote-options-header">
           <span>Option</span>
+          <span>%</span>
           <span class="proposal-vote-weight-label">
             Weight
             <button
@@ -5258,7 +5260,7 @@ class ProposalInfoModal {
             ></button>
           </span>
         </div>
-        ${options.map((option, index) => this.renderVoteOption(option, index)).join('')}
+        ${options.map((option, index) => this.renderVoteOption(option, index, totalWeight)).join('')}
         ${this.renderVoteRequirements(proposal)}
       `;
     }
@@ -5317,11 +5319,16 @@ class ProposalInfoModal {
     showToast(helpButton.title, 0, 'info');
   }
 
-  renderVoteOption(option, index) {
+  renderVoteOption(option, index, totalWeight) {
     const weight = this.voteWeights[index] || 0;
     return `
       <label class="proposal-vote-option">
         <span>${escapeHtml(option)}</span>
+        <span
+          class="proposal-vote-weight-percent"
+          data-vote-weight-percent="${index}"
+          aria-label="${escapeDaoFormAttribute(`${option} percent`)}"
+        >${escapeHtml(this.formatCountPercent(weight, totalWeight))}</span>
         <input
           type="number"
           class="form-control"
@@ -5345,7 +5352,24 @@ class ProposalInfoModal {
     if (!Number.isInteger(index) || index < 0 || index >= this.voteWeights.length) return;
     this.voteWeights[index] = this.normalizeVoteWeight(input.value);
     input.value = String(this.voteWeights[index]);
+    this.updateVoteWeightPercents();
     this.updateVotePreview(this.getCurrentProposal());
+  }
+
+  updateVoteWeightPercents() {
+    const percentEls = this.voteOptions?.querySelectorAll('[data-vote-weight-percent]');
+    if (!percentEls?.length) return;
+
+    const totalWeight = this.getVoteWeightsTotal();
+    for (const el of percentEls) {
+      const index = Number(el.dataset.voteWeightPercent);
+      if (!Number.isInteger(index) || index < 0 || index >= this.voteWeights.length) continue;
+      el.textContent = this.formatCountPercent(this.voteWeights[index] || 0, totalWeight);
+    }
+  }
+
+  getVoteWeightsTotal() {
+    return this.voteWeights.reduce((sum, weight) => sum + weight, 0);
   }
 
   handleVoteSpendInput() {
@@ -5448,7 +5472,7 @@ class ProposalInfoModal {
       return { ok: false, message: 'Wallet address unavailable.' };
     }
 
-    const totalWeight = this.voteWeights.reduce((sum, weight) => sum + weight, 0);
+    const totalWeight = this.getVoteWeightsTotal();
     if (totalWeight <= 0) {
       return { ok: false, message: 'Enter at least one positive option weight.' };
     }
