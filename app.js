@@ -2496,6 +2496,29 @@ function formatDaoDate(ts) {
   }
 }
 
+function formatDaoDayOrTime(ts, now) {
+  const at = Number(ts || 0);
+  if (!at) return '';
+  const atDate = new Date(at);
+  const nowDate = new Date(now);
+  const sameDay = (
+    atDate.getFullYear() === nowDate.getFullYear()
+    && atDate.getMonth() === nowDate.getMonth()
+    && atDate.getDate() === nowDate.getDate()
+  );
+  if (!sameDay) return formatDaoDate(at);
+  try {
+    return atDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function formatDaoReadyAtLabel(ts, now) {
+  const when = formatDaoDayOrTime(ts, now);
+  return when ? `Ready at ${when}` : '';
+}
+
 function formatDaoProposalTitle(proposal) {
   const title = String(proposal.title || '').trim() || 'Proposal';
   return proposal.number ? `#${proposal.number}: ${title}` : title;
@@ -2864,7 +2887,8 @@ class DaoModal {
     }
 
     if (state === 'review') {
-      const reviewWindow = getDaoProposalReviewWindow(proposal);
+      const now = getTransactionTimestamp();
+      const reviewWindow = getDaoProposalReviewWindow(proposal, now);
 
       if (reviewWindow.canFinalizeReviewResult) {
         const { acceptCount, withholdCount } = getDaoCommitteeReview(proposal);
@@ -2876,19 +2900,29 @@ class DaoModal {
         });
       }
 
+      let reviewLabel = reviewWindow.label;
+      if (reviewWindow.canFinalizeReviewResult) {
+        reviewLabel = 'Ready to finalize';
+      } else if (now < reviewWindow.start) {
+        reviewLabel = formatDaoReadyAtLabel(reviewWindow.start, now) || reviewLabel;
+      } else if (now <= reviewWindow.end) {
+        const endLabel = formatDaoDayOrTime(reviewWindow.end, now);
+        if (endLabel) reviewLabel = `Ends ${endLabel}`;
+      }
+
       chips.push({
-        value: reviewWindow.canFinalizeReviewResult ? 'Ready to finalize' : reviewWindow.label,
+        value: reviewLabel,
         tone: 'neutral',
       });
     } else if (state === 'voting') {
       const now = getTransactionTimestamp();
       const votingWindow = getDaoProposalVotingWindow(proposal, now);
-      const endDate = formatDaoDate(votingWindow.end);
+      const endLabel = formatDaoDayOrTime(votingWindow.end, now);
       const votingEnded = Boolean(votingWindow.end && now > votingWindow.end);
 
-      if (endDate && !votingEnded) {
+      if (endLabel && !votingEnded) {
         chips.push({
-          value: `Ends ${endDate}`,
+          value: `Ends ${endLabel}`,
           tone: 'neutral',
         });
       }
@@ -2918,11 +2952,11 @@ class DaoModal {
       if (applyAction?.rowPreviewLabel) {
         chips.push({
           value: applyAction.rowPreviewLabel,
-          tone: 'neutral',
+          tone: applyAction.canSubmit ? 'accepted' : 'neutral',
         });
       }
     }
-    if (result) {
+    if (result && state !== 'accepted') {
       chips.push({
         value: result.headline,
         tone: result.tone,
@@ -4254,6 +4288,7 @@ function getDaoProposalApplyLifecycleAction(
         ? `Apply becomes available after the grace period ends: ${eligibleAt}.`
         : 'Apply timing is unavailable until the proposal includes grace-period timing.',
       false,
+      formatDaoReadyAtLabel(applyWindow.eligibleAt, now),
     );
   }
 
