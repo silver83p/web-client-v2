@@ -37,6 +37,7 @@ async function checkVersion() {
       newUrl,
       'styles.css',
       'app.js',
+      'evm-assets.js',
       'dao.repo.js',
       'data/emoji-picker-data.js',
       'lib.js',
@@ -158,6 +159,8 @@ import {
   CHAT_REACTION_SHEET_DEFAULT_COMMON_EMOJIS,
   CHAT_REACTION_SHEET_RECENT_CATEGORY_KEY,
 } from './data/emoji-picker-data.js';
+
+import { evmAssets } from './evm-assets.js';
 
 const weiDigits = 18;
 const wei = 10n ** BigInt(weiDigits);
@@ -444,6 +447,7 @@ function newDataRecord(myAccount) {
 function clearMyData() {
   myData = null;
   myAccount = null;
+  evmAssets.reset();
 }
 
 /**
@@ -738,6 +742,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Wallet Screen
   walletScreen.load();
+
+  // Connected EVM assets
+  evmAssets.load();
 
   // About and Contact Modals
   sourceModal.load();
@@ -2135,7 +2142,6 @@ class WalletScreen {
       }
     }
 
-    // Update total networth
     const walletUsdValue = calculateWalletUsdValue(walletData.assets);
     walletData.networth = walletUsdValue ?? 0.0;
     this.totalBalance.textContent = walletUsdValue === null ? 'N/A' : walletUsdValue.toFixed(2);
@@ -29395,6 +29401,7 @@ const createAccountModal = new CreateAccountModal();
  */
 class SendAssetFormModal {
   constructor() {
+    this.mode = 'liberdus';
     this.username = null;
     this.sendAssetFormModalCheckTimeout = null;
     this.foundAddressObject = { address: null };
@@ -29417,6 +29424,9 @@ class SendAssetFormModal {
     this.retryTxIdInput = document.getElementById('retryOfPaymentTxId');
     this.usernameAvailable = document.getElementById('sendToAddressError');
     this.submitButton = document.querySelector('#sendForm button[type="submit"]');
+    this.networkSelect = document.getElementById('sendNetwork');
+    this.networkGroup = document.getElementById('sendNetworkGroup');
+    this.networkStatus = document.getElementById('sendNetworkStatus');
     this.assetSelectDropdown = document.getElementById('sendAsset');
     this.balanceSymbol = document.getElementById('balanceSymbol');
     this.availableBalance = document.getElementById('availableBalance');
@@ -29443,10 +29453,8 @@ class SendAssetFormModal {
     });
 
     this.availableBalance.addEventListener('click', this.fillAmount.bind(this));
-    this.assetSelectDropdown.addEventListener('change', () => {
-      // updateSendAddresses();
-      this.updateAvailableBalance();
-    });
+    this.networkSelect.addEventListener('change', () => this.handleNetworkChange());
+    this.assetSelectDropdown.addEventListener('change', () => this.handleAssetChange());
     // amount input listener for normalizing
     this.amountInput.addEventListener('input', () => this.amountInput.value = normalizeUnsignedFloat(this.amountInput.value));
     // amount input listener for real-time balance validation
@@ -29480,7 +29488,9 @@ class SendAssetFormModal {
    * Opens the send asset modal
    * @returns {Promise<void>}
    */
-  async open() {
+  async open({ mode = 'liberdus', networkId = null, assetKey = null } = {}) {
+    this.mode = mode;
+    this.networkGroup.hidden = mode !== 'evm';
     this.modal.classList.add('active');
     this.memoValidation = {};
     this.memoByteCounter.textContent = '';
@@ -29506,16 +29516,67 @@ class SendAssetFormModal {
       this.username = null;
     }
 
-    await walletScreen.updateWalletBalances(); // Refresh wallet balances first
-    // Get wallet data
-    const wallet = myData.wallet;
-    // Populate assets dropdown
-    this.assetSelectDropdown.innerHTML = wallet.assets
-      .map((asset, index) => `<option value="${index}">${asset.name} (${asset.symbol})</option>`)
-      .join('');
+    if (this.mode === 'evm') {
+      await evmAssets.refresh();
+      evmAssets.populateNetworkSelect(this.networkSelect, {
+        selectedId: networkId || 'ethereum',
+        evmOnly: true,
+      });
+    } else {
+      await walletScreen.updateWalletBalances();
+      evmAssets.rebuildCatalog();
+      evmAssets.populateNetworkSelect(this.networkSelect, { selectedId: 'liberdus' });
+    }
+    await this.handleNetworkChange({ resetRecipient: false });
+    if (assetKey && [...this.assetSelectDropdown.options].some((option) => option.value === assetKey)) {
+      this.assetSelectDropdown.value = assetKey;
+      await this.handleAssetChange();
+    }
+  }
 
-    // Update addresses for first asset
-    this.updateSendAddresses();
+  getSelectedNetwork() {
+    return evmAssets.getNetwork(this.networkSelect.value);
+  }
+
+  getSelectedAsset() {
+    return evmAssets.getSelectedAsset(this.networkSelect.value, this.assetSelectDropdown);
+  }
+
+  isLiberdusSelected() {
+    return this.mode === 'liberdus';
+  }
+
+  async handleNetworkChange({ resetRecipient = true } = {}) {
+    const walletNetwork = this.getSelectedNetwork();
+    evmAssets.populateAssetSelect(this.assetSelectDropdown, walletNetwork?.id || 'liberdus');
+
+    if (resetRecipient) {
+      this.usernameInput.value = '';
+      this.foundAddressObject.address = null;
+      this.usernameAvailable.style.display = 'none';
+    }
+    this.amountInput.value = '';
+    this.balanceWarning.textContent = '';
+    this.balanceWarning.style.display = 'none';
+
+    if (walletNetwork?.source === 'evm') {
+      this.usernameInput.placeholder = 'Enter 0x wallet address';
+      this.networkStatus.textContent = `${walletNetwork.name} is connected for balances and receiving. Sending is coming in Phase 2.`;
+      this.networkStatus.dataset.status = walletNetwork.connected ? 'connected' : 'ready';
+    } else {
+      this.usernameInput.placeholder = 'Enter username';
+      this.networkStatus.textContent = 'Liberdus transfers are ready.';
+      this.networkStatus.dataset.status = 'connected';
+    }
+
+    await this.handleAssetChange();
+  }
+
+  async handleAssetChange() {
+    const asset = this.getSelectedAsset();
+    this.balanceSymbol.textContent = asset?.tokenSymbol || 'LIB';
+    this.toggleBalanceButton.disabled = !this.isLiberdusSelected();
+    await this.updateAvailableBalance();
   }
 
   /**
@@ -29543,6 +29604,17 @@ class SendAssetFormModal {
     if (this.sendAssetFormModalCheckTimeout) {
       clearTimeout(this.sendAssetFormModalCheckTimeout);
       this.sendAssetFormModalCheckTimeout = null;
+    }
+
+    if (!this.isLiberdusSelected()) {
+      this.clearFormInfo();
+      const isValidAddress = isValidEthereumAddress(rawInput);
+      this.foundAddressObject.address = isValidAddress ? rawInput : null;
+      this.usernameAvailable.textContent = isValidAddress ? 'valid address' : 'enter a valid 0x address';
+      this.usernameAvailable.style.color = isValidAddress ? '#28a745' : '#dc3545';
+      this.usernameAvailable.style.display = rawInput ? 'inline' : 'none';
+      await this.refreshSendButtonDisabledState();
+      return;
     }
 
     if (isValidEthereumAddress(rawInput)) {
@@ -29722,6 +29794,11 @@ class SendAssetFormModal {
   async handleSendFormSubmit(event) {
     event.preventDefault();
 
+    if (!this.isLiberdusSelected()) {
+      showToast('EVM sending will be enabled in Phase 2. Balances and receiving are available now.', 5000, 'info');
+      return;
+    }
+
     const hasPendingTransfer =
       Array.isArray(myData?.pending) &&
       myData.pending.some((pendingTx) => pendingTx?.type === 'transfer');
@@ -29807,8 +29884,17 @@ class SendAssetFormModal {
    * @returns {void}
    */
   async fillAmount() {
+    const selectedAsset = this.getSelectedAsset();
+    if (!selectedAsset) return;
+
+    if (!this.isLiberdusSelected()) {
+      this.amountInput.value = selectedAsset.tokenAmount || '0';
+      this.amountInput.dispatchEvent(new Event('input'));
+      return;
+    }
+
     await getNetworkParams();
-    const asset = myData.wallet.assets[this.assetSelectDropdown.value];
+    const asset = selectedAsset.walletAsset;
     const feeInWei = getTransactionFeeWei();
     const maxAmount = BigInt(asset.balance) - feeInWei;
     const maxAmountStr = big2str(maxAmount > 0n ? maxAmount : 0n, 18).slice(0, -16);
@@ -29832,19 +29918,14 @@ class SendAssetFormModal {
    * @returns {void}
    */
   async updateAvailableBalance() {
-    const walletData = myData.wallet;
-    const assetIndex = this.assetSelectDropdown.value;
-
-    // Check if we have any assets
-    if (!walletData.assets || walletData.assets.length === 0) {
+    const selectedAsset = this.getSelectedAsset();
+    if (!selectedAsset) {
       this.updateBalanceDisplay(null);
-      // If no assets, amount validation will likely fail or be irrelevant.
-      // Button state should reflect this.
       await this.refreshSendButtonDisabledState();
       return;
     }
 
-    this.updateBalanceDisplay(walletData.assets[assetIndex]);
+    await this.updateBalanceDisplay(selectedAsset);
     await this.refreshSendButtonDisabledState();
   }
 
@@ -29860,6 +29941,13 @@ class SendAssetFormModal {
       return;
     }
 
+    if (asset.source === 'evm') {
+      this.balanceSymbol.textContent = asset.tokenSymbol;
+      this.balanceAmount.textContent = `${evmAssets.formatTokenAmount(asset.tokenAmount)} ${asset.tokenSymbol}`;
+      this.transactionFee.textContent = 'Calculated at send';
+      return;
+    }
+
     await getNetworkParams();
     const txFeeInLIB = getTransactionFeeWei();
     const stabilityFactor = getStabilityFactor();
@@ -29870,10 +29958,10 @@ class SendAssetFormModal {
 
     // Only set to asset symbol if it's empty (initial state)
     if (!currentSymbol) {
-      this.balanceSymbol.textContent = asset.symbol;
+      this.balanceSymbol.textContent = asset.tokenSymbol;
     }
 
-    const balanceInLIB = big2str(BigInt(asset.balance), 18).slice(0, -12);
+    const balanceInLIB = big2str(BigInt(asset.walletAsset.balance), 18).slice(0, -12);
     const feeInLIB = big2str(txFeeInLIB, 18).slice(0, -16);
 
     this.updateBalanceAndFeeDisplay(balanceInLIB, feeInLIB, isCurrentlyUSD, stabilityFactor);
@@ -29884,11 +29972,7 @@ class SendAssetFormModal {
    * @returns {void}
    */
   updateSendAddresses() {
-    const walletData = myData.wallet;
-    // const assetIndex = document.getElementById('sendAsset').value;
-
-    // Check if we have any assets
-    if (!walletData.assets || walletData.assets.length === 0) {
+    if (!this.getSelectedAsset()) {
       showToast('No addresses available', 0, 'error');
       return;
     }
@@ -29902,6 +29986,13 @@ class SendAssetFormModal {
    * @returns {Promise<void>}
    */
   async refreshSendButtonDisabledState() {
+    if (!this.isLiberdusSelected()) {
+      this.balanceWarning.textContent = '';
+      this.balanceWarning.style.display = 'none';
+      this.submitButton.disabled = true;
+      return;
+    }
+
     // If offline, keep button disabled
     if (!isOnline) {
       this.submitButton.disabled = true;
@@ -29921,7 +30012,12 @@ class SendAssetFormModal {
       return;
     }
 
-    const assetIndex = this.assetSelectDropdown.value;
+    const selectedAsset = this.getSelectedAsset();
+    const assetIndex = myData.wallet.assets.indexOf(selectedAsset?.walletAsset);
+    if (assetIndex < 0) {
+      this.submitButton.disabled = true;
+      return;
+    }
 
     // Check if amount is in USD and convert to LIB for validation
     const isUSD = this.balanceSymbol.textContent === 'USD';
@@ -29981,6 +30077,9 @@ class SendAssetFormModal {
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
     }
+    if (!this.isLiberdusSelected()) {
+      return;
+    }
     this.balanceSymbol.textContent = this.balanceSymbol.textContent === 'LIB' ? 'USD' : 'LIB';
 
     // check the context value of the button to determine if it's LIB or USD
@@ -29991,7 +30090,8 @@ class SendAssetFormModal {
     const stabilityFactor = getStabilityFactor();
 
     // Get the raw values in LIB format
-    const asset = myData.wallet.assets[this.assetSelectDropdown.value];
+    const asset = this.getSelectedAsset()?.walletAsset;
+    if (!asset) return;
     const txFeeInWei = getTransactionFeeWei();
     const balanceInLIB = big2str(BigInt(asset.balance), 18).slice(0, -12);
     const feeInLIB = big2str(txFeeInWei, 18).slice(0, -16);
@@ -30270,6 +30370,13 @@ class SendAssetConfirmModal {
    */
   async handleSendAsset(event) {
     event.preventDefault();
+    const selectedAsset = sendAssetFormModal.getSelectedAsset();
+    if (!sendAssetFormModal.isLiberdusSelected() || selectedAsset?.source !== 'liberdus') {
+      showToast('EVM sending will be enabled in Phase 2.', 5000, 'info');
+      this.close();
+      return;
+    }
+
     const rawInput = sendAssetFormModal.usernameInput.value.trim();
     if (isValidEthereumAddress(rawInput)) {
       showToast('Address not supported; enter username instead.', 0, 'error');
@@ -30283,7 +30390,11 @@ class SendAssetConfirmModal {
     }
 
     const wallet = myData.wallet;
-    const assetIndex = Number(sendAssetFormModal.assetSelectDropdown.value);
+    const assetIndex = wallet.assets.indexOf(selectedAsset.walletAsset);
+    if (assetIndex < 0) {
+      showToast('Selected Liberdus asset is unavailable.', 0, 'error');
+      return;
+    }
     const amount = bigxnum2big(wei, sendAssetFormModal.amountInput.value);
     const memoIn = sendAssetFormModal.memoInput.value || '';
     const memo = memoIn.trim();
@@ -30547,10 +30658,14 @@ const sendAssetConfirmModal = new SendAssetConfirmModal();
 
 class ReceiveModal {
   constructor() {
+    this.mode = 'liberdus';
   }
 
   load() {
     this.modal = document.getElementById('receiveModal');
+    this.networkSelect = document.getElementById('receiveNetwork');
+    this.networkGroup = document.getElementById('receiveNetworkGroup');
+    this.networkStatus = document.getElementById('receiveNetworkStatus');
     this.assetSelect = document.getElementById('receiveAsset');
     this.amountInput = document.getElementById('receiveAmount');
     this.memoInput = document.getElementById('receiveMemo');
@@ -30573,53 +30688,66 @@ class ReceiveModal {
     this.displayAddress.addEventListener('click', () => this.copyAddress());
     
     // QR code updates
-    this.assetSelect.addEventListener('change', () => this.updateQRCode());
+    this.networkSelect.addEventListener('change', () => this.handleNetworkChange());
+    this.assetSelect.addEventListener('change', () => this.handleAssetChange());
     this.amountInput.addEventListener('input', () => this.amountInput.value = normalizeUnsignedFloat(this.amountInput.value));
     this.amountInput.addEventListener('input', this.debouncedUpdateQRCode);
     this.memoInput.addEventListener('input', this.debouncedUpdateQRCode);
     this.toggleReceiveBalanceButton.addEventListener('click', this.handleToggleBalance.bind(this));
   }
 
-  open() {
+  async open({ mode = 'liberdus', networkId = null, assetKey = null } = {}) {
+    this.mode = mode;
+    this.networkGroup.hidden = mode !== 'evm';
     this.modal.classList.add('active');
-
-    // Get wallet data
-    const walletData = myData.wallet;
-
-    // Populate assets dropdown
-    // Clear existing options
-    this.assetSelect.innerHTML = '';
-
-    // Check if wallet assets exist
-    if (walletData && walletData.assets && walletData.assets.length > 0) {
-      // Add options for each asset
-      walletData.assets.forEach((asset, index) => {
-        const option = document.createElement('option');
-        option.value = index;
-        option.textContent = `${asset.name} (${asset.symbol})`;
-        this.assetSelect.appendChild(option);
-      });
-    } else {
-      // Add a default option if no assets
-      const option = document.createElement('option');
-      option.value = 0;
-      option.textContent = 'Liberdus (LIB)';
-      this.assetSelect.appendChild(option);
-    }
 
     // Clear input fields
     this.amountInput.value = '';
     this.memoInput.value = '';
 
-    this.receiveBalanceSymbol.textContent = 'LIB';
-
-
-    // Initial update for addresses based on the first asset
-    this.updateReceiveAddresses();
+    if (this.mode === 'evm') {
+      await evmAssets.refresh();
+      evmAssets.populateNetworkSelect(this.networkSelect, {
+        selectedId: networkId || 'ethereum',
+        evmOnly: true,
+      });
+    } else {
+      evmAssets.rebuildCatalog();
+      evmAssets.populateNetworkSelect(this.networkSelect, { selectedId: 'liberdus' });
+    }
+    await this.handleNetworkChange();
+    if (assetKey && [...this.assetSelect.options].some((option) => option.value === assetKey)) {
+      this.assetSelect.value = assetKey;
+      await this.handleAssetChange();
+    }
   }
 
   close() {
     this.modal.classList.remove('active');
+  }
+
+  getSelectedNetwork() {
+    return evmAssets.getNetwork(this.networkSelect.value);
+  }
+
+  getSelectedAsset() {
+    return evmAssets.getSelectedAsset(this.networkSelect.value, this.assetSelect);
+  }
+
+  async handleNetworkChange() {
+    const walletNetwork = this.getSelectedNetwork();
+    evmAssets.populateAssetSelect(this.assetSelect, walletNetwork?.id || 'liberdus');
+    this.networkStatus.textContent = walletNetwork?.source === 'evm'
+      ? `Receive on ${walletNetwork.name} using this account's shared EVM address.`
+      : 'Receive Liberdus using your account address.';
+    this.networkStatus.dataset.status = walletNetwork?.connected ? 'connected' : 'ready';
+    await this.handleAssetChange();
+  }
+
+  async handleAssetChange() {
+    const asset = this.getSelectedAsset();
+    this.receiveBalanceSymbol.textContent = asset?.tokenSymbol || 'LIB';
+    this.updateReceiveAddresses();
   }
 
   updateReceiveAddresses() {
@@ -30658,37 +30786,25 @@ class ReceiveModal {
 
   // Create QR payment data object based on form values
   createQRPaymentData() {
-    // Get selected asset
-    const assetIndex = parseInt(this.assetSelect.value, 10) || 0;
+    const walletNetwork = this.getSelectedNetwork();
+    const asset = this.getSelectedAsset();
 
-    // Default asset info in case we can't find the selected asset
-    let assetId = 'liberdus';
-    let symbol = 'LIB';
-
-    // Try to get the selected asset
-    try {
-      if (myData && myData.wallet && myData.wallet.assets && myData.wallet.assets.length > 0) {
-        const asset = myData.wallet.assets[assetIndex];
-        if (asset) {
-          assetId = asset.id || 'liberdus';
-          symbol = asset.symbol || 'LIB';
-        } else {
-          console.warn(`Asset not found at index ${assetIndex}, using defaults`);
+    const paymentData = this.mode === 'evm'
+      ? {
+          u: myAccount.username,
+          n: walletNetwork?.id || 'ethereum',
+          c: walletNetwork?.chainId || 1,
+          i: asset?.contractAddress || asset?.key || 'native',
+          s: asset?.tokenSymbol || walletNetwork?.nativeSymbol || 'ETH',
+          d: String(this.receiveBalanceSymbol.textContent || asset?.tokenSymbol || 'ETH').toUpperCase(),
+          r: this.fullAddress,
         }
-      } else {
-        console.warn('Wallet assets not available, using default asset');
-      }
-    } catch (error) {
-      console.error('Error accessing asset data:', error);
-    }
-
-    // Build payment data object
-    const paymentData = {
-      u: myAccount.username, // username
-      i: assetId, // assetId
-      s: symbol, // symbol
-      d: String(this.receiveBalanceSymbol.textContent || 'LIB').toUpperCase() //display unit
-    };
+      : {
+          u: myAccount.username,
+          i: asset?.walletAsset?.id || 'liberdus',
+          s: asset?.tokenSymbol || 'LIB',
+          d: String(this.receiveBalanceSymbol.textContent || 'LIB').toUpperCase(),
+        };
 
     // Add optional fields if they have values
     const amount = this.amountInput.value.trim();
@@ -30778,22 +30894,33 @@ class ReceiveModal {
    */
   async handleToggleBalance() {
     try {
-      this.receiveBalanceSymbol.textContent = this.receiveBalanceSymbol.textContent === 'LIB' ? 'USD' : 'LIB';
+      const asset = this.getSelectedAsset();
+      const tokenSymbol = asset?.tokenSymbol || 'LIB';
+      const isShowingToken = this.receiveBalanceSymbol.textContent !== 'USD';
+      this.receiveBalanceSymbol.textContent = isShowingToken ? 'USD' : tokenSymbol;
+      const tokenPrice = Number(asset?.tokenPriceUsd);
+      let conversionPrice = Number.isFinite(tokenPrice) && tokenPrice > 0 ? tokenPrice : null;
+      if (conversionPrice === null && asset?.source === 'liberdus') {
+        await getNetworkParams();
+        const stabilityFactor = getStabilityFactor();
+        conversionPrice = Number.isFinite(stabilityFactor) && stabilityFactor > 0
+          ? stabilityFactor
+          : null;
+      }
 
-      const isLib = this.receiveBalanceSymbol.textContent === 'LIB';
-
-      await getNetworkParams();
-      const stabilityFactor = getStabilityFactor();
+      if (conversionPrice === null) {
+        this.receiveBalanceSymbol.textContent = tokenSymbol;
+        showToast(`${tokenSymbol}/USD price is unavailable`, 2500, 'warning');
+        return;
+      }
 
       if (this.amountInput && this.amountInput.value.trim() !== '') {
         const currentValue = parseFloat(this.amountInput.value);
         if (!isNaN(currentValue)) {
-          if (!isLib) {
-            // now showing USD, convert LIB -> USD
-            this.amountInput.value = (currentValue * stabilityFactor).toString();
+          if (this.receiveBalanceSymbol.textContent === 'USD') {
+            this.amountInput.value = (currentValue * conversionPrice).toString();
           } else {
-            // now showing LIB, convert USD -> LIB
-            this.amountInput.value = (currentValue / stabilityFactor).toString();
+            this.amountInput.value = (currentValue / conversionPrice).toString();
           }
         }
       }
@@ -30823,6 +30950,16 @@ class ReceiveModal {
 
 // initialize the receive modal
 const receiveModal = new ReceiveModal();
+
+evmAssets.configure({
+  getAccount: () => myAccount,
+  getLiberdusAsset: () => myData?.wallet?.assets?.find((asset) => isLibAsset(asset))
+    || myData?.wallet?.assets?.[0]
+    || null,
+  openSend: (options) => sendAssetFormModal.open(options),
+  openReceive: (options) => receiveModal.open(options),
+  showToast,
+});
 
 /**
  * Failed Transaction Modal
@@ -34822,6 +34959,12 @@ function closeTopModal(topModal){
       break;
     case 'menuModal':
       menuModal.close();
+      break;
+    case 'assetsModal':
+      evmAssets.close(modalId);
+      break;
+    case 'assetDetailsModal':
+      evmAssets.close(modalId);
       break;
     case 'daoModal':
       daoModal.close();
