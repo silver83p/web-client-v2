@@ -2652,11 +2652,21 @@ input[type='file'].form-control::file-selector-button {
 #proposalInfoModal .proposal-review-result-actions,
 #proposalInfoModal .proposal-lifecycle-actions,
 #proposalInfoModal .proposal-vote-actions {
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
   display: grid;
   gap: 8px;
+}
+
+#proposalInfoModal .proposal-committee-actions,
+#proposalInfoModal .proposal-review-result-actions,
+#proposalInfoModal .proposal-lifecycle-actions {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   padding: 10px;
+}
+
+#proposalInfoModal .proposal-vote-actions {
+  border-top: 1px solid var(--border-color);
+  padding: 10px 0 0;
 }
 
 #proposalInfoModal .proposal-lifecycle-action {
@@ -3020,22 +3030,65 @@ input[type='file'].form-control::file-selector-button {
   gap: 8px;
 }
 
-#proposalInfoModal .proposal-vote-options-help,
 #proposalInfoModal .proposal-vote-options-header {
   color: var(--secondary-text-color);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-#proposalInfoModal .proposal-vote-options-header {
   display: grid;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) 92px;
+  line-height: 1.35;
 }
 
 #proposalInfoModal .proposal-vote-options-header span:last-child {
   text-align: center;
+}
+
+#proposalInfoModal .proposal-vote-allocation-label,
+#proposalInfoModal .proposal-vote-requirement-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+#proposalInfoModal .proposal-vote-allocation-label {
+  justify-content: center;
+  justify-self: center;
+}
+
+#proposalInfoModal .proposal-vote-help {
+  flex: 0 0 auto;
+  margin-left: 0;
+  transform: none;
+}
+
+#proposalInfoModal button.proposal-vote-help {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+#proposalInfoModal .proposal-vote-requirements {
+  align-items: baseline;
+  color: var(--secondary-text-color);
+  column-gap: 8px;
+  display: grid;
+  font-size: 12px;
+  grid-template-columns: auto auto;
+  justify-content: end;
+  line-height: 1.35;
+  row-gap: 6px;
+}
+
+#proposalInfoModal .proposal-vote-requirement-label {
+  min-width: 0;
+}
+
+#proposalInfoModal .proposal-vote-requirement-value {
+  color: var(--text-color);
+  text-align: right;
+  white-space: nowrap;
 }
 
 #proposalInfoModal .proposal-vote-option,
@@ -3148,6 +3201,10 @@ input[type='file'].form-control::file-selector-button {
   line-height: 1.35;
   padding: 8px 10px;
   text-align: center;
+}
+
+#proposalInfoModal .proposal-vote-preview--idle {
+  visibility: hidden;
 }
 
 #proposalInfoModal .proposal-vote-preview-message--warning {
