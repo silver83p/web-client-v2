@@ -90,7 +90,6 @@ import {
   DAO_STATES,
   getDaoTransactionMessage,
   getDaoProposalClaimWindow,
-  getDaoProposalMaxStartDelayDays,
   getDaoProposalTimeline,
   getDaoRewardClaimStatus,
   getDaoStateLabel,
@@ -891,9 +890,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Import Contacts Modal
   importContactsModal.load();
 
-  // Call Schedule Modals
+  // Call scheduling and shared date/time picker modals
   callScheduleChoiceModal.load();
-  callScheduleDateModal.load();
+  dateTimePickerModal.load();
 
   // Remove Accounts Modal
   removeAccountsModal.load();
@@ -2996,6 +2995,8 @@ function escapeDaoFormAttribute(value) {
   return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+const DAO_REVIEW_START_MAX_MS = new Date(9999, 11, 31, 23, 59, 0, 0).getTime();
+
 class AddProposalModal {
   load() {
     this.modal = document.getElementById('addProposalModal');
@@ -3011,8 +3012,8 @@ class AddProposalModal {
     this.changesList = document.getElementById('addProposalChangesList');
     this.addChangeButton = document.getElementById('addProposalChangeButton');
     this.emergencySelect = document.getElementById('addProposalEmergency');
-    this.startDelayInput = document.getElementById('addProposalStartDelayDays');
-    this.startDelayLimit = document.getElementById('addProposalStartDelayLimit');
+    this.reviewStartButton = document.getElementById('addProposalReviewStartTime');
+    this.reviewStartHelp = document.getElementById('addProposalReviewStartHelp');
     this.gracePeriodInput = document.getElementById('addProposalGracePeriodMs');
     this.gracePeriodHelp = document.getElementById('addProposalGracePeriodHelp');
     this.gracePeriodLimit = document.getElementById('addProposalGracePeriodLimit');
@@ -3033,6 +3034,7 @@ class AddProposalModal {
       ));
       this.form.addEventListener('input', (event) => this.clearValidationError(event.target));
       this.form.addEventListener('change', (event) => this.clearValidationError(event.target));
+      this.form.addEventListener('click', (event) => this.handleTimingHelpClick(event));
     }
 
     if (this.typeSelect) {
@@ -3042,12 +3044,9 @@ class AddProposalModal {
     }
 
     if (this.emergencySelect) {
-      this.emergencySelect.addEventListener('change', () => {
-        this.renderProposalFee();
-        this.refreshStartDelayLimit();
-      });
+      this.emergencySelect.addEventListener('change', () => this.renderProposalFee());
     }
-    if (this.startDelayInput) this.startDelayInput.addEventListener('input', () => this.renderStartDelayLimit());
+    if (this.reviewStartButton) this.reviewStartButton.addEventListener('click', () => this.openReviewStartPicker());
     if (this.gracePeriodInput) {
       this.gracePeriodInput.addEventListener('input', () => {
         const maxLength = String(DAO_PROPOSAL_GRACE_PERIOD_MAX_MS).length;
@@ -3072,20 +3071,16 @@ class AddProposalModal {
     this.resetConfigCache();
     this.proposalFeeUsdStr = null;
     this.maxGracePeriodMs = null;
-    this.proposalDurations = null;
     if (this.titleInput) this.titleInput.value = '';
     if (this.typeSelect) this.typeSelect.value = 'governance';
     if (this.descriptionInput) this.descriptionInput.value = '';
     if (this.emergencySelect) this.emergencySelect.value = 'false';
-    if (this.startDelayInput) {
-      this.startDelayInput.value = '0';
-      this.startDelayInput.removeAttribute('max');
-    }
+    this.reviewStartTimeMs = 0;
+    this.renderReviewStartTime();
     if (this.gracePeriodInput) {
       this.gracePeriodInput.value = '';
       this.gracePeriodInput.removeAttribute('max');
     }
-    this.refreshStartDelayLimit();
     this.renderOptions(['yes', 'no']);
     this.renderGracePeriodLimitHint();
     this.refreshProposalDefaults();
@@ -3151,33 +3146,6 @@ class AddProposalModal {
       : 'Unavailable';
   }
 
-  refreshStartDelayLimit() {
-    this.maxStartDelayDays = null;
-    if (!this.proposalDurations || !Number.isSafeInteger(this.maxGracePeriodMs)) {
-      this.startDelayInput?.removeAttribute('max');
-      this.renderStartDelayLimit();
-      return;
-    }
-
-    try {
-      this.maxStartDelayDays = getDaoProposalMaxStartDelayDays(getTransactionTimestamp(), {
-        ...this.proposalDurations,
-        emergency: this.emergencySelect?.value === 'true',
-        gracePeriod: this.maxGracePeriodMs,
-      });
-      if (this.startDelayInput) this.startDelayInput.max = String(this.maxStartDelayDays);
-    } catch (error) {
-      console.warn('Could not calculate the DAO proposal review-start limit:', error);
-      this.startDelayInput?.removeAttribute('max');
-    }
-
-    this.renderStartDelayLimit();
-  }
-
-  renderStartDelayLimit() {
-    this.renderMaximumWarning(this.startDelayInput, this.startDelayLimit, `Maximum: ${this.maxStartDelayDays} days`);
-  }
-
   renderMaximumWarning(input, warning, message) {
     if (!warning) return;
     warning.textContent = message;
@@ -3187,7 +3155,7 @@ class AddProposalModal {
   renderGracePeriodLimitHint() {
     const maximumSummary = this.maxGracePeriodMs === null
       ? ''
-      : `${this.maxGracePeriodMs} ms (${formatDaoDurationEstimate(this.maxGracePeriodMs)})`;
+      : `${formatDaoDurationEstimate(this.maxGracePeriodMs)} (${this.maxGracePeriodMs} ms)`;
     const currentValue = String(this.gracePeriodInput?.value ?? '').trim();
     const currentSummary = currentValue ? formatDaoDurationEstimate(currentValue) : '';
     if (this.gracePeriodInput) {
@@ -3208,11 +3176,10 @@ class AddProposalModal {
     this.renderProposalFee();
 
     try {
-      const { proposalFeeUsdStr, maxGracePeriodMs, proposalDurations } = await this.loadDaoProposalDefaults();
+      const { proposalFeeUsdStr, maxGracePeriodMs } = await this.loadDaoProposalDefaults();
       if (!this.isActive() || requestId !== this.proposalDefaultsRequestId) return;
       this.proposalFeeUsdStr = proposalFeeUsdStr;
       this.maxGracePeriodMs = maxGracePeriodMs;
-      this.proposalDurations = proposalDurations;
       if (this.gracePeriodInput) {
         this.gracePeriodInput.max = String(maxGracePeriodMs);
         if (!String(this.gracePeriodInput.value || '').trim()) {
@@ -3220,22 +3187,19 @@ class AddProposalModal {
         }
       }
       this.renderProposalFee();
-      this.refreshStartDelayLimit();
       this.renderGracePeriodLimitHint();
     } catch (error) {
-      console.warn('Could not refresh DAO proposal defaults:', error);
+      console.warn('Could not refresh DAO proposal fee:', error);
       if (!this.isActive() || requestId !== this.proposalDefaultsRequestId) return;
       this.proposalFeeUsdStr = '';
       this.maxGracePeriodMs = null;
-      this.proposalDurations = null;
       if (this.gracePeriodInput) {
         this.gracePeriodInput.value = '';
         this.gracePeriodInput.removeAttribute('max');
       }
       this.renderProposalFee();
-      this.refreshStartDelayLimit();
       this.renderGracePeriodLimitHint();
-      showToast('Could not refresh DAO proposal defaults', 2500, 'warning');
+      showToast('Could not refresh DAO proposal fee', 2500, 'warning');
     }
   }
 
@@ -3257,7 +3221,7 @@ class AddProposalModal {
   clearValidationError(target) {
     const highlight = this.getValidationHighlight(target);
     highlight?.classList.remove('dao-form-error');
-    if (target?.matches?.('input, select, textarea')) {
+    if (target?.matches?.('input, select, textarea, button')) {
       target.removeAttribute('aria-invalid');
     }
   }
@@ -3273,7 +3237,7 @@ class AddProposalModal {
       highlight.classList.add('dao-form-error');
       highlight.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-    if (target?.matches?.('input, select, textarea')) {
+    if (target?.matches?.('input, select, textarea, button')) {
       target.setAttribute('aria-invalid', 'true');
       target.focus({ preventScroll: true });
     }
@@ -3570,25 +3534,67 @@ class AddProposalModal {
     return n;
   }
 
-  getDaysValue(input, label) {
-    const n = this.getIntegerValue(input, label);
-    if (!Number.isSafeInteger(this.maxStartDelayDays) || this.maxStartDelayDays < 0) {
-      throw this.createValidationError(`${label} maximum is not available`, input);
-    }
-    if (n > this.maxStartDelayDays) {
-      throw this.createValidationError(`${label} must not exceed ${this.maxStartDelayDays} days`, input);
-    }
+  openReviewStartPicker() {
+    dateTimePickerModal.open({
+      onDone: (timestamp) => {
+        if (timestamp === null) return;
+        this.reviewStartTimeMs = timestamp;
+        this.renderReviewStartTime();
+        this.clearValidationError(this.reviewStartButton);
+      },
+      title: 'Choose Review Start',
+      initialTimestamp: this.reviewStartTimeMs,
+      minTimestamp: getTransactionTimestamp(),
+      maxTimestamp: DAO_REVIEW_START_MAX_MS,
+      allowImmediate: true,
+      selectionFormatter: (timestamp) => {
+        const delayMs = Math.max(0, timestamp - getTransactionTimestamp());
+        return {
+          preview: `Delay: ${formatDaoDurationSummary(delayMs)}`,
+          submitLabel: `Submit: ${delayMs} ms delay`,
+        };
+      },
+      minError: 'Review start time must be in the future',
+      maxError: 'Review start time must be before the year 10000',
+    });
+  }
 
-    const delayMs = n * DAO_PROPOSAL_DAY_MS;
-    if (!Number.isSafeInteger(delayMs)) {
-      throw this.createValidationError(`${label} is too large`, input);
-    }
+  handleTimingHelpClick(event) {
+    const helpButton = event.target?.closest?.('[data-dao-timing-help]');
+    if (!helpButton) return;
 
-    const startTime = getTransactionTimestamp() + delayMs;
-    if (!Number.isSafeInteger(startTime) || Number.isNaN(new Date(startTime).getTime())) {
-      throw this.createValidationError(`${label} produces an invalid date`, input);
+    event.preventDefault();
+    event.stopPropagation();
+    showToast(helpButton.title, 0, 'info');
+  }
+
+  renderReviewStartTime() {
+    if (!this.reviewStartButton) return;
+    const delayMs = this.reviewStartTimeMs > 0
+      ? Math.max(0, this.reviewStartTimeMs - getTransactionTimestamp())
+      : 0;
+    this.reviewStartButton.textContent = String(delayMs);
+    this.reviewStartButton.title = this.reviewStartTimeMs > 0
+      ? formatDaoTimestamp(this.reviewStartTimeMs)
+      : 'Start now';
+    if (this.reviewStartHelp) {
+      this.reviewStartHelp.textContent = `Delay: ${formatDaoDurationEstimate(delayMs)}`;
     }
-    return n;
+  }
+
+  getReviewStartTimeMs() {
+    const timestamp = this.reviewStartTimeMs;
+    if (timestamp === 0) return 0;
+    if (!Number.isSafeInteger(timestamp) || Number.isNaN(new Date(timestamp).getTime())) {
+      throw this.createValidationError('Review start time must be a valid date and time', this.reviewStartButton);
+    }
+    if (timestamp < getTransactionTimestamp()) {
+      throw this.createValidationError('Review start time must be in the future', this.reviewStartButton);
+    }
+    if (timestamp > DAO_REVIEW_START_MAX_MS) {
+      throw this.createValidationError('Review start time must be before the year 10000', this.reviewStartButton);
+    }
+    return timestamp;
   }
 
   getMillisecondsValue(input, label, maximumMs) {
@@ -3686,7 +3692,7 @@ class AddProposalModal {
     try {
       const options = this.getValidatedOptions();
       const changes = this.getValidatedChanges();
-      const startDelayDays = this.getDaysValue(this.startDelayInput, 'Review start delay');
+      const reviewStartTimeMs = this.getReviewStartTimeMs();
       const gracePeriodMs = this.getMillisecondsValue(this.gracePeriodInput, 'Grace period', this.maxGracePeriodMs);
       const emergency = this.emergencySelect?.value === 'true';
       if (!emergency && !this.proposalFeeUsdStr) {
@@ -3702,7 +3708,7 @@ class AddProposalModal {
         options,
         changes,
         proposalFeeUsdStr: this.proposalFeeUsdStr,
-        startDelayDays,
+        reviewStartTimeMs,
         gracePeriodMs,
         maxGracePeriodMs: this.maxGracePeriodMs,
       });
@@ -3717,8 +3723,8 @@ const addProposalModal = new AddProposalModal();
 
 function formatDaoDurationSummary(ms) {
   const n = Number(ms || 0);
-  if (!n) return '0 ms (now)';
-  return `${n} ms (${formatDaoDurationEstimate(n)})`;
+  if (!n) return '0 sec (0 ms)';
+  return `${formatDaoDurationEstimate(n)} (${n} ms)`;
 }
 
 function formatDaoDurationEstimate(ms) {
@@ -3740,11 +3746,11 @@ function formatDaoDurationEstimate(ms) {
     if (value === 0) continue;
     parts.push(`${value} ${unit}${unit === 'day' && value !== 1 ? 's' : ''}`);
     remainingMs -= value * unitMs;
-    if (parts.length === 2) break;
+    if (parts.length === 3) break;
   }
 
   if (parts.length === 0) return `${n} ms`;
-  return `${remainingMs > 0 ? 'about ' : ''}${parts.join(' ')}`;
+  return parts.join(' ');
 }
 
 function renderDaoProposalHeading(proposal) {
@@ -4000,6 +4006,9 @@ class ConfirmProposalModal {
     }
 
     const tx = draft.transaction;
+    const reviewDelayIfSubmittedNowMs = draft.reviewStartTimeMs > 0
+      ? Math.max(0, draft.reviewStartTimeMs - getTransactionTimestamp())
+      : 0;
     this.setTitle('Review Proposal');
     this.content.innerHTML = [
       renderDaoProposalHeading(tx),
@@ -4011,7 +4020,10 @@ class ConfirmProposalModal {
         ['Initial state', 'Review after signing'],
       ]),
       renderDaoProposalSection('Review Timeline', [
-        ['Review starts', formatDaoDurationSummary(draft.startDelayMs)],
+        ['Scheduled review start', draft.reviewStartTimeMs
+          ? formatDaoTimestamp(draft.reviewStartTimeMs)
+          : 'Start now'],
+        ['Time until start if submitted now', formatDaoDurationSummary(reviewDelayIfSubmittedNowMs)],
         ['Grace period', formatDaoDurationSummary(tx.gracePeriod)],
       ]),
       '<p class="proposal-info-muted">The proposal fee is derived from DAO params and seeds the voter reward pool for regular proposals. Signing submits this proposal for review.</p>',
@@ -8815,11 +8827,7 @@ class ClockTimer {
    * @returns {string} Formatted current time string
    */
   formatCurrentTime() {
-    const now = getCorrectedTimestamp();
-    const localMs = now - timeSkew;
-    const date = new Date(localMs);
-    
-    return date.toLocaleTimeString(undefined, {
+    return new Date().toLocaleTimeString(undefined, {
       hour: 'numeric',
       minute: '2-digit',
       second: '2-digit',
@@ -13622,7 +13630,7 @@ function markConnectivityDependentElements() {
     // Call schedule modals
     '#callScheduleNowBtn',
     '#openCallScheduleDateBtn',
-    '#confirmCallSchedule',
+    '#confirmDateTimePicker',
 
     // Message context menu (disable all except 'Delete for me' and 'Copy' and 'Join')
     '.message-context-menu .context-menu-option:not([data-action="delete"]):not([data-action="copy"]):not([data-action="join"]):not([data-action="location"])',
@@ -24753,7 +24761,7 @@ class ChatModal {
 
   /**
    * Opens a lightweight chooser to select calling now or scheduling for later.
-   * Returns 0 for immediate call or a corrected future timestamp (ms since epoch) using timeSkew.
+   * Returns 0 for immediate call or an absolute future Unix timestamp in milliseconds.
    * Returns null if user cancels.
    * @returns {Promise<number|null>}
    */
@@ -24764,7 +24772,7 @@ class ChatModal {
           if (choice === null) return resolve(null);
           if (choice === 'now') return resolve(0);
           // schedule
-          callScheduleDateModal.open((dateTs) => {
+          openCallScheduleDatePicker((dateTs) => {
             if (dateTs === null) {
               // back to choice
               return openChoice();
@@ -24826,8 +24834,7 @@ class ChatModal {
         if (chosenCallTime === 0) {
           window.open(callUrl + `${callUrlParams}"${myAccount.username}"`, '_blank');
         } else {
-          const when = new Date(chosenCallTime - timeSkew); // convert back to local wall-clock for display
-          showToast(`Call scheduled for ${when.toLocaleString()}`, 3000, 'success');
+          showToast(`Call scheduled for ${this.formatLocalDateTime(chosenCallTime)}`, 3000, 'success');
         }
       }
       
@@ -24885,7 +24892,7 @@ class ChatModal {
       const callObj = {
         type: 'call',
         url: meetUrl,
-        // callTime: 0 for immediate, or corrected future timestamp (ms since epoch)
+        // callTime: 0 for immediate, or an absolute future Unix timestamp in milliseconds
         callTime: normalizedCallTime
       };
 
@@ -25478,9 +25485,8 @@ class ChatModal {
   }
 
   formatLocalDateTime(ts) {
-    const localMs = (typeof ts === 'number' ? ts : Number(ts)) - timeSkew;
-    const minute = 60 * 1000;
-    const roundedMs = Math.round(localMs / minute) * minute;
+    const minuteMs = 60 * 1000;
+    const roundedMs = Math.round(Number(ts) / minuteMs) * minuteMs;
     return new Date(roundedMs).toLocaleString(undefined, {
       year: 'numeric',
       month: 'numeric',
@@ -27686,11 +27692,12 @@ function roundToMinuteMs(ms) {
   return Math.round(ms / 60000) * 60000;
 }
 
-function formatTimeInTimeZone(ms, tz) {
+function formatTimeInTimeZone(ms, tz, withDate = false) {
   if (!tz || !ms) return '';
   try {
     const fmt = new Intl.DateTimeFormat(undefined, {
       timeZone: tz,
+      ...(withDate ? { year: 'numeric', month: 'short', day: '2-digit' } : {}),
       hour: '2-digit',
       minute: '2-digit',
       timeZoneName: 'short'
@@ -27699,6 +27706,10 @@ function formatTimeInTimeZone(ms, tz) {
   } catch (e) {
     return '';
   }
+}
+
+function formatDateTimeInTimeZone(ms, tz) {
+  return formatTimeInTimeZone(ms, tz, true);
 }
 
 /**
@@ -27790,119 +27801,99 @@ class CallScheduleChoiceModal {
 }
 
 /**
- * Call Schedule Date Modal
- * Lets user pick date/time and submit
+ * Shared date/time picker used by scheduling flows.
  */
-class CallScheduleDateModal {
+class DateTimePickerModal {
   constructor() {
     this.modal = null;
+    this.title = null;
     this.form = null;
     this.dateInput = null;
     this.hourSelect = null;
     this.minuteSelect = null;
     this.ampmSelect = null;
-    this.recipientTime = null;
+    this.preview = null;
     this.submitBtn = null;
+    this.immediateBtn = null;
     this.cancelBtn = null;
     this.closeBtn = null;
-    this.onDone = null; // function(timestamp|null)
-    this.DEFAULT_OFFSET_MINUTES = 0;
-    this.maxDaysOut = 400;
-    this.clockTimer = new ClockTimer('callScheduleCurrentTime');
+    this.options = null;
+    this.returnFocus = null;
+    this.clockTimer = new ClockTimer('dateTimePickerCurrentTime');
     this._onCancel = this._onCancel.bind(this);
     this._onInputChange = this._onInputChange.bind(this);
   }
 
   load() {
-    this.modal = document.getElementById('callScheduleDateModal');
+    this.modal = document.getElementById('dateTimePickerModal');
     if (!this.modal) return;
-    this.form = document.getElementById('callScheduleDateForm');
-    this.dateInput = document.getElementById('callScheduleDate');
-    this.hourSelect = document.getElementById('callScheduleHour');
-    this.minuteSelect = document.getElementById('callScheduleMinute');
-    this.ampmSelect = document.getElementById('callScheduleAmPm');
-    this.recipientTime = document.getElementById('callScheduleConvertedTime');
-    this.submitBtn = document.getElementById('confirmCallSchedule');
-    this.cancelBtn = document.getElementById('cancelCallScheduleDate');
-    this.closeBtn = document.getElementById('closeCallScheduleDateModal');
+    this.title = document.getElementById('dateTimePickerModalTitle');
+    this.form = document.getElementById('dateTimePickerForm');
+    this.dateInput = document.getElementById('dateTimePickerDate');
+    this.hourSelect = document.getElementById('dateTimePickerHour');
+    this.minuteSelect = document.getElementById('dateTimePickerMinute');
+    this.ampmSelect = document.getElementById('dateTimePickerAmPm');
+    this.preview = document.getElementById('dateTimePickerPreview');
+    this.submitBtn = document.getElementById('confirmDateTimePicker');
+    this.immediateBtn = document.getElementById('clearDateTimePicker');
+    this.cancelBtn = document.getElementById('cancelDateTimePicker');
+    this.closeBtn = document.getElementById('closeDateTimePickerModal');
 
-    const wrappedConfirm = withButtonCooldown(this.submitBtn, BUTTON_COOLDOWN_MS, null, async () => {
-      this._submitValue();
-    });
+    this._populateTimeOptions();
+
+    const wrappedConfirm = withButtonCooldown(this.submitBtn, BUTTON_COOLDOWN_MS, null, async () => this._submitValue());
     if (this.form) this.form.addEventListener('submit', wrappedConfirm);
-    if (this.submitBtn) this.submitBtn.addEventListener('click', wrappedConfirm);
+    if (this.immediateBtn) this.immediateBtn.addEventListener('click', () => this._closeWith(0));
     if (this.cancelBtn) this.cancelBtn.addEventListener('click', this._onCancel);
     if (this.closeBtn) this.closeBtn.addEventListener('click', this._onCancel);
-
-    // Live update of converted time preview (single listener for all inputs)
     if (this.form) this.form.addEventListener('change', this._onInputChange);
   }
 
-  open(onDone) {
-    this.onDone = onDone;
-    const defaultDate = this._getDefaultDate();
-    // Populate hours 1-12 (12-hour format)
-    if (this.hourSelect) {
-      this.hourSelect.innerHTML = '';
-      for (let h = 1; h <= 12; h++) {
-        const opt = document.createElement('option');
-        opt.value = this._pad2(h);
-        opt.textContent = this._pad2(h);
-        this.hourSelect.appendChild(opt);
-      }
-      const hour24 = defaultDate.getHours();
-      const hour12 = ((hour24 % 12) === 0) ? 12 : (hour24 % 12);
-      this.hourSelect.value = this._pad2(hour12);
-    }
-    // Set AM/PM
-    if (this.ampmSelect) {
-      const hour24 = defaultDate.getHours();
-      this.ampmSelect.value = hour24 >= 12 ? 'PM' : 'AM';
-    }
-    // Populate 5-minute list starting with 00, going to 55
-    if (this.minuteSelect) {
-      this.minuteSelect.innerHTML = '';
-      const defaultMinute = defaultDate.getMinutes();
-      
-      // Always populate 00, 05, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
-      for (let i = 0; i < 12; i++) {
-        const m = i * 5;
-        const opt = document.createElement('option');
-        opt.value = this._pad2(m);
-        opt.textContent = this._pad2(m);
-        this.minuteSelect.appendChild(opt);
-      }
-      
-      // Pre-select the closest future time (round up to next 5-minute interval)
-      const roundedMinute = Math.ceil(defaultMinute / 5) * 5;
-      this.minuteSelect.value = this._pad2(roundedMinute % 60);
-      
-      // Handle hour rollover when minute rounds to 60
-      if (roundedMinute === 60 && this.hourSelect && this.ampmSelect) {
-        const currentHour12 = parseInt(this.hourSelect.value);
-        const isAM = this.ampmSelect.value === 'AM';
-        
-        if (currentHour12 === 12) {
-          this.hourSelect.value = '01';
-          this.ampmSelect.value = isAM ? 'PM' : 'AM';
-        } else {
-          this.hourSelect.value = this._pad2(currentHour12 + 1);
-        }
-      }
-    }
-    // Set local date input
-    if (this.dateInput) {
-      const max = new Date();
-      max.setDate(max.getDate() + this.maxDaysOut);
-      this.dateInput.max = this._formatDateInput(max);
+  open({
+    onDone,
+    title = 'Select Date and Time',
+    initialTimestamp = 0,
+    minTimestamp = 0,
+    maxTimestamp = 0,
+    allowImmediate = false,
+    selectionFormatter = null,
+    minError = 'Please choose a date and time in the future',
+    maxError = 'Selected date and time is too far in the future',
+  }) {
+    if (typeof onDone !== 'function') throw new Error('Date/time picker callback is required');
+    this.returnFocus = document.activeElement;
+    this.options = {
+      onDone,
+      minTimestamp,
+      maxTimestamp,
+      selectionFormatter,
+      minError,
+      maxError,
+    };
 
-      this.dateInput.value = this._formatDateInput(defaultDate);
+    if (this.title) this.title.textContent = title;
+    if (this.immediateBtn) this.immediateBtn.classList.toggle('hidden', !allowImmediate);
+
+    const currentMinTimestamp = typeof minTimestamp === 'function' ? minTimestamp() : minTimestamp;
+    const defaultTimestamp = initialTimestamp > 0
+      ? initialTimestamp
+      : Math.max(Date.now(), currentMinTimestamp);
+    const defaultDate = new Date(this._roundUpToNextFiveMinutes(defaultTimestamp));
+    this._setFormValue(defaultDate);
+
+    if (this.dateInput) {
+      this.dateInput.min = currentMinTimestamp > 0
+        ? this._formatDateInput(new Date(currentMinTimestamp))
+        : '';
+      this.dateInput.max = maxTimestamp > 0
+        ? this._formatDateInput(new Date(maxTimestamp))
+        : '';
     }
+
     this.modal?.classList.add('active');
     this.clockTimer.start();
-
-    // Render the initial converted time preview
-    this._updateConvertedTimePreview();
+    this._updatePreview();
+    requestAnimationFrame(() => this.dateInput?.focus());
   }
 
   _onCancel() {
@@ -27910,10 +27901,33 @@ class CallScheduleDateModal {
   }
 
   _onInputChange() {
-    this._updateConvertedTimePreview();
+    this._updatePreview();
   }
 
-  _getSelectedCorrectedTimestamp() {
+  _populateTimeOptions() {
+    if (this.hourSelect) {
+      for (let hour = 1; hour <= 12; hour++) {
+        this.hourSelect.add(new Option(this._pad2(hour), this._pad2(hour)));
+      }
+    }
+    if (this.minuteSelect) {
+      for (let minute = 0; minute < 60; minute += 5) {
+        this.minuteSelect.add(new Option(this._pad2(minute), this._pad2(minute)));
+      }
+    }
+  }
+
+  _setFormValue(date) {
+    if (this.dateInput) this.dateInput.value = this._formatDateInput(date);
+    if (this.hourSelect) {
+      const hour12 = date.getHours() % 12 || 12;
+      this.hourSelect.value = this._pad2(hour12);
+    }
+    if (this.minuteSelect) this.minuteSelect.value = this._pad2(date.getMinutes());
+    if (this.ampmSelect) this.ampmSelect.value = date.getHours() >= 12 ? 'PM' : 'AM';
+  }
+
+  _getSelectedTimestamp() {
     if (!this.dateInput || !this.hourSelect || !this.minuteSelect || !this.ampmSelect) return 0;
     const dateVal = this.dateInput.value;
     const hourVal = this.hourSelect.value;
@@ -27928,93 +27942,55 @@ class CallScheduleDateModal {
 
     const hour24 = this._convert12To24(hour12, ampmVal);
     const { year, month, day } = parsed;
-    const localMs = new Date(year, month - 1, day, hour24, minute, 0, 0).getTime();
-    return localMs + timeSkew;
+    const selectedDate = new Date(year, month - 1, day, hour24, minute, 0, 0);
+    if (
+      selectedDate.getFullYear() !== year
+      || selectedDate.getMonth() !== month - 1
+      || selectedDate.getDate() !== day
+      || selectedDate.getHours() !== hour24
+      || selectedDate.getMinutes() !== minute
+    ) {
+      return NaN;
+    }
+    return selectedDate.getTime();
   }
 
-  _updateConvertedTimePreview() {
-    if (!this.recipientTime) return;
-
-    const tz = getActiveChatContactTimeZone();
-    const tsRaw = this._getSelectedCorrectedTimestamp();
-    // Display-only: stabilize at the chosen minute even if timeSkew includes seconds.
-    const ts = tsRaw ? roundToMinuteMs(tsRaw) : 0;
-
-    if (!tz || !ts) {
-      this.recipientTime.textContent = '';
-      this.recipientTime.style.display = 'none';
-      return;
-    }
-
-    const s = (() => {
-      if (!tz || !ts) return '';
-      try {
-        const fmt = new Intl.DateTimeFormat(undefined, {
-          timeZone: tz,
-          year: 'numeric',
-          month: 'short',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZoneName: 'short'
-        });
-        return fmt.format(new Date(ts));
-      } catch (e) {
-        return '';
-      }
-    })();
-
-    if (!s) {
-      this.recipientTime.textContent = '';
-      this.recipientTime.style.display = 'none';
-      return;
-    }
-
-    this.recipientTime.textContent = `Recipient time: ${s}`;
-    this.recipientTime.style.display = '';
+  _updatePreview() {
+    if (!this.preview) return;
+    const timestamp = this._getSelectedTimestamp();
+    const selection = timestamp && typeof this.options?.selectionFormatter === 'function'
+      ? this.options.selectionFormatter(timestamp)
+      : null;
+    const preview = selection?.preview || '';
+    this.preview.textContent = preview;
+    this.preview.style.display = preview ? '' : 'none';
+    if (this.submitBtn) this.submitBtn.textContent = selection?.submitLabel || 'Submit';
   }
 
   _submitValue() {
-    if (!this.dateInput || !this.hourSelect || !this.minuteSelect || !this.ampmSelect) return;
-    const dateVal = this.dateInput.value;
-    const hourVal = this.hourSelect.value;
-    const minuteVal = this.minuteSelect.value;
-    const ampmVal = this.ampmSelect.value;
-    if (!dateVal || hourVal === '' || minuteVal === '') {
-      showToast('Please pick a date and time', 0, 'error');
+    const timestamp = this._getSelectedTimestamp();
+    if (Number.isNaN(timestamp)) {
+      showToast('That local time does not exist. Choose another time.', 0, 'error');
       return;
     }
-    const parsed = this._parseDateInput(dateVal);
-    const hour12 = Number(hourVal);
-    const minute = Number(minuteVal);
-    if (!parsed || Number.isNaN(hour12) || Number.isNaN(minute)) {
+    if (!timestamp || !Number.isSafeInteger(timestamp)) {
       showToast('Invalid date/time selected', 0, 'error');
       return;
     }
-    const hour24 = this._convert12To24(hour12, ampmVal);
-    const { year, month, day } = parsed;
-    const localMs = new Date(year, month - 1, day, hour24, minute, 0, 0).getTime();
-    const corrected = localMs + timeSkew;
-    const nowCorrected = getCorrectedTimestamp();
-    const minAllowed = nowCorrected - 5 * 60 * 1000;
-
-    // Max 400 days out
-    const d = new Date(nowCorrected);
-    d.setDate(d.getDate() + this.maxDaysOut);
-    const maxAllowed = d.getTime();
-
-    if (corrected < minAllowed) {
-      showToast('Please choose a date or time in the future', 0, 'error');
+    const minTimestamp = typeof this.options?.minTimestamp === 'function'
+      ? this.options.minTimestamp()
+      : this.options?.minTimestamp;
+    if (minTimestamp > 0 && timestamp < minTimestamp) {
+      showToast(this.options.minError, 0, 'error');
       return;
     }
-    if (corrected > maxAllowed) {
-      showToast(`Please choose a date within the next ${this.maxDaysOut} days`, 0, 'error');
+    if (this.options?.maxTimestamp > 0 && timestamp > this.options.maxTimestamp) {
+      showToast(this.options.maxError, 0, 'error');
       return;
     }
-    this._closeWith(corrected);
+    this._closeWith(timestamp);
   }
 
-  // Helpers
   _pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
   _formatDateInput(d) {
@@ -28022,23 +27998,8 @@ class CallScheduleDateModal {
   }
 
   _roundUpToNextFiveMinutes(ms) {
-    const d = new Date(ms);
-    d.setSeconds(0, 0);
-    const minutes = d.getMinutes();
-    const rounded = Math.ceil(minutes / 5) * 5;
-    if (rounded === 60) {
-      d.setHours(d.getHours() + 1, 0, 0, 0);
-    } else {
-      d.setMinutes(rounded, 0, 0);
-    }
-    return d.getTime();
-  }
-
-  _getDefaultDate() {
-    const nowMs = Date.now();
-    const offsetMs = this.DEFAULT_OFFSET_MINUTES * 60 * 1000;
-    const defaultMs = this._roundUpToNextFiveMinutes(nowMs + offsetMs);
-    return new Date(defaultMs);
+    const intervalMs = 5 * 60 * 1000;
+    return Math.ceil(ms / intervalMs) * intervalMs;
   }
 
   _parseDateInput(val) {
@@ -28058,20 +28019,42 @@ class CallScheduleDateModal {
   _closeWith(value) {
     this.clockTimer.stop();
     if (this.modal) this.modal.classList.remove('active');
-    const cb = this.onDone;
-    this.onDone = null;
-
-    // Hide converted time preview when closing
-    if (this.recipientTime) {
-      this.recipientTime.textContent = '';
-      this.recipientTime.style.display = 'none';
+    const onDone = this.options?.onDone;
+    const returnFocus = this.returnFocus;
+    this.options = null;
+    this.returnFocus = null;
+    if (this.preview) {
+      this.preview.textContent = '';
+      this.preview.style.display = 'none';
     }
-    if (cb) cb(value);
+    if (onDone) onDone(value);
+    returnFocus?.focus();
   }
 }
 
+const CALL_SCHEDULE_MAX_DAYS = 400;
 const callScheduleChoiceModal = new CallScheduleChoiceModal();
-const callScheduleDateModal = new CallScheduleDateModal();
+const dateTimePickerModal = new DateTimePickerModal();
+
+function openCallScheduleDatePicker(onDone) {
+  const now = getCorrectedTimestamp();
+  const maximum = new Date(now);
+  maximum.setDate(maximum.getDate() + CALL_SCHEDULE_MAX_DAYS);
+  const recipientTimeZone = getActiveChatContactTimeZone();
+
+  dateTimePickerModal.open({
+    onDone,
+    title: 'Schedule Call',
+    initialTimestamp: now,
+    minTimestamp: () => getCorrectedTimestamp() - 5 * 60 * 1000,
+    maxTimestamp: maximum.getTime(),
+    selectionFormatter: (timestamp) => {
+      const formatted = formatDateTimeInTimeZone(roundToMinuteMs(timestamp), recipientTimeZone);
+      return { preview: formatted ? `Recipient time: ${formatted}` : '' };
+    },
+    maxError: `Please choose a date within the next ${CALL_SCHEDULE_MAX_DAYS} days`,
+  });
+}
 
 /**
  * Failed Message Context Menu Class

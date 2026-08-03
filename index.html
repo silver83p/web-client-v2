@@ -526,13 +526,32 @@
                 <label>Timing</label>
                 <div class="dao-form-grid dao-form-grid--timing">
                   <div class="form-group">
-                    <label for="addProposalStartDelayDays">Review Starts (days)</label>
-                    <input id="addProposalStartDelayDays" class="form-control" type="number" min="0" step="1" value="0" inputmode="numeric" required />
-                    <div class="dao-form-help">Days from submission. 0 means now.</div>
-                    <div class="dao-form-help dao-form-limit hidden" id="addProposalStartDelayLimit"></div>
+                    <div class="dao-form-label-with-help">
+                      <label for="addProposalReviewStartTime">Review Delay (ms)</label>
+                      <button
+                        type="button"
+                        class="toll-info-icon dao-form-tooltip"
+                        data-icon="info"
+                        data-dao-timing-help
+                        title="How long to wait before proposal review starts. Select a date and time, or use 0 to start immediately."
+                        aria-label="About Review Delay"
+                      ></button>
+                    </div>
+                    <button id="addProposalReviewStartTime" class="form-control dao-review-start-button" type="button" aria-haspopup="dialog" aria-controls="dateTimePickerModal">0</button>
+                    <div class="dao-form-help" id="addProposalReviewStartHelp">Delay: 0 sec</div>
                   </div>
                   <div class="form-group">
-                    <label for="addProposalGracePeriodMs">Grace Period (ms)</label>
+                    <div class="dao-form-label-with-help">
+                      <label for="addProposalGracePeriodMs">Grace Period (ms)</label>
+                      <button
+                        type="button"
+                        class="toll-info-icon dao-form-tooltip"
+                        data-icon="info"
+                        data-dao-timing-help
+                        title="How long to wait after voting ends before the proposal can be applied. Cannot exceed the DAO grace duration."
+                        aria-label="About Grace Period"
+                      ></button>
+                    </div>
                     <input id="addProposalGracePeriodMs" class="form-control" type="number" min="0" step="1" inputmode="numeric" placeholder="Loading maximum..." required />
                     <div class="dao-form-help" id="addProposalGracePeriodHelp">Estimate: loading...</div>
                     <div class="dao-form-help dao-form-limit hidden" id="addProposalGracePeriodLimit"></div>
@@ -1550,35 +1569,36 @@
         <a class="last-item" href="#"></a>
       </div>
 
-      <!-- Call Schedule Date Modal -->
-      <div class="modal modal-dialog" id="callScheduleDateModal">
+      <!-- Shared Date and Time Picker Modal -->
+      <div class="modal modal-dialog" id="dateTimePickerModal">
         <div class="dialog-box-content">
           <div class="modal-header">
-            <button class="back-button" id="closeCallScheduleDateModal"></button>
-            <div class="modal-title">Schedule Call</div>
-            <div class="current-time" id="callScheduleCurrentTime" aria-label="Current time"></div>
+            <button class="back-button" id="closeDateTimePickerModal"></button>
+            <div class="modal-title" id="dateTimePickerModalTitle">Select Date and Time</div>
+            <div class="current-time" id="dateTimePickerCurrentTime" aria-label="Current time"></div>
           </div>
           <div class="modal-content">
             <div class="form-container call-invite-modal-container">
-              <form id="callScheduleDateForm" class="form--narrow">
+              <form id="dateTimePickerForm" class="form--narrow">
                 <div class="form-group">
-                  <label for="callScheduleDate">Select date and time</label>
-                  <div class="call-schedule-form-row">
-                    <input id="callScheduleDate" type="date" class="form-control call-schedule-date-input" />
+                  <label for="dateTimePickerDate">Select date and time</label>
+                  <div class="date-time-picker-row">
+                    <input id="dateTimePickerDate" type="date" class="form-control date-time-picker-date-input" />
                   </div>
-                  <div class="call-schedule-form-row">
-                    <select id="callScheduleHour" class="form-control call-schedule-time-select"></select>
-                    <select id="callScheduleMinute" class="form-control call-schedule-time-select"></select>
-                    <select id="callScheduleAmPm" class="form-control call-schedule-time-select">
+                  <div class="date-time-picker-row">
+                    <select id="dateTimePickerHour" class="form-control date-time-picker-time-select" aria-label="Hour"></select>
+                    <select id="dateTimePickerMinute" class="form-control date-time-picker-time-select" aria-label="Minute"></select>
+                    <select id="dateTimePickerAmPm" class="form-control date-time-picker-time-select" aria-label="AM or PM">
                       <option value="AM">AM</option>
                       <option value="PM">PM</option>
                     </select>
                   </div>
                 </div>
                 <div class="form-actions">
-                  <div class="contact-time" id="callScheduleConvertedTime" aria-label="Recipient time"></div>
-                  <button type="submit" id="confirmCallSchedule" class="btn btn--primary btn--pill btn--full">Submit</button>
-                  <button type="button" id="cancelCallScheduleDate" class="btn btn--secondary btn--pill btn--full">Cancel</button>
+                  <div class="contact-time" id="dateTimePickerPreview" aria-label="Selected time"></div>
+                  <button type="submit" id="confirmDateTimePicker" class="btn btn--primary btn--pill btn--full">Submit</button>
+                  <button type="button" id="clearDateTimePicker" class="btn btn--primary btn--pill btn--full hidden">No delay: 0 ms</button>
+                  <button type="button" id="cancelDateTimePicker" class="btn btn--secondary btn--pill btn--full">Cancel</button>
                 </div>
               </form>
             </div>

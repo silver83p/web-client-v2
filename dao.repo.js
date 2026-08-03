@@ -233,6 +233,14 @@ function normalizeDaoDraftGracePeriodMs(value, maxGracePeriodMs) {
   return gracePeriodMs;
 }
 
+function normalizeDaoDraftReviewStartTime(value) {
+  const startTime = normalizeDaoDraftInteger(value, 'Review start time', 'milliseconds');
+  if (startTime > 0 && Number.isNaN(new Date(startTime).getTime())) {
+    throw new Error('Review start time must be a valid date');
+  }
+  return startTime;
+}
+
 function getDaoProposalLifecycleDurationMs({
   emergency = false,
   reviewDuration,
@@ -250,17 +258,6 @@ function getDaoProposalLifecycleDurationMs({
     + Math.max(claimDurationMs, gracePeriodMs);
   if (!Number.isSafeInteger(durationMs)) throw new Error('DAO proposal lifecycle duration is too large');
   return durationMs;
-}
-
-export function getDaoProposalMaxStartDelayDays(timestamp, proposalTiming) {
-  const txTimestamp = normalizeDaoDraftInteger(timestamp, 'DAO proposal timestamp', 'milliseconds');
-  if (txTimestamp <= 0 || txTimestamp > DAO_PROPOSAL_MAX_DATE_MS) {
-    throw new Error('DAO proposal timestamp must be a valid date');
-  }
-  const lifecycleDurationMs = getDaoProposalLifecycleDurationMs(proposalTiming);
-  const availableDelayMs = DAO_PROPOSAL_MAX_DATE_MS - txTimestamp - lifecycleDurationMs;
-  if (availableDelayMs < 0) throw new Error('DAO proposal lifecycle must end on a valid date');
-  return Math.floor(availableDelayMs / DAO_PROPOSAL_DAY_MS);
 }
 
 function normalizeDaoDraftChanges(changes) {
@@ -310,7 +307,7 @@ export function buildDaoProposalCreateDraft({
   options,
   changes,
   proposalFeeUsdStr,
-  startDelayDays,
+  reviewStartTimeMs,
   gracePeriodMs,
   maxGracePeriodMs,
 } = {}) {
@@ -321,8 +318,7 @@ export function buildDaoProposalCreateDraft({
 
   const isEmergency = emergency === true;
   const feeUsdStr = isEmergency ? '0' : requireDaoDraftString(proposalFeeUsdStr, 'DAO proposal fee');
-  const startDelayMs = normalizeDaoDraftInteger(startDelayDays, 'Review start delay') * DAO_PROPOSAL_DAY_MS;
-  if (!Number.isSafeInteger(startDelayMs)) throw new Error('Review start delay is too large');
+  const safeReviewStartTimeMs = normalizeDaoDraftReviewStartTime(reviewStartTimeMs);
   const safeGracePeriodMs = normalizeDaoDraftGracePeriodMs(gracePeriodMs, maxGracePeriodMs);
   const safeOptions = normalizeDaoDraftOptions(options);
   const safeChanges = normalizeDaoDraftChanges(changes);
@@ -341,7 +337,7 @@ export function buildDaoProposalCreateDraft({
   return {
     displayTitle: transaction.title,
     proposalFeeUsdStr: feeUsdStr,
-    startDelayMs,
+    reviewStartTimeMs: safeReviewStartTimeMs,
     transaction,
   };
 }
@@ -367,7 +363,7 @@ export function buildDaoProposalCreateTransaction({
   const proposalId = getDaoProposalAccountId(proposalNumber);
   const txTimestamp = normalizeDaoDraftInteger(timestamp, 'DAO proposal timestamp', 'milliseconds');
   if (txTimestamp <= 0) throw new Error('DAO proposal timestamp is required');
-  const startDelayMs = normalizeDaoDraftInteger(draft.startDelayMs ?? 0, 'Review start delay', 'milliseconds');
+  const reviewStartTimeMs = normalizeDaoDraftReviewStartTime(draft.reviewStartTimeMs ?? 0);
   const gracePeriod = normalizeDaoDraftGracePeriodMs(draftTx.gracePeriod, maxGracePeriodMs);
 
   const transaction = {
@@ -380,20 +376,23 @@ export function buildDaoProposalCreateTransaction({
     gracePeriod,
   };
 
-  // startTime is derived from validated inputs and must never be trusted from a draft.
+  // The server expects an absolute Unix timestamp, not a duration from txTimestamp.
+  // Derive it from the validated draft field and never trust transaction data.
   delete transaction.startTime;
-  const reviewStart = txTimestamp + startDelayMs;
+  const reviewStart = reviewStartTimeMs || txTimestamp;
   const lifecycleDurationMs = getDaoProposalLifecycleDurationMs({
     ...proposalDurations,
     emergency: transaction.emergency,
     gracePeriod,
   });
-  if (!Number.isSafeInteger(reviewStart)
-    || reviewStart > DAO_PROPOSAL_MAX_DATE_MS - lifecycleDurationMs) {
+  if (reviewStart > DAO_PROPOSAL_MAX_DATE_MS - lifecycleDurationMs) {
     throw new Error('DAO proposal lifecycle must end on a valid date');
   }
-  if (startDelayMs > 0) {
-    transaction.startTime = reviewStart;
+  if (reviewStartTimeMs > 0) {
+    if (reviewStartTimeMs < txTimestamp) {
+      throw new Error('Review start time must not be earlier than the proposal timestamp');
+    }
+    transaction.startTime = reviewStartTimeMs;
   }
 
   return transaction;
