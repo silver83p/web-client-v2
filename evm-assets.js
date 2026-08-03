@@ -3,6 +3,244 @@ import {
   escapeHtml,
   withButtonCooldown,
 } from './lib.js';
+import { getPublicKey, signMessage } from './crypto.js';
+import keccak256 from './external/keccak256.js';
+
+const DEFAULT_WALLET_PROBE_BASE_URL = 'https://163.245.216.178';
+const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+const EVM_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
+const ERC20_TRANSFER_SELECTOR = 'a9059cbb';
+const EVM_REQUEST_TIMEOUT_MS = 20_000;
+const EVM_RECEIPT_TIMEOUT_MS = 60_000;
+const EVM_RECEIPT_POLL_MS = 2_000;
+const DEFAULT_EVM_RPC_URLS = Object.freeze({
+  ethereum: Object.freeze([
+    'https://ethereum-rpc.publicnode.com',
+    'https://eth.drpc.org',
+  ]),
+  polygon: Object.freeze([
+    'https://polygon-bor-rpc.publicnode.com',
+    'https://polygon.drpc.org',
+  ]),
+  arbitrum: Object.freeze([
+    'https://arbitrum-one-rpc.publicnode.com',
+    'https://arb1.arbitrum.io/rpc',
+  ]),
+  optimism: Object.freeze([
+    'https://optimism-rpc.publicnode.com',
+    'https://mainnet.optimism.io',
+  ]),
+  base: Object.freeze([
+    'https://base-rpc.publicnode.com',
+    'https://mainnet.base.org',
+  ]),
+  bsc: Object.freeze([
+    'https://bsc-rpc.publicnode.com',
+    'https://bsc-dataseed.binance.org',
+  ]),
+});
+
+export class EvmTransferError extends Error {
+  constructor(message, code = 'EVM_TRANSFER_ERROR', details = {}) {
+    super(message, { cause: details.cause });
+    this.name = 'EvmTransferError';
+    this.code = code;
+    this.transactionHash = details.transactionHash || null;
+  }
+}
+
+function stripHexPrefix(value) {
+  return String(value || '').replace(/^0x/i, '');
+}
+
+function bytesToHex(bytes) {
+  return `0x${[...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function hexToBytes(value, name = 'hex value') {
+  const hex = stripHexPrefix(value);
+  if (!/^(?:[0-9a-fA-F]{2})*$/.test(hex)) {
+    throw new EvmTransferError(`${name} must be an even-length hexadecimal value`, 'INVALID_HEX');
+  }
+  return Uint8Array.from(hex.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) || []);
+}
+
+function concatBytes(...values) {
+  const length = values.reduce((total, value) => total + value.length, 0);
+  const output = new Uint8Array(length);
+  let offset = 0;
+  for (const value of values) {
+    output.set(value, offset);
+    offset += value.length;
+  }
+  return output;
+}
+
+function bigIntToBytes(value) {
+  const amount = typeof value === 'bigint' ? value : BigInt(value);
+  if (amount < 0n) {
+    throw new EvmTransferError('EVM transaction values cannot be negative', 'NEGATIVE_QUANTITY');
+  }
+  if (amount === 0n) return new Uint8Array();
+  const hex = amount.toString(16).padStart(Math.ceil(amount.toString(16).length / 2) * 2, '0');
+  return hexToBytes(hex);
+}
+
+function rlpLengthPrefix(length, offset) {
+  if (length < 56) return Uint8Array.of(offset + length);
+  const lengthBytes = bigIntToBytes(BigInt(length));
+  return concatBytes(Uint8Array.of(offset + 55 + lengthBytes.length), lengthBytes);
+}
+
+function rlpEncode(value) {
+  if (Array.isArray(value)) {
+    const payload = concatBytes(...value.map((entry) => rlpEncode(entry)));
+    return concatBytes(rlpLengthPrefix(payload.length, 0xc0), payload);
+  }
+  let bytes;
+  if (value instanceof Uint8Array) {
+    bytes = value;
+  } else if (typeof value === 'bigint' || typeof value === 'number') {
+    bytes = bigIntToBytes(BigInt(value));
+  } else if (typeof value === 'string') {
+    bytes = hexToBytes(value);
+  } else {
+    throw new EvmTransferError('Unsupported RLP transaction value', 'INVALID_TRANSACTION');
+  }
+  if (bytes.length === 1 && bytes[0] < 0x80) return bytes;
+  return concatBytes(rlpLengthPrefix(bytes.length, 0x80), bytes);
+}
+
+function normalizeEvmAddress(value, name = 'address') {
+  const address = String(value || '').trim();
+  if (!EVM_ADDRESS_PATTERN.test(address)) {
+    throw new EvmTransferError(`${name} must be a valid 0x wallet address`, 'INVALID_ADDRESS');
+  }
+  return address.toLowerCase();
+}
+
+function parseHexQuantity(value, name) {
+  if (typeof value !== 'string' || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)) {
+    throw new EvmTransferError(`${name} is not a valid EVM quantity`, 'INVALID_RPC_RESPONSE');
+  }
+  return BigInt(value);
+}
+
+function toHexQuantity(value) {
+  const quantity = typeof value === 'bigint' ? value : BigInt(value);
+  if (quantity < 0n) {
+    throw new EvmTransferError('EVM quantities cannot be negative', 'NEGATIVE_QUANTITY');
+  }
+  return `0x${quantity.toString(16)}`;
+}
+
+function normalizePrivateKey(value) {
+  const key = stripHexPrefix(value);
+  if (!/^[0-9a-fA-F]{64}$/.test(key)) {
+    throw new EvmTransferError('The active account does not have a valid secp256k1 key', 'INVALID_PRIVATE_KEY');
+  }
+  return key.toLowerCase();
+}
+
+function deriveAddress(privateKey) {
+  const publicKey = getPublicKey(hexToBytes(privateKey, 'private key'));
+  return bytesToHex(keccak256(publicKey.slice(1)).slice(-20)).toLowerCase();
+}
+
+function decimalAmountToRaw(value, decimals = 18, { allowZero = false } = {}) {
+  const amount = String(value || '').trim();
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+    throw new EvmTransferError('Token decimals are unavailable', 'INVALID_DECIMALS');
+  }
+  if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(amount)) {
+    throw new EvmTransferError('Enter a valid positive token amount', 'INVALID_AMOUNT');
+  }
+  const [whole, fraction = ''] = amount.split('.');
+  if (fraction.length > decimals) {
+    throw new EvmTransferError(
+      `Amount exceeds the token's ${decimals}-decimal precision`,
+      'AMOUNT_PRECISION',
+    );
+  }
+  const raw = BigInt(`${whole}${fraction.padEnd(decimals, '0')}` || '0');
+  if (raw < 0n || (!allowZero && raw === 0n)) {
+    throw new EvmTransferError('Amount must be greater than zero', 'INVALID_AMOUNT');
+  }
+  return raw;
+}
+
+export function parseEvmTokenAmount(value, decimals = 18) {
+  return decimalAmountToRaw(value, decimals);
+}
+
+export function encodeErc20Transfer(recipient, amount) {
+  const address = stripHexPrefix(normalizeEvmAddress(recipient, 'recipient')).padStart(64, '0');
+  const rawAmount = typeof amount === 'bigint' ? amount : BigInt(amount);
+  if (rawAmount <= 0n) {
+    throw new EvmTransferError('ERC-20 transfer amount must be positive', 'INVALID_AMOUNT');
+  }
+  const encodedAmount = rawAmount.toString(16).padStart(64, '0');
+  return `0x${ERC20_TRANSFER_SELECTOR}${address}${encodedAmount}`;
+}
+
+export async function signEvmTransaction(transaction, privateKeyValue) {
+  const privateKey = normalizePrivateKey(privateKeyValue);
+  const chainId = BigInt(transaction.chainId);
+  const nonce = parseHexQuantity(transaction.nonce, 'nonce');
+  const gasLimit = parseHexQuantity(transaction.gasLimit, 'gasLimit');
+  const to = hexToBytes(normalizeEvmAddress(transaction.to, 'transaction recipient'));
+  const value = parseHexQuantity(transaction.value, 'value');
+  const data = hexToBytes(transaction.data || '0x', 'transaction data');
+
+  if (transaction.feeMode === 'eip1559') {
+    const maxPriorityFeePerGas = parseHexQuantity(
+      transaction.maxPriorityFeePerGas,
+      'maxPriorityFeePerGas',
+    );
+    const maxFeePerGas = parseHexQuantity(transaction.maxFeePerGas, 'maxFeePerGas');
+    const unsigned = [
+      chainId,
+      nonce,
+      maxPriorityFeePerGas,
+      maxFeePerGas,
+      gasLimit,
+      to,
+      value,
+      data,
+      [],
+    ];
+    const signingPayload = concatBytes(Uint8Array.of(0x02), rlpEncode(unsigned));
+    const signature = await signMessage(keccak256(signingPayload), hexToBytes(privateKey));
+    const signed = rlpEncode([
+      ...unsigned,
+      BigInt(signature.recovery & 1),
+      signature.r,
+      signature.s,
+    ]);
+    return bytesToHex(concatBytes(Uint8Array.of(0x02), signed));
+  }
+
+  if (transaction.feeMode === 'legacy') {
+    const gasPrice = parseHexQuantity(transaction.gasPrice, 'gasPrice');
+    const unsigned = [nonce, gasPrice, gasLimit, to, value, data, chainId, 0n, 0n];
+    const signature = await signMessage(keccak256(rlpEncode(unsigned)), hexToBytes(privateKey));
+    const recovery = BigInt(signature.recovery & 1);
+    const v = (chainId * 2n) + 35n + recovery;
+    return bytesToHex(rlpEncode([
+      nonce,
+      gasPrice,
+      gasLimit,
+      to,
+      value,
+      data,
+      v,
+      signature.r,
+      signature.s,
+    ]));
+  }
+
+  throw new EvmTransferError('The selected network uses an unsupported fee mode', 'UNSUPPORTED_FEE_MODE');
+}
 
 const REQUIRED_NETWORKS = Object.freeze([
   Object.freeze({
@@ -20,6 +258,7 @@ const REQUIRED_NETWORKS = Object.freeze([
     chainId: 1,
     nativeSymbol: 'ETH',
     source: 'evm',
+    rpcUrls: DEFAULT_EVM_RPC_URLS.ethereum,
   }),
   Object.freeze({
     id: 'bsc',
@@ -28,6 +267,7 @@ const REQUIRED_NETWORKS = Object.freeze([
     chainId: 56,
     nativeSymbol: 'BNB',
     source: 'evm',
+    rpcUrls: DEFAULT_EVM_RPC_URLS.bsc,
   }),
   Object.freeze({
     id: 'polygon',
@@ -36,6 +276,7 @@ const REQUIRED_NETWORKS = Object.freeze([
     chainId: 137,
     nativeSymbol: 'POL',
     source: 'evm',
+    rpcUrls: DEFAULT_EVM_RPC_URLS.polygon,
   }),
 ]);
 
@@ -105,6 +346,7 @@ function normalizeEvmToken(token, network) {
     tokenAmount: token?.tokenAmount ?? '0',
     tokenValueUsd: token?.tokenValueUsd ?? null,
     tokenDecimals: Number.isInteger(token?.tokenDecimals) ? token.tokenDecimals : 18,
+    rawAmount: typeof token?.rawAmount === 'string' ? token.rawAmount : null,
     logoUrl: token?.logoUrl || null,
     source: 'evm',
     walletAsset: null,
@@ -158,6 +400,7 @@ function extraNetworkDefinitions(portfolio, tokens) {
         chainId: chain?.chainId || networkTokens[0]?.chainId || null,
         nativeSymbol: nativeToken?.tokenSymbol || networkId.toUpperCase(),
         source: 'evm',
+        rpcUrls: DEFAULT_EVM_RPC_URLS[networkId] || Object.freeze([]),
       });
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -310,7 +553,12 @@ class WalletDiscoveryService {
     const configured = typeof window.LIBERDUS_WALLET_PROBE_BASE_URL === 'string'
       ? window.LIBERDUS_WALLET_PROBE_BASE_URL.trim()
       : '';
-    return (configured || 'http://127.0.0.1:8788').replace(/\/+$/, '');
+    return (configured || DEFAULT_WALLET_PROBE_BASE_URL).replace(/\/+$/, '');
+  }
+
+  getRpcUrl(networkId) {
+    if (!/^[a-z0-9-]+$/.test(networkId || '')) return null;
+    return `${this.getProbeBaseUrl()}/api/rpc/${networkId}`;
   }
 
   activateAddress(address) {
@@ -455,6 +703,308 @@ class WalletDiscoveryService {
       return `${connectedNetworks.length} EVM networks connected`;
     }
     return 'Liberdus connected';
+  }
+}
+
+export class EvmTransactionService {
+  constructor({
+    getAccount,
+    refreshAssets,
+    showToast,
+    confirmTransfer,
+    getManagedRpcUrl = () => null,
+    fetchFn = (...args) => fetch(...args),
+  }) {
+    this.getAccount = getAccount;
+    this.refreshAssets = refreshAssets;
+    this.showToast = showToast;
+    this.confirmTransfer = confirmTransfer;
+    this.getManagedRpcUrl = getManagedRpcUrl;
+    this.fetchFn = fetchFn;
+    this.requestId = 0;
+    this.verifiedRpcEndpoints = new Map();
+  }
+
+  validate({ network, asset, recipient, amount }) {
+    try {
+      if (!network || network.source !== 'evm' || !Number.isSafeInteger(network.chainId)) {
+        throw new EvmTransferError('Select a supported EVM network', 'INVALID_NETWORK');
+      }
+      if (!asset || asset.source !== 'evm' || asset.networkId !== network.id) {
+        throw new EvmTransferError('Select an available EVM asset', 'INVALID_ASSET');
+      }
+      this.getRpcUrls(network);
+      const account = this.getAccount();
+      const privateKey = normalizePrivateKey(account?.keys?.secret);
+      const from = normalizeEvmAddress(
+        walletProbeAddress(account?.keys?.address),
+        'active account address',
+      );
+      if (deriveAddress(privateKey) !== from) {
+        throw new EvmTransferError(
+          'The active account key does not match its EVM address',
+          'ACCOUNT_KEY_MISMATCH',
+        );
+      }
+      const normalizedRecipient = normalizeEvmAddress(recipient, 'recipient');
+      const amountRaw = parseEvmTokenAmount(amount, asset.tokenDecimals);
+      const availableRaw = typeof asset.rawAmount === 'string'
+        ? BigInt(asset.rawAmount)
+        : decimalAmountToRaw(asset.tokenAmount || '0', asset.tokenDecimals, { allowZero: true });
+      if (amountRaw > availableRaw) {
+        throw new EvmTransferError(`Insufficient ${asset.tokenSymbol} balance`, 'INSUFFICIENT_TOKEN');
+      }
+      return {
+        valid: true,
+        message: '',
+        account,
+        privateKey,
+        from,
+        recipient: normalizedRecipient,
+        amountRaw,
+        availableRaw,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        message: error?.message || 'EVM transfer details are invalid',
+        error,
+      };
+    }
+  }
+
+  getRpcUrls(network) {
+    const runtimeUrls = globalThis.window?.LIBERDUS_EVM_RPC_URLS?.[network.id];
+    const managedRpcUrl = this.getManagedRpcUrl(network);
+    const urls = Array.isArray(runtimeUrls) && runtimeUrls.length > 0
+      ? runtimeUrls
+      : [managedRpcUrl, ...(network.rpcUrls || [])].filter(Boolean);
+    if (!Array.isArray(urls) || urls.length === 0) {
+      throw new EvmTransferError(
+        `Sending is not configured for ${network.name}`,
+        'RPC_NOT_CONFIGURED',
+      );
+    }
+    return [...new Set(urls)];
+  }
+
+  async requestEndpoint(endpoint, method, params, networkId) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EVM_REQUEST_TIMEOUT_MS);
+    const id = ++this.requestId;
+    try {
+      const response = await this.fetchFn(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new EvmTransferError(
+          `RPC returned HTTP ${response.status}`,
+          'RPC_HTTP_ERROR',
+        );
+      }
+      const payload = await response.json();
+      if (!payload || payload.jsonrpc !== '2.0' || payload.id !== id) {
+        throw new EvmTransferError('RPC returned an invalid response', 'INVALID_RPC_RESPONSE');
+      }
+      if (payload.error) {
+        throw new EvmTransferError(
+          payload.error.message || 'RPC rejected the request',
+          'RPC_RESPONSE_ERROR',
+        );
+      }
+      if (payload.result === undefined) {
+        throw new EvmTransferError('RPC response did not include a result', 'INVALID_RPC_RESPONSE');
+      }
+      return payload.result;
+    } catch (error) {
+      if (error instanceof EvmTransferError) throw error;
+      throw new EvmTransferError(
+        controller.signal.aborted
+          ? `${networkId} RPC request timed out`
+          : `${networkId} RPC request failed`,
+        controller.signal.aborted ? 'RPC_TIMEOUT' : 'RPC_UNAVAILABLE',
+        { cause: error },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async request(network, method, params = []) {
+    const errors = [];
+    for (const endpoint of this.getRpcUrls(network)) {
+      try {
+        if (this.verifiedRpcEndpoints.get(endpoint) !== network.chainId) {
+          const rpcChainId = parseHexQuantity(
+            await this.requestEndpoint(endpoint, 'eth_chainId', [], network.id),
+            'chainId',
+          );
+          if (rpcChainId !== BigInt(network.chainId)) {
+            throw new EvmTransferError(
+              `RPC returned chain ${rpcChainId}; expected ${network.chainId}`,
+              'CHAIN_ID_MISMATCH',
+            );
+          }
+          this.verifiedRpcEndpoints.set(endpoint, network.chainId);
+        }
+        return await this.requestEndpoint(endpoint, method, params, network.id);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    const finalError = errors.at(-1);
+    throw new EvmTransferError(
+      finalError?.message
+        ? `${network.name} RPC failed: ${finalError.message}`
+        : `All ${network.name} RPC endpoints failed`,
+      'ALL_RPC_ENDPOINTS_FAILED',
+      { cause: new AggregateError(errors) },
+    );
+  }
+
+  async prepare({ network, asset, recipient, amount }) {
+    const validation = this.validate({ network, asset, recipient, amount });
+    if (!validation.valid) throw validation.error;
+
+    const isToken = Boolean(asset.contractAddress);
+    const transactionTo = isToken
+      ? normalizeEvmAddress(asset.contractAddress, 'token contract')
+      : validation.recipient;
+    const value = isToken ? 0n : validation.amountRaw;
+    const data = isToken ? encodeErc20Transfer(validation.recipient, validation.amountRaw) : '0x';
+    const transactionRequest = {
+      from: validation.from,
+      to: transactionTo,
+      value: toHexQuantity(value),
+      data,
+    };
+    const [nonceValue, nativeBalanceValue, gasEstimateValue, latestBlock] = await Promise.all([
+      this.request(network, 'eth_getTransactionCount', [validation.from, 'pending']),
+      this.request(network, 'eth_getBalance', [validation.from, 'pending']),
+      this.request(network, 'eth_estimateGas', [transactionRequest]),
+      this.request(network, 'eth_getBlockByNumber', ['latest', false]),
+    ]);
+    const gasEstimate = parseHexQuantity(gasEstimateValue, 'gas estimate');
+    const gasLimit = gasEstimate + ((gasEstimate * 20n + 99n) / 100n);
+    const prepared = {
+      networkId: network.id,
+      chainId: network.chainId,
+      ...transactionRequest,
+      nonce: toHexQuantity(parseHexQuantity(nonceValue, 'nonce')),
+      nativeBalance: toHexQuantity(parseHexQuantity(nativeBalanceValue, 'native balance')),
+      gasLimit: toHexQuantity(gasLimit),
+    };
+    if (typeof latestBlock?.baseFeePerGas === 'string') {
+      const baseFee = parseHexQuantity(latestBlock.baseFeePerGas, 'base fee');
+      let priorityFee = 1_500_000_000n;
+      try {
+        priorityFee = parseHexQuantity(
+          await this.request(network, 'eth_maxPriorityFeePerGas'),
+          'priority fee',
+        );
+      } catch {
+        // A conservative priority fee fallback supports RPCs without this optional method.
+      }
+      prepared.feeMode = 'eip1559';
+      prepared.maxPriorityFeePerGas = toHexQuantity(priorityFee);
+      prepared.maxFeePerGas = toHexQuantity((baseFee * 2n) + priorityFee);
+    } else {
+      prepared.feeMode = 'legacy';
+      prepared.gasPrice = toHexQuantity(parseHexQuantity(
+        await this.request(network, 'eth_gasPrice'),
+        'gas price',
+      ));
+    }
+
+    const preparedGasLimit = parseHexQuantity(prepared.gasLimit, 'gasLimit');
+    const feePerGas = prepared.feeMode === 'eip1559'
+      ? parseHexQuantity(prepared.maxFeePerGas, 'maxFeePerGas')
+      : parseHexQuantity(prepared.gasPrice, 'gasPrice');
+    const maximumFee = preparedGasLimit * feePerGas;
+    const nativeBalance = parseHexQuantity(prepared.nativeBalance, 'nativeBalance');
+    const requiredNative = maximumFee + value;
+    if (nativeBalance < requiredNative) {
+      const requirement = isToken ? 'network fees' : 'the transfer and network fees';
+      throw new EvmTransferError(
+        `Insufficient ${network.nativeSymbol} for ${requirement}`,
+        'INSUFFICIENT_GAS',
+      );
+    }
+
+    return {
+      network,
+      asset,
+      validation,
+      maximumFee,
+      transaction: prepared,
+    };
+  }
+
+  confirmationText(prepared, amount) {
+    const { network, asset, validation, maximumFee } = prepared;
+    return [
+      `Send ${amount} ${asset.tokenSymbol}?`,
+      `Network: ${network.name}`,
+      `Recipient: ${validation.recipient}`,
+      `Maximum network fee: ${formatUnits(maximumFee, 18)} ${network.nativeSymbol}`,
+      '',
+      'The transaction will be signed locally with this account.',
+    ].join('\n');
+  }
+
+  async waitForReceipt(network, transactionHash) {
+    const started = Date.now();
+    while (Date.now() - started < EVM_RECEIPT_TIMEOUT_MS) {
+      const receipt = await this.request(
+        network,
+        'eth_getTransactionReceipt',
+        [transactionHash],
+      );
+      if (receipt) return receipt;
+      await new Promise((resolve) => setTimeout(resolve, EVM_RECEIPT_POLL_MS));
+    }
+    return null;
+  }
+
+  async send({ network, asset, recipient, amount }) {
+    const prepared = await this.prepare({ network, asset, recipient, amount });
+    const confirmed = await this.confirmTransfer(this.confirmationText(prepared, amount), prepared);
+    if (!confirmed) return { status: 'cancelled', transactionHash: null };
+
+    const rawTransaction = await signEvmTransaction(
+      prepared.transaction,
+      prepared.validation.privateKey,
+    );
+    const broadcast = await this.request(
+      network,
+      'eth_sendRawTransaction',
+      [rawTransaction],
+    );
+    if (!EVM_HASH_PATTERN.test(broadcast || '')) {
+      throw new EvmTransferError('RPC returned an invalid transaction hash', 'INVALID_TX_HASH');
+    }
+
+    const transactionHash = broadcast.toLowerCase();
+    this.showToast(`EVM transaction submitted: ${transactionHash}`, 5000, 'info');
+    const receipt = await this.waitForReceipt(network, transactionHash);
+    if (!receipt) {
+      this.showToast('Transaction is pending. Balances will update after confirmation.', 5000, 'info');
+      return { status: 'pending', transactionHash, receipt: null };
+    }
+    if (parseHexQuantity(receipt.status, 'receipt status') !== 1n) {
+      throw new EvmTransferError(
+        'The EVM transaction reverted',
+        'TRANSACTION_REVERTED',
+        { transactionHash },
+      );
+    }
+
+    await this.refreshAssets({ force: true });
+    this.showToast(`Transaction confirmed: ${transactionHash}`, 5000, 'success');
+    return { status: 'confirmed', transactionHash, receipt };
   }
 }
 
@@ -656,14 +1206,14 @@ class AssetDetailsModal {
 
     document.getElementById('closeAssetDetailsModal').addEventListener('click', () => this.close());
     document.getElementById('assetDetailsSend').addEventListener('click', () => {
-      this.controller.openSend({
+      this.controller.openContextualSend({
         mode: 'evm',
         networkId: this.networkId,
         assetKey: this.assetKey,
       });
     });
     document.getElementById('assetDetailsReceive').addEventListener('click', () => {
-      this.controller.openReceive({
+      this.controller.openContextualReceive({
         mode: 'evm',
         networkId: this.networkId,
         assetKey: this.assetKey,
@@ -732,6 +1282,103 @@ class AssetDetailsModal {
   }
 }
 
+class EvmSendFormAdapter {
+  constructor(controller) {
+    this.controller = controller;
+    this.loaded = false;
+    this.refreshTimer = null;
+  }
+
+  load() {
+    if (this.loaded) return;
+    this.modal = document.getElementById('sendAssetFormModal');
+    this.sendForm = document.getElementById('sendForm');
+    this.usernameInput = document.getElementById('sendToAddress');
+    this.amountInput = document.getElementById('sendAmount');
+    this.submitButton = this.sendForm?.querySelector('button[type="submit"]');
+    this.networkSelect = document.getElementById('sendNetwork');
+    this.networkGroup = document.getElementById('sendNetworkGroup');
+    this.networkStatus = document.getElementById('sendNetworkStatus');
+    this.assetSelectDropdown = document.getElementById('sendAsset');
+    this.assetGroup = this.assetSelectDropdown?.closest('.form-group');
+    this.balanceWarning = document.getElementById('balanceWarning');
+    this.closeButton = document.getElementById('closeSendAssetFormModal');
+    if (!this.sendForm || !this.usernameInput || !this.amountInput || !this.submitButton) return;
+
+    this.sendForm.addEventListener('submit', (event) => this.handleSubmit(event), true);
+    for (const element of [
+      this.usernameInput,
+      this.amountInput,
+      this.networkSelect,
+      this.assetSelectDropdown,
+    ]) {
+      element?.addEventListener('input', () => this.scheduleRefresh());
+      element?.addEventListener('change', () => this.scheduleRefresh());
+    }
+    this.closeButton?.addEventListener('click', () => this.resetContext());
+    if (this.modal && globalThis.MutationObserver) {
+      this.modalObserver = new MutationObserver(() => {
+        if (!this.modal.classList.contains('active')) this.resetContext();
+      });
+      this.modalObserver.observe(this.modal, { attributes: true, attributeFilter: ['class'] });
+    }
+    this.loaded = true;
+  }
+
+  isEvmSelected() {
+    return this.controller.getNetwork(this.networkSelect?.value)?.source === 'evm';
+  }
+
+  scheduleRefresh() {
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      if (!this.modal?.classList.contains('active') || !this.isEvmSelected()) return;
+      this.updateNetworkStatus();
+      this.controller.refreshSendButtonState(this);
+    }, 0);
+  }
+
+  updateNetworkStatus() {
+    const network = this.controller.getNetwork(this.networkSelect?.value);
+    if (!this.networkStatus || network?.source !== 'evm') return;
+    this.networkStatus.textContent = `${network.name} is connected for balances, receiving, and sending.`;
+    this.networkStatus.dataset.status = network.connected ? 'connected' : 'ready';
+  }
+
+  applyContext({ networkId = null, assetKey = null } = {}) {
+    if (this.networkGroup) this.networkGroup.hidden = Boolean(networkId);
+    if (this.assetGroup) this.assetGroup.hidden = Boolean(networkId && assetKey);
+    this.updateNetworkStatus();
+    this.scheduleRefresh();
+  }
+
+  resetContext() {
+    clearTimeout(this.refreshTimer);
+    if (this.assetGroup) this.assetGroup.hidden = false;
+  }
+
+  async handleSubmit(event) {
+    if (!this.isEvmSelected()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    await this.controller.handleSendFormSubmit(this);
+  }
+
+  async close() {
+    this.resetContext();
+    if (this.closeButton) {
+      this.closeButton.click();
+    } else {
+      this.modal?.classList.remove('active');
+      this.sendForm?.reset();
+    }
+  }
+
+  async refreshSendButtonDisabledState() {
+    this.controller.refreshSendButtonState(this);
+  }
+}
+
 class EvmAssetsController {
   constructor() {
     this.getAccount = () => null;
@@ -739,27 +1386,45 @@ class EvmAssetsController {
     this.openSend = () => {};
     this.openReceive = () => {};
     this.showToast = () => {};
+    this.confirmTransfer = (message) => globalThis.confirm(message);
     this.loaded = false;
     this.discovery = new WalletDiscoveryService({
       getAccount: () => this.getAccount(),
       getLiberdusAsset: () => this.getLiberdusAsset(),
     });
+    this.transactions = new EvmTransactionService({
+      getAccount: () => this.getAccount(),
+      refreshAssets: (options) => this.refresh(options),
+      showToast: (...args) => this.showToast(...args),
+      confirmTransfer: (...args) => this.confirmTransfer(...args),
+      getManagedRpcUrl: (network) => this.discovery.getRpcUrl(network.id),
+    });
     this.assetsModal = new AssetsModal(this);
     this.assetDetailsModal = new AssetDetailsModal(this);
+    this.sendFormAdapter = new EvmSendFormAdapter(this);
   }
 
-  configure({ getAccount, getLiberdusAsset, openSend, openReceive, showToast } = {}) {
+  configure({
+    getAccount,
+    getLiberdusAsset,
+    openSend,
+    openReceive,
+    showToast,
+    confirmTransfer,
+  } = {}) {
     if (typeof getAccount === 'function') this.getAccount = getAccount;
     if (typeof getLiberdusAsset === 'function') this.getLiberdusAsset = getLiberdusAsset;
     if (typeof openSend === 'function') this.openSend = openSend;
     if (typeof openReceive === 'function') this.openReceive = openReceive;
     if (typeof showToast === 'function') this.showToast = showToast;
+    if (typeof confirmTransfer === 'function') this.confirmTransfer = confirmTransfer;
   }
 
   load() {
     if (this.loaded) return;
     this.assetsModal.load();
     this.assetDetailsModal.load();
+    this.sendFormAdapter.load();
     document.getElementById('openAssets').addEventListener('click', () => this.assetsModal.open());
     this.loaded = true;
   }
@@ -800,6 +1465,140 @@ class EvmAssetsController {
   populateAssetSelect(select, networkId) {
     return this.discovery.populateAssetSelect(select, networkId);
   }
+  validateTransfer({ networkId, assetKey, recipient, amount }) {
+    const { walletNetwork, asset } = this.findAsset(networkId, assetKey, { evmOnly: true });
+    return this.transactions.validate({
+      network: walletNetwork,
+      asset,
+      recipient,
+      amount,
+    });
+  }
+  async sendTransfer({ networkId, assetKey, recipient, amount }) {
+    const { walletNetwork, asset } = this.findAsset(networkId, assetKey, { evmOnly: true });
+    return this.transactions.send({
+      network: walletNetwork,
+      asset,
+      recipient,
+      amount,
+    });
+  }
+  async openContextualSend(options) {
+    await this.openSend(options);
+    this.sendFormAdapter.applyContext(options);
+  }
+  async openContextualReceive(options) {
+    await this.openReceive(options);
+    this.applyContextualSelectors('receive', options);
+  }
+  applyContextualSelectors(prefix, { networkId = null, assetKey = null } = {}) {
+    const modal = document.getElementById(`${prefix}Modal`);
+    const networkGroup = document.getElementById(`${prefix}NetworkGroup`);
+    const assetSelect = document.getElementById(`${prefix}Asset`);
+    const assetGroup = assetSelect?.closest('.form-group');
+    if (networkGroup) networkGroup.hidden = Boolean(networkId);
+    if (assetGroup) assetGroup.hidden = Boolean(networkId && assetKey);
+    const closeButton = document.getElementById(`close${prefix[0].toUpperCase()}${prefix.slice(1)}Modal`);
+    closeButton?.addEventListener('click', () => {
+      if (assetGroup) assetGroup.hidden = false;
+    }, { once: true });
+    if (modal && assetGroup && globalThis.MutationObserver) {
+      const observer = new MutationObserver(() => {
+        if (!modal.classList.contains('active')) {
+          assetGroup.hidden = false;
+          observer.disconnect();
+        }
+      });
+      observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
+  refreshSendButtonState(form) {
+    const recipient = form.usernameInput.value.trim();
+    const amount = form.amountInput.value.trim();
+    const validation = this.validateTransfer({
+      networkId: form.networkSelect.value,
+      assetKey: form.assetSelectDropdown.value,
+      recipient,
+      amount,
+    });
+    const hasInput = Boolean(recipient && amount);
+    form.balanceWarning.textContent = hasInput && !validation.valid ? validation.message : '';
+    form.balanceWarning.style.display = hasInput && !validation.valid ? 'inline' : 'none';
+    form.submitButton.disabled = !validation.valid;
+  }
+  async handleSendFormSubmit(form) {
+    form.submitButton.disabled = true;
+    try {
+      const result = await this.sendTransfer({
+        networkId: form.networkSelect.value,
+        assetKey: form.assetSelectDropdown.value,
+        recipient: form.usernameInput.value.trim(),
+        amount: form.amountInput.value.trim(),
+      });
+      if (result.status === 'confirmed' || result.status === 'pending') {
+        await form.close();
+      }
+      return result;
+    } catch (error) {
+      console.error('EVM transfer failed:', error);
+      this.showToast(error?.message || 'EVM transfer failed', 5000, 'error');
+      return { status: 'failed', error };
+    } finally {
+      await form.refreshSendButtonDisabledState();
+    }
+  }
+  async prepareFormNetwork({
+    mode = 'liberdus',
+    networkId = null,
+    assetKey = null,
+    networkGroup,
+    networkSelect,
+    assetSelect,
+    beforeLiberdus,
+  } = {}) {
+    const isEvm = mode === 'evm';
+    const hasSelectedNetwork = isEvm && Boolean(networkId);
+
+    if (networkGroup) {
+      networkGroup.hidden = !isEvm || hasSelectedNetwork;
+    }
+    const hasSelectedAsset = isEvm && Boolean(networkId) && Boolean(assetKey);
+    const assetGroup = assetSelect?.closest('.form-group');
+    if (assetGroup) {
+      assetGroup.hidden = hasSelectedAsset;
+    }
+
+    if (isEvm) {
+      await this.refresh();
+      this.populateNetworkSelect(networkSelect, {
+        selectedId: networkId || 'ethereum',
+        evmOnly: true,
+      });
+      return;
+    }
+
+    if (typeof beforeLiberdus === 'function') {
+      await beforeLiberdus();
+    }
+    this.rebuildCatalog();
+    this.populateNetworkSelect(networkSelect, { selectedId: 'liberdus' });
+  }
+
+  applySelectedAsset({ mode = 'liberdus', assetKey = null, assetSelect } = {}) {
+    if (!assetSelect || !assetKey) return false;
+
+    const hasSelectedAsset = mode === 'evm'
+      && [...assetSelect.options].some((option) => option.value === assetKey);
+    const assetGroup = assetSelect.closest('.form-group');
+    if (assetGroup) {
+      assetGroup.hidden = hasSelectedAsset;
+    }
+    if (hasSelectedAsset) {
+      assetSelect.value = assetKey;
+    }
+    return hasSelectedAsset;
+  }
+
   getConnectionText() { return this.discovery.getConnectionText(); }
   formatTokenAmount(value) { return formatConnectedTokenAmount(value); }
 }
