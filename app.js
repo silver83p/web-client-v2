@@ -2477,6 +2477,7 @@ setDaoBackendFetcher(createDaoBackendFetcher(queryNetwork, IS_DEV_NETWORK));
 
 const DAO_CLAIMABLE_FILTER = { key: 'claimable', label: 'Claimable' };
 const DAO_FILTER_OPTIONS = [...DAO_STATES, DAO_CLAIMABLE_FILTER];
+const DAO_FILTER_OVERFLOW_KEYS = ['withheld', 'rejected', 'applied'];
 
 function formatDaoTimestamp(ts) {
   const n = Number(ts || 0);
@@ -2530,7 +2531,6 @@ class DaoModal {
   constructor() {
     this.selectedGroupKey = 'active';
     this.selectedFilterKey = 'voting';
-    this._outsideClickHandler = null;
     this.refreshState = 'loading';
     this.refreshSequence = 0;
     this.openRefreshId = 0;
@@ -2541,9 +2541,10 @@ class DaoModal {
     this.modal = document.getElementById('daoModal');
     this.closeButton = document.getElementById('closeDaoModal');
     this.titleEl = document.getElementById('daoModalTitle');
-    this.statusMenuButton = document.getElementById('daoFilterButton');
-    this.statusMenu = document.getElementById('daoStatusContextMenu');
-    this.groupToolbar = this.modal.querySelector('.dao-toolbar');
+    this.filterBar = document.getElementById('daoFilterBar');
+    this.filterOverflow = document.getElementById('daoFilterOverflow');
+    this.filterExpandButton = document.getElementById('daoFilterExpandButton');
+    this.groupToggle = this.modal.querySelector('.dao-group-toggle');
     this.groupActiveButton = document.getElementById('daoGroupActiveButton');
     this.groupArchivedButton = document.getElementById('daoGroupArchivedButton');
     this.list = document.getElementById('daoProposalList');
@@ -2553,41 +2554,32 @@ class DaoModal {
     if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
     if (this.addButton) this.addButton.addEventListener('click', () => addProposalModal.open());
 
-    if (this.statusMenuButton) {
-      this.statusMenuButton.addEventListener('click', (e) => this.toggleStatusMenu(e));
+    if (this.filterBar) {
+      this.filterBar.addEventListener('click', (e) => {
+        const chip = e.target.closest('.dao-filter-chip');
+        if (!chip) return;
+        const key = chip.dataset.filterKey;
+        if (!key) return;
+        this.setFilter(key);
+      });
+    }
+
+    if (this.filterExpandButton) {
+      this.filterExpandButton.addEventListener('click', () => {
+        this.setFiltersExpanded(this.filterOverflow.hidden);
+      });
     }
 
     if (this.groupActiveButton) {
       this.groupActiveButton.addEventListener('click', () => {
         this.setGroupFilter('active');
       });
-      this.groupActiveButton.setAttribute('role', 'tab');
     }
     if (this.groupArchivedButton) {
       this.groupArchivedButton.addEventListener('click', () => {
         this.setGroupFilter('archived');
       });
-      this.groupArchivedButton.setAttribute('role', 'tab');
     }
-
-    if (this.statusMenu) {
-      this.statusMenu.addEventListener('click', (e) => {
-        const option = e.target.closest('.context-menu-option');
-        if (!option) return;
-        const key = option.dataset.filterKey;
-        if (!key) return;
-        this.setFilter(key);
-      });
-    }
-
-    // Close the DAO menu on outside click
-    this._outsideClickHandler = (e) => {
-      if (!this.statusMenu || this.statusMenu.style.display !== 'block') return;
-      if (this.statusMenu.contains(e.target)) return;
-      if (this.statusMenuButton && this.statusMenuButton.contains(e.target)) return;
-      this.closeStatusMenu();
-    };
-    document.addEventListener('click', this._outsideClickHandler);
   }
 
   open() {
@@ -2629,7 +2621,6 @@ class DaoModal {
 
   close() {
     this.openRefreshId = ++this.refreshSequence;
-    this.closeStatusMenu();
     this.modal.classList.remove('active');
     enterFullscreen();
 
@@ -2684,49 +2675,26 @@ class DaoModal {
     return didRefreshDaoData;
   }
 
-  toggleStatusMenu(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!this.statusMenu) return;
-    if (this.statusMenu.style.display === 'block') {
-      this.closeStatusMenu();
-      return;
+  setFiltersExpanded(expanded) {
+    const overflowFilterSelected = DAO_FILTER_OVERFLOW_KEYS.includes(this.selectedFilterKey);
+    const keepExpanded = expanded || overflowFilterSelected;
+    if (this.filterBar) this.filterBar.classList.toggle('expanded', keepExpanded);
+    if (this.filterOverflow) this.filterOverflow.hidden = !keepExpanded;
+    if (this.filterExpandButton) {
+      this.filterExpandButton.disabled = overflowFilterSelected;
+      this.filterExpandButton.setAttribute('aria-expanded', keepExpanded ? 'true' : 'false');
+      this.filterExpandButton.setAttribute(
+        'aria-label',
+        overflowFilterSelected
+          ? 'Extra filters remain visible while selected'
+          : keepExpanded ? 'Hide extra filters' : 'Show more filters'
+      );
     }
-    this.showStatusMenu();
-  }
-
-  showStatusMenu() {
-    if (!this.statusMenu || !this.statusMenuButton) return;
-    const buttonRect = this.statusMenuButton.getBoundingClientRect();
-    const menuWidth = 176;
-    const approxMenuHeight = 16 + DAO_FILTER_OPTIONS.length * 40; // padding + items
-
-    let left = buttonRect.right - menuWidth;
-    let top = buttonRect.bottom + 8;
-
-    if (left < 10) left = 10;
-    if (top + approxMenuHeight > window.innerHeight - 10) {
-      top = buttonRect.top - approxMenuHeight - 8;
-    }
-
-    Object.assign(this.statusMenu.style, {
-      left: `${left}px`,
-      top: `${top}px`,
-      display: 'block',
-    });
-
-    if (this.statusMenuButton) this.statusMenuButton.setAttribute('aria-expanded', 'true');
-  }
-
-  closeStatusMenu() {
-    if (!this.statusMenu) return;
-    this.statusMenu.style.display = 'none';
-    if (this.statusMenuButton) this.statusMenuButton.setAttribute('aria-expanded', 'false');
   }
 
   setFilter(key) {
     this.selectedFilterKey = key;
-    this.closeStatusMenu();
+    this.setFiltersExpanded(!this.filterOverflow.hidden);
     this.render();
   }
 
@@ -2759,27 +2727,34 @@ class DaoModal {
     const label = DAO_FILTER_OPTIONS.find((filter) => filter.key === this.selectedFilterKey)?.label
       || this.selectedFilterKey;
     if (this.titleEl) this.titleEl.textContent = isClaimableFilter ? 'DAO - Claimable' : `DAO - ${groupLabel} - ${label}`;
-    if (this.groupToolbar) this.groupToolbar.classList.toggle('hidden', isClaimableFilter);
+    // Claimable spans both groups, so hide Active/Archived while keeping the filter bar.
+    if (this.groupToggle) this.groupToggle.classList.toggle('hidden', isClaimableFilter);
 
     // Update group toggle labels + selection
-    if (this.groupActiveButton) {
-      this.groupActiveButton.textContent = `Active ${hasFreshData ? proposalsActive.length : '—'}`;
-      this.groupActiveButton.classList.toggle('active', this.selectedGroupKey !== 'archived');
-      this.groupActiveButton.setAttribute('aria-selected', this.selectedGroupKey !== 'archived' ? 'true' : 'false');
-    }
-    if (this.groupArchivedButton) {
-      this.groupArchivedButton.textContent = `Archived ${hasFreshData ? proposalsArchived.length : '—'}`;
-      this.groupArchivedButton.classList.toggle('active', this.selectedGroupKey === 'archived');
-      this.groupArchivedButton.setAttribute('aria-selected', this.selectedGroupKey === 'archived' ? 'true' : 'false');
+    const groups = [
+      { key: 'active', label: 'Active', button: this.groupActiveButton, count: proposalsActive.length },
+      { key: 'archived', label: 'Archived', button: this.groupArchivedButton, count: proposalsArchived.length },
+    ];
+    for (const { key, label: groupName, button, count } of groups) {
+      if (!button) continue;
+      const countEl = button.querySelector('.dao-group-toggle-count');
+      if (countEl) {
+        countEl.textContent = hasFreshData ? String(count) : '—';
+        countEl.setAttribute(
+          'aria-label',
+          hasFreshData ? `${count} ${key} proposals` : `${groupName} count unavailable`
+        );
+      }
+      const selected = this.selectedGroupKey === key;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
     }
 
     for (const filter of DAO_FILTER_OPTIONS) {
-      const option = this.statusMenu?.querySelector(`[data-filter-key="${filter.key}"]`);
-      const labelEl = option?.querySelector('.dao-status-label');
-      const countEl = option?.querySelector('.dao-status-count');
+      const chip = this.filterBar?.querySelector(`.dao-filter-chip[data-filter-key="${filter.key}"]`);
+      const countEl = chip?.querySelector('.dao-filter-chip-count');
       const count = counts[filter.key] || 0;
 
-      if (labelEl) labelEl.textContent = filter.label;
       if (countEl) {
         countEl.textContent = hasFreshData ? String(count) : '—';
         countEl.setAttribute(
@@ -2787,10 +2762,10 @@ class DaoModal {
           hasFreshData ? `${count} ${filter.label.toLowerCase()} proposals` : `${filter.label} count unavailable`
         );
       }
-      if (option) {
+      if (chip) {
         const selected = filter.key === this.selectedFilterKey;
-        option.classList.toggle('active', selected);
-        option.setAttribute('aria-checked', selected ? 'true' : 'false');
+        chip.classList.toggle('active', selected);
+        chip.setAttribute('aria-selected', selected ? 'true' : 'false');
       }
     }
 
