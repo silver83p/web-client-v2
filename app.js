@@ -3421,7 +3421,7 @@ class AddProposalModal {
         </div>
         <div class="dao-form-change-box">
           <div class="dao-form-change-line">
-            <label for="${configId}">Select</label>
+            <label for="${configId}">Select <span class="dao-form-required" aria-hidden="true">*</span></label>
             <select id="${configId}" class="form-control" data-dao-change-key required>${selectOptions}</select>
           </div>
           <div class="dao-form-change-line">
@@ -3429,7 +3429,7 @@ class AddProposalModal {
             <input id="${currentId}" class="form-control dao-form-current-value" type="text" value="${escapeDaoFormAttribute(option.current)}" readonly />
           </div>
           <div class="dao-form-change-line">
-            <label for="${proposedId}">Enter</label>
+            <label for="${proposedId}">Enter <span class="dao-form-required" aria-hidden="true">*</span></label>
             ${this.renderProposedValueControl(option, row.value, proposedId)}
           </div>
           <div class="dao-form-meta">${escapeHtml(option.path)} · ${escapeHtml(option.valueType)}</div>
