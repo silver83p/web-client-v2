@@ -81,6 +81,7 @@ import {
   createDaoBackendFetcher,
   DAO_ACTION_TYPES,
   DAO_CONFIG_CHANGE_OPTIONS,
+  DAO_PROPOSAL_CREATE_TYPE,
   DAO_PROPOSAL_DAY_MS,
   DAO_PROPOSAL_GRACE_PERIOD_MAX_MS,
   DAO_PROPOSAL_TITLE_MAX_LENGTH,
@@ -2548,7 +2549,15 @@ class DaoModal {
     this.addButton = document.getElementById('daoAddProposalButton');
 
     if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
-    if (this.addButton) this.addButton.addEventListener('click', () => addProposalModal.open());
+    if (this.addButton) {
+      this.addButton.addEventListener('click', () => {
+        if (hasPendingDaoProposalCreation()) {
+          showToast('Wait for your pending proposal to confirm before creating another.', 3000, 'info');
+          return;
+        }
+        addProposalModal.open();
+      });
+    }
 
     if (this.filterBar) {
       this.filterBar.addEventListener('click', (e) => {
@@ -2798,7 +2807,18 @@ class DaoModal {
 
     // Show + button when modal is active
     if (this.addButton) {
+      const proposalCreationPending = hasPendingDaoProposalCreation(currentAddress);
       this.addButton.classList.toggle('visible', hasFreshData && this.isActive());
+      this.addButton.disabled = proposalCreationPending;
+      this.addButton.title = proposalCreationPending
+        ? 'Wait for your pending proposal to confirm before creating another.'
+        : 'Add proposal';
+      this.addButton.setAttribute(
+        'aria-label',
+        proposalCreationPending
+          ? 'Add proposal unavailable while your pending proposal confirms'
+          : 'Add proposal'
+      );
     }
   }
 
@@ -3920,7 +3940,6 @@ class ConfirmProposalModal {
     this.content = document.getElementById('confirmProposalContent');
     this.currentDraft = null;
     this.isSubmitting = false;
-    this.canSubmit = false;
     this.signButtonLabel = this.signButton?.textContent || 'Sign Proposal';
 
     if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
@@ -3930,7 +3949,6 @@ class ConfirmProposalModal {
 
   open(draft) {
     this.currentDraft = draft;
-    this.canSubmit = false;
     this.setSubmitting(false);
     this.render();
     this.modal.classList.add('active');
@@ -3952,21 +3970,19 @@ class ConfirmProposalModal {
     if (this.closeButton) this.closeButton.disabled = this.isSubmitting;
     if (this.backButton) this.backButton.disabled = this.isSubmitting;
     if (this.signButton) {
-      this.signButton.disabled = this.isSubmitting || !this.canSubmit;
-      this.signButton.textContent = this.isSubmitting
-        ? 'Signing...'
-        : this.canSubmit ? this.signButtonLabel : 'Submission unavailable';
+      this.signButton.disabled = this.isSubmitting;
+      this.signButton.textContent = this.isSubmitting ? 'Signing...' : this.signButtonLabel;
     }
   }
 
   async handleSign() {
-    if (!this.canSubmit) {
-      showToast('Proposal submission will be enabled with nested transaction support', 3000, 'info');
-      return;
-    }
     if (this.isSubmitting) return;
     if (!this.currentDraft?.transaction?.from) {
       showToast('Proposal draft is unavailable', 3000, 'warning');
+      return;
+    }
+    if (hasPendingDaoProposalCreation(this.currentDraft.transaction.from)) {
+      showToast('Wait for your pending proposal to confirm before creating another.', 3000, 'info');
       return;
     }
 
@@ -3974,7 +3990,17 @@ class ConfirmProposalModal {
     let loadingToastId = showToast('Submitting proposal...', 0, 'loading');
 
     try {
-      const { maxGracePeriodMs, proposalDurations } = await addProposalModal.loadDaoProposalDefaults({ refresh: true });
+      const { proposalFeeUsdStr, maxGracePeriodMs, proposalDurations } = await addProposalModal.loadDaoProposalDefaults({ refresh: true });
+      const refreshedProposalFeeUsdStr = this.currentDraft.transaction.emergency ? '0' : proposalFeeUsdStr;
+      if (refreshedProposalFeeUsdStr !== this.currentDraft.proposalFeeUsdStr) {
+        this.currentDraft = {
+          ...this.currentDraft,
+          proposalFeeUsdStr: refreshedProposalFeeUsdStr,
+        };
+        this.render();
+        showToast('Proposal fee changed. Review the updated amount and sign again.', 4000, 'info');
+        return;
+      }
       const result = await daoRepo.createProposal({
         draft: this.currentDraft,
         timestamp: getTransactionTimestamp(),
@@ -4012,6 +4038,7 @@ class ConfirmProposalModal {
           action: '',
         });
       }
+      if (daoModal.isActive()) daoModal.render();
 
       if (loadingToastId) {
         hideToast(loadingToastId);
@@ -4063,7 +4090,7 @@ class ConfirmProposalModal {
         ['Time until start if submitted now', formatDaoDurationSummary(reviewDelayIfSubmittedNowMs)],
         ['Grace period', formatDaoDurationSummary(tx.gracePeriod)],
       ]),
-      '<p class="proposal-info-muted">The proposal fee is derived from DAO params and seeds the voter reward pool for regular proposals. Submission will be enabled when nested change-set transaction support is available.</p>',
+      '<p class="proposal-info-muted">The proposal fee is derived from DAO params and seeds the voter reward pool for regular proposals. Signing submits this proposal for review.</p>',
     ].join('');
   }
 
@@ -4095,6 +4122,13 @@ const DAO_VOTE_HELP = {
 
 function getDaoCurrentAccountAddress() {
   return myAccount?.keys?.address ? longAddress(myAccount.keys.address) : '';
+}
+
+function hasPendingDaoProposalCreation(from = getDaoCurrentAccountAddress()) {
+  if (!from || !Array.isArray(myData?.pending)) return false;
+  return myData.pending.some((pendingTx) => (
+    pendingTx?.type === DAO_PROPOSAL_CREATE_TYPE && pendingTx.from === from
+  ));
 }
 
 function getDaoProposalReviewWindow(proposal, now = getTransactionTimestamp()) {
