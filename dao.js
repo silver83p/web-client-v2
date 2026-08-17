@@ -720,6 +720,136 @@ export function normalizeDaoAddress(value) {
   return normalizeAddress(address);
 }
 
+function normalizeDaoUserVotes(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const normalized = {};
+  for (const [proposalKey, entry] of Object.entries(value)) {
+    const proposalNumber = normalizeDaoPositiveInteger(proposalKey);
+    if (!proposalNumber || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+
+    const claimStart = normalizeDaoTimestamp(entry.claimStart);
+    const claimEnd = normalizeDaoTimestamp(entry.claimEnd);
+    normalized[proposalNumber] = claimStart && claimEnd >= claimStart
+      ? { claimStart, claimEnd }
+      : {};
+  }
+  return normalized;
+}
+
+function hasDaoUserVoteClaimWindow(entry) {
+  return Boolean(entry?.claimStart && entry.claimEnd >= entry.claimStart);
+}
+
+export function createDaoProposalVoteTracker({
+  getDaoUserVotes,
+  setDaoUserVotes,
+}) {
+  if (typeof getDaoUserVotes !== 'function' || typeof setDaoUserVotes !== 'function') {
+    throw new TypeError('DAO vote tracker requires account vote state accessors');
+  }
+
+  function readVotes() {
+    try {
+      return normalizeDaoUserVotes(getDaoUserVotes());
+    } catch {
+      return {};
+    }
+  }
+
+  function writeVotes(votes) {
+    try {
+      setDaoUserVotes(votes);
+    } catch {
+      // Vote history is optional; account-state failures must not block DAO actions.
+    }
+  }
+
+  function getPendingClaimProposalNumbers() {
+    return Object.entries(readVotes())
+      .filter(([, entry]) => !hasDaoUserVoteClaimWindow(entry))
+      .map(([proposalNumber]) => Number(proposalNumber));
+  }
+
+  function getOpenClaimProposalNumbers(now = Date.now()) {
+    const timestamp = normalizeDaoTimestamp(now);
+    if (!timestamp) return [];
+
+    const votes = readVotes();
+    const unexpiredVotes = Object.fromEntries(
+      Object.entries(votes).filter(([, entry]) => (
+        !hasDaoUserVoteClaimWindow(entry) || timestamp <= entry.claimEnd
+      )),
+    );
+    if (Object.keys(unexpiredVotes).length !== Object.keys(votes).length) {
+      writeVotes(unexpiredVotes);
+    }
+
+    return Object.entries(unexpiredVotes)
+      .filter(([, entry]) => (
+        hasDaoUserVoteClaimWindow(entry)
+        && timestamp >= entry.claimStart
+      ))
+      .map(([proposalNumber]) => Number(proposalNumber));
+  }
+
+  function setAuthoritativeClaimWindow(proposalNumber, claimStart, claimEnd) {
+    const number = normalizeDaoPositiveInteger(proposalNumber);
+    const normalizedClaimStart = normalizeDaoTimestamp(claimStart);
+    const normalizedClaimEnd = normalizeDaoTimestamp(claimEnd);
+    if (!number || !normalizedClaimStart || normalizedClaimEnd < normalizedClaimStart) return;
+
+    const current = readVotes();
+    if (!Object.prototype.hasOwnProperty.call(current, number)) return;
+
+    const currentWindow = current[number];
+    if (currentWindow.claimStart === normalizedClaimStart
+      && currentWindow.claimEnd === normalizedClaimEnd) return;
+
+    writeVotes({
+      ...current,
+      [number]: {
+        claimStart: normalizedClaimStart,
+        claimEnd: normalizedClaimEnd,
+      },
+    });
+  }
+
+  function handleSettlement({
+    type,
+    outcome,
+    proposalNumber,
+  }) {
+    if (outcome !== 'success') return;
+    if (type !== DAO_ACTION_TYPES.VOTE && type !== DAO_ACTION_TYPES.CLAIM_REWARD) return;
+
+    const number = normalizeDaoPositiveInteger(proposalNumber);
+    if (!number) return;
+
+    const current = readVotes();
+    const isTracked = Object.prototype.hasOwnProperty.call(current, number);
+
+    if (type === DAO_ACTION_TYPES.VOTE) {
+      if (isTracked) return;
+      writeVotes({ ...current, [number]: {} });
+      return;
+    }
+
+    if (isTracked) {
+      const next = { ...current };
+      delete next[number];
+      writeVotes(next);
+    }
+  }
+
+  return Object.freeze({
+    getPendingClaimProposalNumbers,
+    getOpenClaimProposalNumbers,
+    handleSettlement,
+    setAuthoritativeClaimWindow,
+  });
+}
+
 export function parseDaoUnsignedBigInt(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value === 'bigint') return value >= 0n ? value : null;
@@ -848,6 +978,16 @@ function normalizeDaoProposalIndexEntries(entries) {
   return (Array.isArray(entries) ? entries : [])
     .map(normalizeDaoProposalMetadataEntry)
     .filter(Boolean);
+}
+
+export function getDaoTrackedProposalMetadataEntries(entries, proposalNumbers) {
+  const tracked = new Set(
+    (Array.isArray(proposalNumbers) ? proposalNumbers : [])
+      .map(normalizeDaoPositiveInteger)
+      .filter(Boolean),
+  );
+  return normalizeDaoProposalIndexEntries(entries)
+    .filter((entry) => tracked.has(entry.proposal));
 }
 
 async function fetchDaoProposalMeta(queryDaoApi) {

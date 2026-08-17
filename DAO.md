@@ -90,9 +90,21 @@ Important implementation detail:
 
 - The DAO UI requests the complete metadata index whenever the DAO is refreshed; proposal metadata is not persisted.
 - Proposal details are not persisted. Status filters fetch fresh details for the visible 10 entries, “Load more” fetches the next 10, and opening a proposal refreshes that proposal again.
-- The Claimable filter is intentionally disabled for this branch. Selecting it performs no proposal-detail requests and displays no proposals.
+- The Claimable filter queries only proposals from the current account's confirmed vote history whose authoritative reward-claim window is currently open. It does not scan every finalized proposal, and it renders a candidate only when fresh details report that it is claimable.
 - Account changes and sign-out clear the in-memory proposal details.
 - Failed detail fetches are retried the next time their filter page or proposal is opened.
+
+### Account claim candidates
+
+- New accounts initialize an empty `daoUserVotes` map. For existing accounts without the map, the first confirmed vote creates it and adds its proposal number.
+- Vote-history changes update `myData` in memory and rely on the normal account save lifecycle; DAO tracking does not trigger an extra save.
+- On each DAO metadata refresh, tracked proposals that have entered a final state are refreshed once and updated with the authoritative claim window derived from `votingEndedAt`.
+- Repeated confirmed votes on one proposal keep a single stored entry.
+- Confirmed reward claims remove their proposal number. Submitted, failed, and timed-out claims leave it available for retry.
+- Proposals are hidden until their authoritative claim window opens and after it ends. Expired entries are removed from the account record when claim candidates are evaluated.
+- The authoritative saved claim window narrows the account's candidate list. Fresh proposal details must confirm current eligibility before rendering, and the server remains authoritative when a claim is submitted.
+- Account backups include this vote history and restore it with the rest of the account data. It does not discover votes that are absent from the restored account record.
+- Otherwise ineligible candidates can remain stored until a reward is successfully claimed or the account data is cleared, but fresh details exclude them from the rendered list.
 
 ## Backend Data Boundary
 
@@ -101,6 +113,7 @@ Important implementation detail:
 - Proposal list loading uses:
   - `GET /dao/proposals/meta` on every DAO refresh
   - `GET /dao/proposals/:number` for each entry on the visible filter page
+- The Claimable filter requests details only for locally tracked proposal numbers with an open saved claim window that are found in the metadata index, then renders only details whose reward status is `Claimable`.
 - Status, emergency flag, and status-transition ordering always come from the metadata index overlay, not the detail payload.
 - The fetcher skips an unavailable detail response so it does not block the remaining indexed proposals from rendering.
 - The old exhaustive `1..N` list fallback is not used when the metadata index is empty.
