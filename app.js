@@ -86,6 +86,7 @@ import {
   DAO_PROPOSAL_DAY_MS,
   DAO_PROPOSAL_GRACE_PERIOD_MAX_MS,
   DAO_PROPOSAL_TITLE_MAX_LENGTH,
+  DAO_PARAMETER_MAX_WHOLE_DIGITS,
   buildDaoProposalCreateDraft,
   daoRepo,
   DAO_STATES,
@@ -101,8 +102,10 @@ import {
   getDaoTypeLabel,
   getEffectiveDaoState,
   hasPendingDaoAction,
+  isValidDaoDecimalString,
   isDaoTransactionType,
   normalizeDaoAddress,
+  normalizeDaoParameterInput,
   parseDaoUnsignedBigInt,
   setDaoBackendFetcher,
 } from './dao.js';
@@ -3083,6 +3086,7 @@ function escapeDaoFormAttribute(value) {
 }
 
 const DAO_REVIEW_START_MAX_MS = new Date(9999, 11, 31, 23, 59, 0, 0).getTime();
+const DAO_PARAMETER_NUMBER_LIMIT = 10 ** DAO_PARAMETER_MAX_WHOLE_DIGITS;
 
 class AddProposalModal {
   load() {
@@ -3559,19 +3563,24 @@ class AddProposalModal {
   }
 
   renderProposedValueControl(option, value, id, dataAttributes) {
-    if (option.valueType === 'boolean') {
-      return `
-        <select id="${id}" class="form-control" ${dataAttributes} required>
-          <option value="">Select value</option>
-          <option value="true" ${value === 'true' ? 'selected' : ''}>True</option>
-          <option value="false" ${value === 'false' ? 'selected' : ''}>False</option>
-        </select>
-      `;
+    switch (`${option.valueType}:${option.validation}`) {
+      case 'boolean:boolean':
+        return `
+          <select id="${id}" class="form-control" ${dataAttributes} required>
+            <option value="">Select value</option>
+            <option value="true" ${value === 'true' ? 'selected' : ''}>True</option>
+            <option value="false" ${value === 'false' ? 'selected' : ''}>False</option>
+          </select>
+        `;
+      case 'string:decimalString':
+        return `<input id="${id}" class="form-control" ${dataAttributes} type="text" inputmode="decimal" maxlength="34" value="${escapeDaoFormAttribute(value)}" required />`;
+      case 'number:integer':
+        return `<input id="${id}" class="form-control" ${dataAttributes} type="number" step="1" inputmode="numeric" min="0" value="${escapeDaoFormAttribute(value)}" required />`;
+      case 'number:decimal':
+        return `<input id="${id}" class="form-control" ${dataAttributes} type="number" step="any" inputmode="decimal" min="0" value="${escapeDaoFormAttribute(value)}" required />`;
+      default:
+        throw new Error(`Unsupported DAO parameter validation: ${option.valueType}:${option.validation}`);
     }
-
-    const step = option.valueType === 'integer' ? '1' : 'any';
-    const inputmode = option.valueType === 'integer' ? 'numeric' : 'decimal';
-    return `<input id="${id}" class="form-control" ${dataAttributes} type="number" step="${step}" inputmode="${inputmode}" value="${escapeDaoFormAttribute(value)}" required />`;
   }
 
   addOption() {
@@ -3647,7 +3656,11 @@ class AddProposalModal {
 
     if (event.target.matches('[data-dao-change-value]')) {
       const change = proposalOption.changes[Number(event.target.dataset.daoChangeIndex)];
-      if (change) change.value = event.target.value;
+      if (!change) return;
+
+      const value = normalizeDaoParameterInput(event.target.value);
+      event.target.value = value;
+      change.value = value;
     }
   }
 
@@ -3795,15 +3808,39 @@ class AddProposalModal {
         seenKeys.add(option.key);
 
         const value = String(change.value || '').trim();
+        const parameterType = `${option.valueType}:${option.validation}`;
+        const numericValue = Number(value);
         if (!value) throw this.createValidationError(`Enter a proposed value for ${option.label}`, valueInput);
-        if (option.valueType === 'boolean' && value !== 'true' && value !== 'false') {
+        if (parameterType === 'boolean:boolean' && value !== 'true' && value !== 'false') {
           throw this.createValidationError(`${option.label} must be true or false`, valueInput);
         }
-        if (option.valueType === 'integer' && !Number.isInteger(Number(value))) {
+        if (parameterType === 'number:integer' && !Number.isInteger(numericValue)) {
           throw this.createValidationError(`${option.label} must be a whole number`, valueInput);
         }
-        if (option.valueType === 'float' && !Number.isFinite(Number(value))) {
+        if (parameterType === 'number:integer' && (
+          numericValue < 0 || numericValue >= DAO_PARAMETER_NUMBER_LIMIT
+        )) {
+          throw this.createValidationError(
+            `${option.label} must be a non-negative whole number with up to ${DAO_PARAMETER_MAX_WHOLE_DIGITS} digits`,
+            valueInput,
+          );
+        }
+        if (parameterType === 'number:decimal' && !Number.isFinite(numericValue)) {
           throw this.createValidationError(`${option.label} must be a number`, valueInput);
+        }
+        if (parameterType === 'number:decimal' && (
+          numericValue < 0 || numericValue >= DAO_PARAMETER_NUMBER_LIMIT
+        )) {
+          throw this.createValidationError(
+            `${option.label} must be non-negative with up to ${DAO_PARAMETER_MAX_WHOLE_DIGITS} digits before the decimal point`,
+            valueInput,
+          );
+        }
+        if (parameterType === 'string:decimalString' && !isValidDaoDecimalString(value)) {
+          throw this.createValidationError(
+            `${option.label} must be a non-negative number`,
+            valueInput,
+          );
         }
 
         return {
