@@ -154,6 +154,7 @@ import {
   linkifyUrls,
   escapeHtml,
   debounce,
+  installModalTransitionListeners,
   openModal,
   withButtonCooldown,
   BUTTON_COOLDOWN_MS,
@@ -716,6 +717,7 @@ function lockRapidMenuClicks(menuList) {
 
 // Load saved account data and update chat list on page load
 document.addEventListener('DOMContentLoaded', async () => {
+  installModalTransitionListeners();
   markConnectivityDependentElements();
   await checkVersion(); // version needs to be checked before anything else happens
   timeDifference(); // Calculate and log time difference early
@@ -2371,20 +2373,8 @@ class MenuModal {
     }
   }
 
-  enableSignOutButtonWithDelay() {
-    // Disable button initially
-    this.signOutHeaderButton.classList.remove('active');
-    // Re-enable after modal animation completes (300ms) + small buffer to prevent accidental double-taps
-    setTimeout(() => {
-      if (this.isActive()) {
-        this.signOutHeaderButton.classList.add('active');
-      }
-    }, 400); // 400ms = modal animation (300ms) + 100ms buffer
-  }
-
   open() {
     openModal(this.modal);
-    this.enableSignOutButtonWithDelay();
     enterFullscreen();
   }
 
@@ -6416,20 +6406,8 @@ class SettingsModal {
     this.signOutHeaderButton.addEventListener('click', settingsWrappedSignOut);
   }
 
-  enableSignOutButtonWithDelay() {
-    // Disable button initially
-    this.signOutHeaderButton.classList.remove('active');
-    // Re-enable after modal animation completes (300ms) + small buffer to prevent accidental double-taps
-    setTimeout(() => {
-      if (this.isActive()) {
-        this.signOutHeaderButton.classList.add('active');
-      }
-    }, 400); // 400ms = modal animation (300ms) + 100ms buffer
-  }
-
   open() {
     openModal(this.modal);
-    this.enableSignOutButtonWithDelay();
     enterFullscreen();
   }
 
@@ -30355,6 +30333,8 @@ class SendAssetFormModal {
     this.submitButton.disabled = true;
     qrScanModal.fillFunction = this.fillFromQR.bind(this); // set function to handle filling the payment form from QR data
 
+    if (!openModal(this.modal)) return;
+
     if (this.username) {
       this.usernameInput.value = this.username;
       setTimeout(() => {
@@ -30379,7 +30359,6 @@ class SendAssetFormModal {
       this.assetSelectDropdown.value = assetKey;
       await this.handleAssetChange();
     }
-    openModal(this.modal);
   }
 
   getSelectedNetwork() {
@@ -31554,6 +31533,8 @@ class ReceiveModal {
     this.amountInput.value = '';
     this.memoInput.value = '';
 
+    if (!openModal(this.modal)) return;
+
     if (this.mode === 'evm') {
       await evmAssets.refresh();
       evmAssets.populateNetworkSelect(this.networkSelect, {
@@ -31569,7 +31550,6 @@ class ReceiveModal {
       this.assetSelect.value = assetKey;
       await this.handleAssetChange();
     }
-    openModal(this.modal);
   }
 
   close() {
