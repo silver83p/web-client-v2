@@ -721,6 +721,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   timeDifference(); // Calculate and log time difference early
 
   setupConnectivityDetection();
+  PopupSelect.load();
 
   // React Native App
   reactNativeApp.load();
@@ -3155,6 +3156,8 @@ class AddProposalModal {
     this.gracePeriodLimit = document.getElementById('addProposalGracePeriodLimit');
     this.gracePeriodLoadError = false;
     this.submitButton = this.form?.querySelector('button[type="submit"]');
+    if (this.typeSelect) PopupSelect.enhance(this.typeSelect);
+    if (this.emergencySelect) PopupSelect.enhance(this.emergencySelect);
     this.resetConfigCache();
 
     if (this.closeButton) this.closeButton.addEventListener('click', () => this.close());
@@ -3204,9 +3207,15 @@ class AddProposalModal {
     this.maxGracePeriodMs = null;
     this.gracePeriodLoadError = false;
     if (this.titleInput) this.titleInput.value = '';
-    if (this.typeSelect) this.typeSelect.value = 'governance';
+    if (this.typeSelect) {
+      this.typeSelect.value = 'governance';
+      PopupSelect.sync(this.typeSelect);
+    }
     if (this.descriptionInput) this.descriptionInput.value = '';
-    if (this.emergencySelect) this.emergencySelect.value = 'false';
+    if (this.emergencySelect) {
+      this.emergencySelect.value = 'false';
+      PopupSelect.sync(this.emergencySelect);
+    }
     this.reviewStartTimeMs = 0;
     this.gracePeriodMs = 0;
     this.renderReviewStartTime();
@@ -3221,6 +3230,7 @@ class AddProposalModal {
   }
 
   close() {
+    PopupSelect.hide();
     this.modal.classList.remove('active');
     enterFullscreen();
   }
@@ -3337,10 +3347,11 @@ class AddProposalModal {
   }
 
   clearValidationError(target) {
-    const highlight = this.getValidationHighlight(target);
+    const control = PopupSelect.getVisibleControl(target);
+    const highlight = this.getValidationHighlight(control);
     highlight?.classList.remove('dao-form-error');
-    if (target?.matches?.('input, select, textarea, button')) {
-      target.removeAttribute('aria-invalid');
+    if (control?.matches?.('input, select, textarea, button')) {
+      control.removeAttribute('aria-invalid');
     }
   }
 
@@ -3349,7 +3360,7 @@ class AddProposalModal {
   }
 
   showValidationError(error) {
-    const target = error?.validationTarget;
+    const target = PopupSelect.getVisibleControl(error?.validationTarget);
     const highlight = this.getValidationHighlight(target);
     if (highlight) {
       highlight.classList.add('dao-form-error');
@@ -3503,6 +3514,8 @@ class AddProposalModal {
   renderOptions(unavailableMessage = '') {
     if (!this.optionsList) return;
 
+    PopupSelect.hide();
+
     const configOptions = this.getConfigOptions();
     const isEmergency = this.emergencySelect?.value === 'true';
     this.optionsLimitHelp?.classList.toggle('hidden', isEmergency);
@@ -3518,6 +3531,9 @@ class AddProposalModal {
         this.renderOption(proposalOption, index, configOptions, unavailableMessage)
       )),
     ].join('');
+
+    this.optionsList.querySelectorAll('select')
+      .forEach((select) => PopupSelect.enhance(select));
 
     if (this.addOptionButton) {
       this.addOptionButton.disabled = configOptions.length === 0 || isEmergency || this.options.length >= 9;
@@ -3571,7 +3587,7 @@ class AddProposalModal {
       <option value="${escapeHtml(item.key)}" ${item.key === option.key ? 'selected' : ''}>${escapeHtml(item.label)}</option>
     `).join('') : '';
     const parameterControl = isTemplate
-      ? `<select id="${configId}" class="form-control" data-dao-change-key data-dao-option-index="${optionIndex}" data-dao-change-index="${changeIndex}" required>${selectOptions}</select>`
+      ? `<select id="${configId}" class="form-control" aria-label="Select parameter for Option ${optionNumber}, change ${changeNumber}" data-dao-change-key data-dao-option-index="${optionIndex}" data-dao-change-index="${changeIndex}" required>${selectOptions}</select>`
       : `<input id="${configId}" class="form-control dao-form-current-value" type="text" value="${escapeDaoFormAttribute(option.label)}" readonly />`;
 
     return `
@@ -3637,7 +3653,9 @@ class AddProposalModal {
     this.options.push(this.createOption());
     this.synchronizeOptions();
     this.renderOptions();
-    this.optionsList?.querySelector(`[data-dao-option="${this.options.length - 1}"] [data-dao-change-value]`)?.focus();
+    PopupSelect.focus(this.optionsList?.querySelector(
+      `[data-dao-option="${this.options.length - 1}"] [data-dao-change-value]`
+    ));
   }
 
   addParameterChange(optionIndex) {
@@ -3656,7 +3674,10 @@ class AddProposalModal {
     template.changes.push({ key: nextOption.key, value: '' });
     this.synchronizeOptions();
     this.renderOptions();
-    this.optionsList?.querySelector(`[data-dao-option="${optionIndex}"] [data-dao-change-row]:last-child [data-dao-change-key]`)?.focus();
+    const parameterSelect = this.optionsList?.querySelector(
+      `[data-dao-option="${optionIndex}"] [data-dao-change-row]:last-child [data-dao-change-key]`
+    );
+    PopupSelect.focus(parameterSelect);
   }
 
   handleOptionsClick(event) {
@@ -3705,15 +3726,19 @@ class AddProposalModal {
     if (!event.target.matches('[data-dao-change-key]')) return;
 
     const optionIndex = Number(event.target.dataset.daoOptionIndex);
+    const changeIndex = Number(event.target.dataset.daoChangeIndex);
     if (optionIndex !== 0) return;
 
     const proposalOption = this.options[optionIndex];
-    const change = proposalOption?.changes[Number(event.target.dataset.daoChangeIndex)];
+    const change = proposalOption?.changes[changeIndex];
     if (!change) return;
     change.key = event.target.value;
     change.value = '';
     this.synchronizeOptions();
     this.renderOptions();
+    PopupSelect.focus(this.optionsList?.querySelector(
+      `[data-dao-change-key][data-dao-option-index="${optionIndex}"][data-dao-change-index="${changeIndex}"]`
+    ));
   }
 
   getIntegerValue(input, label, unit = '') {
@@ -35850,4 +35875,392 @@ function closeTopModal({ id: modalId }) {
 
   closeModal();
   return true;
+}
+
+class PopupSelect {
+  static MAX_MENU_WIDTH = 360;
+  static MIN_MENU_WIDTH = 280;
+  static TRIGGER_GAP = 6;
+  static VIEWPORT_MARGIN = 8;
+  static SCROLL_INDICATOR_INSET = 8;
+  static SCROLL_INDICATOR_RIGHT_INSET = 3;
+  static SCROLL_INDICATOR_WIDTH = 4;
+  static MIN_SCROLL_THUMB_HEIGHT = 24;
+  static generatedId = 0;
+  static activeSelect = null;
+  static activeIndex = -1;
+  static menu = null;
+  static scrollIndicator = null;
+  static scrollThumb = null;
+
+  static load() {
+    if (PopupSelect.menu) return;
+
+    PopupSelect.menu = document.getElementById('popupSelectListbox');
+    PopupSelect.scrollIndicator = document.getElementById('popupSelectScrollIndicator');
+    PopupSelect.scrollThumb = PopupSelect.scrollIndicator?.firstElementChild;
+    if (!PopupSelect.menu || !PopupSelect.scrollIndicator || !PopupSelect.scrollThumb) throw new Error('PopupSelect markup is missing');
+    document.addEventListener('pointerdown', PopupSelect.handleDocumentPointerDown, true);
+    document.addEventListener('click', PopupSelect.handleDocumentClick);
+    document.addEventListener('keydown', PopupSelect.handleDocumentKeyDown);
+    document.addEventListener('change', ({ target }) => PopupSelect.sync(target), true);
+    document.addEventListener('scroll', PopupSelect.handleDocumentScroll, { capture: true, passive: true });
+    window.addEventListener('resize', PopupSelect.hide);
+    window.visualViewport?.addEventListener('scroll', PopupSelect.hide, { passive: true });
+    window.visualViewport?.addEventListener('resize', PopupSelect.hide);
+    PopupSelect.menu.addEventListener('scroll', PopupSelect.updateScrollIndicator, { passive: true });
+  }
+
+  static handleDocumentPointerDown(event) {
+    const trigger = PopupSelect.getTrigger(PopupSelect.activeSelect);
+    if (
+      !trigger ||
+      trigger.contains(event.target) ||
+      PopupSelect.menu.contains(event.target)
+    ) return;
+
+    PopupSelect.hide();
+  }
+
+  static handleDocumentClick(event) {
+    const option = event.target.closest?.('.popup-select__option');
+    if (option && PopupSelect.menu.contains(option)) {
+      if (!PopupSelect.activeSelect || option.getAttribute('aria-disabled') === 'true') return;
+      PopupSelect.setActiveIndex(Number(option.dataset.optionIndex));
+      PopupSelect.selectActiveOption();
+      return;
+    }
+
+    const trigger = event.target.closest?.('.popup-select__trigger');
+    const select = PopupSelect.getSelect(trigger);
+    if (!select) return;
+
+    if (PopupSelect.activeSelect === select) PopupSelect.close();
+    else PopupSelect.open(select);
+  }
+
+  static handleDocumentKeyDown(event) {
+    const trigger = event.target.closest?.('.popup-select__trigger');
+    const select = PopupSelect.getSelect(trigger);
+    if (select && ['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault();
+      PopupSelect.open(select);
+      return;
+    }
+
+    if (PopupSelect.activeSelect && PopupSelect.menu.contains(event.target)) {
+      PopupSelect.handleMenuKeyDown(event);
+      return;
+    }
+
+    if (event.key !== 'Escape' || !PopupSelect.activeSelect) return;
+    event.preventDefault();
+    PopupSelect.close();
+  }
+
+  static handleDocumentScroll(event) {
+    if (!PopupSelect.activeSelect || event.target === PopupSelect.menu) return;
+    PopupSelect.hide();
+  }
+
+  static getTrigger(select) {
+    const trigger = select?.nextElementSibling;
+    return trigger?.classList.contains('popup-select__trigger') ? trigger : null;
+  }
+
+  static getSelect(trigger) {
+    const select = trigger?.previousElementSibling;
+    return select?.tagName === 'SELECT' ? select : null;
+  }
+
+  static getVisibleControl(control) {
+    return PopupSelect.getTrigger(control) || control;
+  }
+
+  static hide() {
+    const trigger = PopupSelect.getTrigger(PopupSelect.activeSelect);
+    if (!PopupSelect.activeSelect) return;
+
+    PopupSelect.activeSelect = null;
+    PopupSelect.activeIndex = -1;
+    trigger?.setAttribute('aria-expanded', 'false');
+    PopupSelect.menu.hidden = true;
+    PopupSelect.scrollIndicator.hidden = true;
+  }
+
+  static close() {
+    if (!PopupSelect.activeSelect) return;
+    const trigger = PopupSelect.getTrigger(PopupSelect.activeSelect);
+
+    PopupSelect.hide();
+    trigger?.focus({ preventScroll: true });
+  }
+
+  static enhance(select) {
+    if (select?.tagName !== 'SELECT') throw new TypeError('PopupSelect requires a select element');
+    if (!PopupSelect.menu) throw new Error('PopupSelect.load() must be called before creating controls');
+    if (PopupSelect.getTrigger(select)) return;
+
+    const label = select.labels?.[0] || null;
+    if (!select.id) select.id = `popupSelect${++PopupSelect.generatedId}`;
+    if (label && !label.id) label.id = `${select.id}PopupLabel`;
+    const trigger = PopupSelect.createTrigger(select, label);
+
+    select.classList.add('sr-only');
+    select.setAttribute('aria-hidden', 'true');
+    select.tabIndex = -1;
+    select.insertAdjacentElement('afterend', trigger);
+    if (label) label.htmlFor = trigger.id;
+
+    PopupSelect.sync(select);
+  }
+
+  static createTrigger(select, label) {
+    const trigger = document.createElement('button');
+    trigger.id = `${select.id}PopupTrigger`;
+    trigger.className = 'form-control popup-select__trigger';
+    trigger.type = 'button';
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', PopupSelect.menu.id);
+    if (select.required) trigger.setAttribute('aria-required', 'true');
+
+    const accessibleName = select.getAttribute('aria-label');
+    const describedBy = select.getAttribute('aria-describedby');
+    if (accessibleName) trigger.setAttribute('aria-label', accessibleName);
+    else if (label) trigger.setAttribute('aria-labelledby', `${label.id} ${trigger.id}Value`);
+    if (describedBy) trigger.setAttribute('aria-describedby', describedBy);
+
+    trigger.innerHTML = `
+      <span id="${trigger.id}Value" class="popup-select__value"></span>
+      <span class="popup-select__chevron" aria-hidden="true"></span>
+    `;
+
+    return trigger;
+  }
+
+  static renderMenu() {
+    const select = PopupSelect.activeSelect;
+    if (!select) return;
+
+    const trigger = PopupSelect.getTrigger(select);
+    const accessibleName = select.getAttribute('aria-label');
+    const labelledBy = trigger?.labels?.[0]?.id;
+    PopupSelect.menu.removeAttribute('aria-label');
+    PopupSelect.menu.removeAttribute('aria-labelledby');
+    PopupSelect.menu.removeAttribute('aria-activedescendant');
+    if (accessibleName) PopupSelect.menu.setAttribute('aria-label', accessibleName);
+    else if (labelledBy) PopupSelect.menu.setAttribute('aria-labelledby', labelledBy);
+
+    PopupSelect.menu.replaceChildren();
+    PopupSelect.menu.scrollTop = 0;
+    [...select.options].forEach((option, index) => {
+      const item = document.createElement('div');
+      item.id = `${PopupSelect.menu.id}Option${index}`;
+      item.className = 'popup-select__option';
+      item.dataset.optionIndex = String(index);
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(index === select.selectedIndex));
+      if (option.disabled) item.setAttribute('aria-disabled', 'true');
+
+      const label = document.createElement('span');
+      label.className = 'popup-select__option-label';
+      label.textContent = option.textContent;
+      item.append(label);
+      PopupSelect.menu.append(item);
+    });
+  }
+
+  static sync(select) {
+    const trigger = PopupSelect.getTrigger(select);
+    if (!trigger) return;
+
+    const selectedText = select.options[select.selectedIndex]?.textContent || '';
+    trigger.querySelector('.popup-select__value').textContent = selectedText;
+    const accessibleName = select.getAttribute('aria-label');
+    if (accessibleName) trigger.setAttribute('aria-label', `${accessibleName}: ${selectedText}`);
+    trigger.disabled = select.disabled;
+    if (PopupSelect.activeSelect !== select) return;
+
+    PopupSelect.renderMenu();
+    PopupSelect.activeIndex = select.selectedIndex >= 0 && !select.options[select.selectedIndex].disabled
+      ? select.selectedIndex
+      : PopupSelect.findEnabledIndex(0, 1);
+    if (!PopupSelect.menu.hidden) PopupSelect.setActiveIndex(PopupSelect.activeIndex);
+  }
+
+  static open(select) {
+    const trigger = PopupSelect.getTrigger(select);
+    if (!trigger || PopupSelect.activeSelect === select || select.disabled || select.options.length === 0) return;
+
+    PopupSelect.hide();
+    PopupSelect.activeSelect = select;
+    PopupSelect.sync(select);
+    trigger.setAttribute('aria-expanded', 'true');
+    PopupSelect.menu.hidden = false;
+
+    PopupSelect.positionMenu();
+    PopupSelect.menu.focus({ preventScroll: true });
+    PopupSelect.setActiveIndex(PopupSelect.activeIndex);
+  }
+
+  static focus(control) {
+    PopupSelect.getVisibleControl(control)?.focus({ preventScroll: true });
+  }
+
+  static findEnabledIndex(index, direction) {
+    const options = PopupSelect.activeSelect.options;
+    while (index >= 0 && index < options.length) {
+      if (!options[index].disabled) return index;
+      index += direction;
+    }
+    return -1;
+  }
+
+  static setActiveIndex(index) {
+    if (!PopupSelect.activeSelect || index < 0 || PopupSelect.activeSelect.options[index]?.disabled) return;
+
+    PopupSelect.activeIndex = index;
+    PopupSelect.menu.querySelectorAll('.popup-select__option').forEach((item, itemIndex) => {
+      item.classList.toggle('is-active', itemIndex === index);
+    });
+
+    const activeOption = PopupSelect.menu.querySelector(`[data-option-index="${index}"]`);
+    if (!activeOption) return;
+    PopupSelect.menu.setAttribute('aria-activedescendant', activeOption.id);
+    const optionBottom = activeOption.offsetTop + activeOption.offsetHeight;
+    if (activeOption.offsetTop < PopupSelect.menu.scrollTop) {
+      PopupSelect.menu.scrollTop = activeOption.offsetTop;
+    } else if (optionBottom > PopupSelect.menu.scrollTop + PopupSelect.menu.clientHeight) {
+      PopupSelect.menu.scrollTop = optionBottom - PopupSelect.menu.clientHeight;
+    }
+    PopupSelect.updateScrollIndicator();
+  }
+
+  static selectActiveOption() {
+    const select = PopupSelect.activeSelect;
+    const option = select?.options[PopupSelect.activeIndex];
+    if (!option || option.disabled) return;
+
+    const changed = select.selectedIndex !== PopupSelect.activeIndex;
+    select.selectedIndex = PopupSelect.activeIndex;
+    PopupSelect.close();
+    if (changed) {
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  static positionMenu() {
+    const trigger = PopupSelect.getTrigger(PopupSelect.activeSelect);
+    if (!trigger) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const visualViewport = window.visualViewport;
+    const viewport = {
+      left: visualViewport?.offsetLeft ?? 0,
+      top: visualViewport?.offsetTop ?? 0,
+      right: (visualViewport?.offsetLeft ?? 0) + (visualViewport?.width ?? window.innerWidth),
+      bottom: (visualViewport?.offsetTop ?? 0) + (visualViewport?.height ?? window.innerHeight),
+    };
+    const availableWidth = Math.max(0, viewport.right - viewport.left - PopupSelect.VIEWPORT_MARGIN * 2);
+    const menuWidth = Math.min(
+      Math.max(Math.ceil(triggerRect.width), PopupSelect.MIN_MENU_WIDTH),
+      PopupSelect.MAX_MENU_WIDTH,
+      availableWidth,
+    );
+
+    PopupSelect.menu.style.width = `${menuWidth}px`;
+    PopupSelect.menu.style.maxHeight = '';
+    const desiredHeight = PopupSelect.menu.getBoundingClientRect().height;
+    const spaceBelow = Math.max(
+      0,
+      viewport.bottom - PopupSelect.VIEWPORT_MARGIN - triggerRect.bottom - PopupSelect.TRIGGER_GAP,
+    );
+    const spaceAbove = Math.max(
+      0,
+      triggerRect.top - viewport.top - PopupSelect.VIEWPORT_MARGIN - PopupSelect.TRIGGER_GAP,
+    );
+    const opensAbove = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+    const availableHeight = opensAbove ? spaceAbove : spaceBelow;
+
+    PopupSelect.menu.style.maxHeight = `${Math.floor(Math.min(desiredHeight, availableHeight))}px`;
+    const menuRect = PopupSelect.menu.getBoundingClientRect();
+    const minLeft = viewport.left + PopupSelect.VIEWPORT_MARGIN;
+    const maxLeft = viewport.right - PopupSelect.VIEWPORT_MARGIN - menuRect.width;
+    const left = Math.max(minLeft, Math.min(maxLeft, triggerRect.left));
+    const top = opensAbove
+      ? triggerRect.top - PopupSelect.TRIGGER_GAP - menuRect.height
+      : triggerRect.bottom + PopupSelect.TRIGGER_GAP;
+
+    PopupSelect.menu.dataset.placement = opensAbove ? 'above' : 'below';
+    PopupSelect.menu.style.left = `${Math.round(left)}px`;
+    PopupSelect.menu.style.top = `${Math.round(top)}px`;
+    PopupSelect.updateScrollIndicator();
+  }
+
+  static updateScrollIndicator() {
+    const scrollRange = PopupSelect.menu.scrollHeight - PopupSelect.menu.clientHeight;
+    if (!PopupSelect.activeSelect || scrollRange <= 1) {
+      PopupSelect.scrollIndicator.hidden = true;
+      return;
+    }
+
+    const menuRect = PopupSelect.menu.getBoundingClientRect();
+    const trackHeight = Math.max(0, menuRect.height - PopupSelect.SCROLL_INDICATOR_INSET * 2);
+    const thumbHeight = Math.min(
+      trackHeight,
+      Math.max(
+        PopupSelect.MIN_SCROLL_THUMB_HEIGHT,
+        trackHeight * (PopupSelect.menu.clientHeight / PopupSelect.menu.scrollHeight),
+      ),
+    );
+    const thumbTravel = Math.max(0, trackHeight - thumbHeight);
+    const scrollProgress = Math.min(1, Math.max(0, PopupSelect.menu.scrollTop / scrollRange));
+    const thumbTop = thumbTravel * scrollProgress;
+
+    PopupSelect.scrollIndicator.hidden = false;
+    PopupSelect.scrollIndicator.style.height = `${Math.round(trackHeight)}px`;
+    PopupSelect.scrollIndicator.style.left = `${Math.round(
+      menuRect.right - PopupSelect.SCROLL_INDICATOR_RIGHT_INSET - PopupSelect.SCROLL_INDICATOR_WIDTH,
+    )}px`;
+    PopupSelect.scrollIndicator.style.top = `${Math.round(menuRect.top + PopupSelect.SCROLL_INDICATOR_INSET)}px`;
+    PopupSelect.scrollThumb.style.height = `${Math.round(thumbHeight)}px`;
+    PopupSelect.scrollThumb.style.top = `${Math.round(thumbTop)}px`;
+  }
+
+  static handleMenuKeyDown(event) {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        PopupSelect.setActiveIndex(PopupSelect.findEnabledIndex(PopupSelect.activeIndex + 1, 1));
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        PopupSelect.setActiveIndex(PopupSelect.findEnabledIndex(PopupSelect.activeIndex - 1, -1));
+        break;
+      case 'Home':
+        event.preventDefault();
+        PopupSelect.setActiveIndex(PopupSelect.findEnabledIndex(0, 1));
+        break;
+      case 'End':
+        event.preventDefault();
+        PopupSelect.setActiveIndex(PopupSelect.findEnabledIndex(PopupSelect.activeSelect.options.length - 1, -1));
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        PopupSelect.selectActiveOption();
+        break;
+      case 'Escape':
+        event.preventDefault();
+        event.stopPropagation();
+        PopupSelect.close();
+        break;
+      case 'Tab':
+        PopupSelect.close();
+        break;
+    }
+  }
 }
