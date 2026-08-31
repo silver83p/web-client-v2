@@ -90,6 +90,7 @@ import {
   DAO_PROJECT_MAX_MILESTONES,
   DAO_PROJECT_MILESTONE_TEXT_MAX_LENGTH,
   DAO_PROJECT_MILESTONE_TITLE_MAX_LENGTH,
+  DAO_PROJECT_FILTERS,
   DAO_PROJECT_PREVIEW_KIND,
   DAO_PROJECT_TYPE,
   DAO_PARAMETER_MAX_WHOLE_DIGITS,
@@ -100,6 +101,9 @@ import {
   getDaoFinalVoteResult,
   getDaoNotificationSummary,
   getDaoProjectBudgetSummary,
+  getDaoProjectPresentation,
+  getDaoProposalInfoStateLabel,
+  getDaoProposalListFilterKey,
   getDaoTransactionMessage,
   getDaoTrackedProposalMetadataEntries,
   getDaoProposalClaimWindow,
@@ -2606,7 +2610,14 @@ async function refreshDaoNotificationSummary() {
 const DAO_PROPOSAL_PAGE_SIZE = 10;
 const DAO_ALL_FILTER = { key: 'all', label: 'All' };
 const DAO_CLAIMABLE_FILTER = { key: 'claimable', label: 'Claimable' };
-const DAO_FILTER_OPTIONS = [DAO_ALL_FILTER, ...DAO_STATES, DAO_CLAIMABLE_FILTER];
+const DAO_FILTER_OPTIONS = [
+  DAO_ALL_FILTER,
+  ...DAO_STATES,
+  DAO_CLAIMABLE_FILTER,
+  ...DAO_PROJECT_FILTERS,
+];
+const DAO_PROJECT_FILTER_KEYS = new Set(DAO_PROJECT_FILTERS.map(({ key }) => key));
+const DAO_PROJECT_CANDIDATE_STATES = new Set(['accepted', 'applied']);
 
 function formatDaoTimestamp(ts) {
   const n = Number(ts || 0);
@@ -2737,12 +2748,17 @@ class DaoModal {
       await daoRepo.refresh({ force: true });
       if (!this.isActive() || refreshId !== this.openRefreshId) return;
       this.acknowledgeNotifications(notificationCutoff);
+      const projectFilterProposalNumbers = await this.loadProjectFilterCandidates();
+      if (!this.isActive() || refreshId !== this.openRefreshId) return;
       const refreshedClaimProposalNumbers = await this.syncTrackedClaimWindows();
       if (!this.isActive() || refreshId !== this.openRefreshId) return;
       this.refreshState = 'ready';
       await this.loadSelectedFilter({
         reset: true,
-        reuseProposalNumbers: refreshedClaimProposalNumbers,
+        reuseProposalNumbers: new Set([
+          ...projectFilterProposalNumbers,
+          ...refreshedClaimProposalNumbers,
+        ]),
       });
       this.lastSuccessfulRefreshId = Math.max(this.lastSuccessfulRefreshId, refreshId);
       if (!this.isActive() || refreshId !== this.openRefreshId) return;
@@ -2859,7 +2875,26 @@ class DaoModal {
   getSelectedMetadataEntries(entries) {
     if (this.selectedFilterKey === DAO_ALL_FILTER.key) return entries;
     if (this.selectedFilterKey === DAO_CLAIMABLE_FILTER.key) return this.getClaimCandidateMetadataEntries(entries);
-    return entries.filter((entry) => entry.status === this.selectedFilterKey);
+    const proposalsByNumber = new Map(
+      daoRepo.getProposalsForUi().map((proposal) => [proposal.number, proposal]),
+    );
+    return entries.filter((entry) => {
+      const proposal = proposalsByNumber.get(entry.proposal);
+      const filterKey = proposal ? getDaoProposalListFilterKey(proposal) : entry.status;
+      return filterKey === this.selectedFilterKey;
+    });
+  }
+
+  async loadProjectFilterCandidates() {
+    const entries = daoRepo.getProposalMetaForUi()
+      .filter((entry) => DAO_PROJECT_CANDIDATE_STATES.has(entry.status));
+    await daoRepo.loadProposalEntries(entries, { append: true });
+    const candidateNumbers = new Set(entries.map((entry) => entry.proposal));
+    return new Set(
+      daoRepo.getProposalsForUi()
+        .map((proposal) => proposal.number)
+        .filter((proposalNumber) => candidateNumbers.has(proposalNumber)),
+    );
   }
 
   async loadSelectedFilter({ reset, reuseProposalNumbers = new Set() }) {
@@ -2869,9 +2904,8 @@ class DaoModal {
     const pageStart = reset ? 0 : Math.max(this.visibleProposalCount - DAO_PROPOSAL_PAGE_SIZE, 0);
     const entriesToLoad = entries.slice(pageStart, this.visibleProposalCount);
     const entriesToFetch = entriesToLoad.filter((entry) => !reuseProposalNumbers.has(entry.proposal));
-    const reusedFreshDetails = entriesToFetch.length < entriesToLoad.length;
 
-    const request = daoRepo.loadProposalEntries(entriesToFetch, { append: !reset || reusedFreshDetails });
+    const request = daoRepo.loadProposalEntries(entriesToFetch, { append: true });
     this.detailsRequest = request;
     this.render();
 
@@ -2913,11 +2947,15 @@ class DaoModal {
     let didRefreshDaoData = false;
     try {
       await daoRepo.refresh({ force: true });
+      const projectFilterProposalNumbers = await this.loadProjectFilterCandidates();
       const refreshedClaimProposalNumbers = await this.syncTrackedClaimWindows();
       if (this.isActive()) {
         await this.loadSelectedFilter({
           reset: true,
-          reuseProposalNumbers: refreshedClaimProposalNumbers,
+          reuseProposalNumbers: new Set([
+            ...projectFilterProposalNumbers,
+            ...refreshedClaimProposalNumbers,
+          ]),
         });
       }
       if (!daoRepo.getProposalById(pendingTxInfo?.proposalStoreId)) {
@@ -2981,8 +3019,11 @@ class DaoModal {
       : this.getSelectedMetadataEntries(metadataEntries);
 
     const counts = Object.fromEntries(DAO_FILTER_OPTIONS.map((filter) => [filter.key, 0]));
+    const proposalsByNumber = new Map(proposals.map((proposal) => [proposal.number, proposal]));
     for (const entry of metadataEntries) {
-      if (counts[entry.status] !== undefined) counts[entry.status] += 1;
+      const proposal = proposalsByNumber.get(entry.proposal);
+      const filterKey = proposal ? getDaoProposalListFilterKey(proposal) : entry.status;
+      if (counts[filterKey] !== undefined) counts[filterKey] += 1;
     }
     counts[DAO_ALL_FILTER.key] = metadataEntries.length;
     counts[DAO_CLAIMABLE_FILTER.key] = claimCandidateMetadataEntries.length;
@@ -3002,9 +3043,13 @@ class DaoModal {
         countEl.textContent = hasFreshData ? String(count) : '—';
         let countAriaLabel = `${filter.label} count unavailable`;
         if (hasFreshData) {
-          countAriaLabel = filter.key === DAO_CLAIMABLE_FILTER.key
-            ? `${count} tracked claim candidates`
-            : `${count} ${filter.label.toLowerCase()} proposals`;
+          if (filter.key === DAO_CLAIMABLE_FILTER.key) {
+            countAriaLabel = `${count} tracked claim candidates`;
+          } else if (DAO_PROJECT_FILTER_KEYS.has(filter.key)) {
+            countAriaLabel = `${count} ${filter.label.toLowerCase()} projects`;
+          } else {
+            countAriaLabel = `${count} ${filter.label.toLowerCase()} proposals`;
+          }
         }
         countEl.setAttribute('aria-label', countAriaLabel);
       }
@@ -3049,6 +3094,9 @@ class DaoModal {
       } else if (isClaimableFilter) {
         if (headlineEl) headlineEl.textContent = 'No claimable proposals found';
         if (sublineEl) sublineEl.textContent = 'Claimable proposals appear here when available';
+      } else if (DAO_PROJECT_FILTER_KEYS.has(this.selectedFilterKey)) {
+        if (headlineEl) headlineEl.textContent = `No ${label.toLowerCase()} projects found`;
+        if (sublineEl) sublineEl.textContent = 'Projects appear here after proposal acceptance';
       } else {
         if (headlineEl) headlineEl.textContent = 'No proposals found';
         if (sublineEl) sublineEl.textContent = 'Proposal data appears here when available';
@@ -4641,6 +4689,131 @@ function renderDaoProjectMilestones(milestones) {
   `;
 }
 
+function formatDaoProjectUsd(value) {
+  return value === null ? 'Unavailable' : `${value} USD`;
+}
+
+function getDaoProjectStatusTone(status) {
+  if (status === 'completed') return 'accept';
+  if (status === 'terminated') return 'rejected';
+  return '';
+}
+
+function getDaoProposalStatusTone(status) {
+  if (status === 'accepted' || status === 'applied') return 'accept';
+  if (status === 'rejected' || status === 'withheld' || status === 'canceled') return 'rejected';
+  return '';
+}
+
+function renderDaoProjectInfoMilestones(project) {
+  if (project.milestones.length === 0) {
+    return `
+      <section class="proposal-info-section dao-project-info-milestones">
+        <h3>Milestones</h3>
+        <div class="dao-project-info-notice dao-project-info-notice--unavailable" role="status">
+          <strong>Milestones unavailable</strong>
+          <span>This proposal does not include readable milestone data.</span>
+        </div>
+      </section>
+    `;
+  }
+
+  const milestoneHtml = project.milestones.map((milestone, index) => {
+    const milestoneNumber = index + 1;
+    const title = formatDaoDetailValue(milestone.title);
+    const description = formatDaoDetailValue(milestone.description);
+    const deliverable = formatDaoDetailValue(milestone.deliverable);
+    const statusLabel = milestone.status?.label || 'Unavailable';
+    const statusTone = getDaoProjectStatusTone(milestone.status?.key);
+
+    return `
+      <article class="dao-project-review-milestone">
+        <h4><span>Milestone ${milestoneNumber}</span><strong>${escapeHtml(title)}</strong></h4>
+        <div class="dao-project-review-copy">
+          <div>
+            <span>Description</span>
+            <p>${escapeHtml(description)}</p>
+          </div>
+          <div>
+            <span>Deliverable / Acceptance Criteria</span>
+            <p>${escapeHtml(deliverable)}</p>
+          </div>
+        </div>
+        <div class="proposal-info-grid" aria-label="Milestone ${milestoneNumber} terms">
+          ${renderDaoProposalRows([
+            ['Duration', milestone.durationDays === null ? null : `${milestone.durationDays} days`],
+            ['Cost', formatDaoProjectUsd(milestone.costUsdStr)],
+            ['Late penalty', formatDaoProjectUsd(milestone.penaltyUsdStr)],
+            ['Early bonus', formatDaoProjectUsd(milestone.bonusUsdStr)],
+          ])}
+        </div>
+        <div class="proposal-info-grid dao-project-info-runtime" aria-label="Milestone ${milestoneNumber} runtime status">
+          ${renderDaoProposalRows([
+            ['Milestone status', statusLabel, statusTone],
+            ['Started', milestone.startedAt === null ? null : formatDaoDetailTimestamp(milestone.startedAt)],
+            ['Completed', milestone.completedAt === null ? null : formatDaoDetailTimestamp(milestone.completedAt)],
+            ['Payout', milestone.payoutWei === null ? null : formatDaoLibWei(milestone.payoutWei)],
+            ['Paid', milestone.paid === null ? null : milestone.paid ? 'Yes' : 'No'],
+            ['Paid at', milestone.paidAt === null ? null : formatDaoDetailTimestamp(milestone.paidAt)],
+          ])}
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  return `
+    <section class="proposal-info-section dao-project-info-milestones">
+      <h3>Milestones</h3>
+      <div class="dao-project-review-milestone-list">${milestoneHtml}</div>
+    </section>
+  `;
+}
+
+function renderDaoProjectProposalInfo(proposal, proposalState) {
+  const project = getDaoProjectPresentation(proposal);
+  if (project.kind === 'unavailable') {
+    return `
+      <section class="proposal-info-section dao-project-info">
+        <h3>Project Details</h3>
+        <div class="dao-project-info-notice dao-project-info-notice--unavailable" role="status">
+          <strong>Project details unavailable</strong>
+          <span>${escapeHtml(project.message)}</span>
+        </div>
+      </section>
+    `;
+  }
+
+  const partialNotice = project.completeness === 'partial'
+    ? `
+      <div class="dao-project-info-notice dao-project-info-notice--partial" role="status">
+        <strong>Some project details are unavailable</strong>
+        <span>Available fields are shown below. ${project.issueCount} ${project.issueCount === 1 ? 'field needs' : 'fields need'} backend confirmation.</span>
+      </div>
+    `
+    : '';
+  const budget = project.budget;
+  const projectStatus = project.status?.label || 'Unavailable';
+  const projectStatusTone = getDaoProjectStatusTone(project.status?.key);
+  const proposalStatusTone = getDaoProposalStatusTone(proposalState);
+
+  return [
+    partialNotice,
+    renderDaoProposalSection('Project Status', [
+      ['Proposal status', getDaoStateLabel(proposalState), proposalStatusTone],
+      ['Project status', projectStatus, projectStatusTone],
+    ], 'dao-project-info-status'),
+    renderDaoProposalSection('Project Funding', [
+      ['Recipient', project.address],
+      ['Base cost', budget ? `${budget.baseCostUsdStr} USD` : null],
+      ['Maximum bonuses', budget ? `${budget.maximumBonusUsdStr} USD` : null],
+      ['Maximum authorized', budget ? `${budget.maximumAuthorizedUsdStr} USD` : null],
+      ['Treasury balance', project.balanceWei === null ? null : formatDaoLibWei(project.balanceWei)],
+      ['Claimable balance', project.claimableBalanceWei === null ? null : formatDaoLibWei(project.claimableBalanceWei)],
+    ], 'dao-project-info-funding'),
+    renderDaoProjectInfoMilestones(project),
+  ].filter(Boolean).join('');
+}
+
 class ConfirmProposalModal {
   load() {
     this.modal = document.getElementById('confirmProposalModal');
@@ -5207,6 +5380,7 @@ function getDaoProposalApplyLifecycleAction(
   now = getTransactionTimestamp(),
 ) {
   if (getEffectiveDaoState(proposal) !== 'accepted') return null;
+  if (proposal?.proposalType === DAO_PROJECT_TYPE) return null;
 
   if (!isDaoParameterProposalType(proposal)) {
     return getDaoApplyParametersLifecycleAction(
@@ -5508,6 +5682,7 @@ class ProposalInfoModal {
 
     openModal(this.modal);
     enterFullscreen();
+    this.renderLoading();
 
     let p = null;
     try {
@@ -5528,6 +5703,18 @@ class ProposalInfoModal {
     this.renderProposal(p);
   }
 
+  renderLoading() {
+    this.setTitle('Loading proposal');
+    if (this.content) {
+      this.content.innerHTML = '<section class="proposal-info-section"><h3>Proposal</h3><p class="proposal-info-muted" role="status">Loading proposal details…</p></section>';
+    }
+    if (this.detailsContent) this.detailsContent.innerHTML = '';
+    this.hideCommitteeActions();
+    this.hideReviewResultAction();
+    this.hideLifecycleAction();
+    this.hideVoteActions();
+  }
+
   renderNotFound() {
     this.setTitle('Proposal not found');
     if (this.content) {
@@ -5545,7 +5732,7 @@ class ProposalInfoModal {
   renderProposal(proposal) {
     const now = getTransactionTimestamp();
     const state = getEffectiveDaoState(proposal);
-    this.setTitle(getDaoStateLabel(state) || state || 'Proposal');
+    this.setTitle(getDaoProposalInfoStateLabel(proposal));
     const reviewWindow = getDaoProposalReviewWindow(proposal, now);
     const committeeReview = getDaoCommitteeReview(proposal);
     const { committeeAddresses, committeeAddressSet, votes } = committeeReview;
@@ -5557,7 +5744,17 @@ class ProposalInfoModal {
       currentAddress,
       committeeAddressSet,
     });
+    const isProjectProposal = proposal.proposalType === DAO_PROJECT_TYPE;
+    const projectProposalInfoSection = isProjectProposal
+      ? renderDaoProjectProposalInfo(proposal, state)
+      : '';
+    const proposalOptionsSection = renderDaoProposalOptions(proposal);
     const resultSummary = getDaoProposalResultSummary(proposal);
+    const proposalResultsSection = this.renderProposalResults(
+      resultSummary,
+      committeeReview,
+      currentAddress,
+    );
     const rewardSummary = getDaoProposalRewardSummary(proposal, currentAddress);
     const lifecycleActions = getDaoProposalLifecycleActions(proposal, rewardSummary, currentAddress, now);
     const pendingFinalizationOutcome = getDaoPendingFinalizationOutcome(proposal, now);
@@ -5575,9 +5772,10 @@ class ProposalInfoModal {
     if (this.content) {
       this.content.innerHTML = [
         renderDaoProposalHeading(proposal),
-        renderDaoProposalOptions(proposal),
+        projectProposalInfoSection,
+        isProjectProposal ? '' : proposalOptionsSection,
         state === 'voting' ? this.renderCurrentVoteTotals(proposal) : '',
-        this.renderProposalResults(resultSummary, committeeReview, currentAddress),
+        isProjectProposal ? '' : proposalResultsSection,
         state === 'review'
           ? this.renderCommitteeReviewStatus(committeeReview, reviewWindow, currentAddress)
           : '',
@@ -5590,6 +5788,9 @@ class ProposalInfoModal {
         reviewWindow,
         rewardSummary,
         committeeReviewSection,
+        projectProposalSections: isProjectProposal
+          ? [proposalOptionsSection, proposalResultsSection]
+          : [],
       });
     }
 
@@ -5910,8 +6111,16 @@ class ProposalInfoModal {
     ]);
   }
 
-  renderProposalDetails({ proposal, state, reviewWindow, rewardSummary, committeeReviewSection }) {
+  renderProposalDetails({
+    proposal,
+    state,
+    reviewWindow,
+    rewardSummary,
+    committeeReviewSection,
+    projectProposalSections,
+  }) {
     const sections = [
+      ...projectProposalSections,
       renderDaoProposalSection('Overview', [
         ['Number', proposal.number ? `#${proposal.number}` : 'Unavailable'],
         ['Type', getDaoTypeLabel(proposal.proposalType) || 'Unavailable'],
@@ -5932,15 +6141,21 @@ class ProposalInfoModal {
       <details class="proposal-more">
         <summary>
           <span class="proposal-more-title">Show proposal details</span>
-          <span class="proposal-more-note">${escapeHtml(this.getProposalDetailsSummary(state, rewardSummary))}</span>
+          <span class="proposal-more-note">${escapeHtml(this.getProposalDetailsSummary(
+            proposal,
+            state,
+            rewardSummary,
+          ))}</span>
         </summary>
         <div class="proposal-more-content">${sections.join('')}</div>
       </details>
     `;
   }
 
-  getProposalDetailsSummary(state, rewardSummary) {
-    const parts = ['Overview', 'review timeline'];
+  getProposalDetailsSummary(proposal, state, rewardSummary) {
+    const parts = proposal.proposalType === DAO_PROJECT_TYPE
+      ? ['Proposal options', 'results', 'overview', 'review timeline']
+      : ['Overview', 'review timeline'];
     if (state === 'review') parts.push('committee review');
     if (rewardSummary) parts.push('reward accounting');
     return parts.join(', ');
