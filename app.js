@@ -124,6 +124,8 @@ import {
   normalizeDaoParameterInput,
   parseDaoUnsignedBigInt,
   setDaoBackendFetcher,
+  shouldOpenDaoProjectMilestoneByDefault,
+  shouldShowDaoProjectRuntime,
 } from './dao.js';
 
 // Import crypto functions from crypto.js
@@ -3170,6 +3172,9 @@ class DaoModal {
   renderProposalRowPreview(proposal) {
     const chips = [];
     const state = getEffectiveDaoState(proposal);
+    const projectFilter = DAO_PROJECT_FILTERS.find(
+      ({ key }) => key === getDaoProposalListFilterKey(proposal),
+    );
     const result = getDaoProposalResultSummary(proposal);
     const reward = getDaoProposalRewardSummary(proposal);
 
@@ -3262,7 +3267,12 @@ class DaoModal {
         });
       }
     }
-    if (result && state !== 'accepted') {
+    if (projectFilter) {
+      chips.push({
+        value: projectFilter.label,
+        tone: getDaoProjectStatusTone(proposal?.project?.status) || 'neutral',
+      });
+    } else if (result && state !== 'accepted') {
       chips.push({
         value: result.headline,
         tone: result.tone,
@@ -4699,13 +4709,7 @@ function getDaoProjectStatusTone(status) {
   return '';
 }
 
-function getDaoProposalStatusTone(status) {
-  if (status === 'accepted' || status === 'applied') return 'accept';
-  if (status === 'rejected' || status === 'withheld' || status === 'canceled') return 'rejected';
-  return '';
-}
-
-function renderDaoProjectInfoMilestones(project) {
+function renderDaoProjectInfoMilestones(project, proposalState, showRuntimeStatus) {
   if (project.milestones.length === 0) {
     return `
       <section class="proposal-info-section dao-project-info-milestones">
@@ -4725,39 +4729,50 @@ function renderDaoProjectInfoMilestones(project) {
     const deliverable = formatDaoDetailValue(milestone.deliverable);
     const statusLabel = milestone.status?.label || 'Unavailable';
     const statusTone = getDaoProjectStatusTone(milestone.status?.key);
+    const isDefaultOpen = shouldOpenDaoProjectMilestoneByDefault(project, proposalState, index);
 
     return `
-      <article class="dao-project-review-milestone">
-        <h4><span>Milestone ${milestoneNumber}</span><strong>${escapeHtml(title)}</strong></h4>
-        <div class="dao-project-review-copy">
-          <div>
-            <span>Description</span>
-            <p>${escapeHtml(description)}</p>
+      <details class="dao-project-review-milestone dao-project-info-milestone"${isDefaultOpen ? ' open' : ''}>
+        <summary>
+          <span class="dao-project-info-milestone-heading">
+            <span>Milestone ${milestoneNumber}</span>
+            <strong>${escapeHtml(title)}</strong>
+          </span>
+          <span class="dao-project-info-milestone-status">${escapeHtml(statusLabel)}</span>
+        </summary>
+        <div class="dao-project-info-milestone-content">
+          <div class="dao-project-review-copy">
+            <div>
+              <span>Description</span>
+              <p>${escapeHtml(description)}</p>
+            </div>
+            <div>
+              <span>Deliverable / Acceptance Criteria</span>
+              <p>${escapeHtml(deliverable)}</p>
+            </div>
           </div>
-          <div>
-            <span>Deliverable / Acceptance Criteria</span>
-            <p>${escapeHtml(deliverable)}</p>
+          <div class="proposal-info-grid" aria-label="Milestone ${milestoneNumber} terms">
+            ${renderDaoProposalRows([
+              ['Duration', milestone.durationDays === null ? null : `${milestone.durationDays} days`],
+              ['Cost', formatDaoProjectUsd(milestone.costUsdStr)],
+              ['Late penalty', formatDaoProjectUsd(milestone.penaltyUsdStr)],
+              ['Early bonus', formatDaoProjectUsd(milestone.bonusUsdStr)],
+            ])}
           </div>
+          ${showRuntimeStatus ? `
+          <div class="proposal-info-grid dao-project-info-runtime" aria-label="Milestone ${milestoneNumber} runtime status">
+            ${renderDaoProposalRows([
+              ['Milestone status', statusLabel, statusTone],
+              ['Started', milestone.startedAt === null ? null : formatDaoDetailTimestamp(milestone.startedAt)],
+              ['Completed', milestone.completedAt === null ? null : formatDaoDetailTimestamp(milestone.completedAt)],
+              ['Payout', milestone.payoutWei === null ? null : formatDaoLibWei(milestone.payoutWei)],
+              ['Paid', milestone.paid === null ? null : milestone.paid ? 'Yes' : 'No'],
+              ['Paid at', milestone.paidAt === null ? null : formatDaoDetailTimestamp(milestone.paidAt)],
+            ])}
+          </div>
+          ` : ''}
         </div>
-        <div class="proposal-info-grid" aria-label="Milestone ${milestoneNumber} terms">
-          ${renderDaoProposalRows([
-            ['Duration', milestone.durationDays === null ? null : `${milestone.durationDays} days`],
-            ['Cost', formatDaoProjectUsd(milestone.costUsdStr)],
-            ['Late penalty', formatDaoProjectUsd(milestone.penaltyUsdStr)],
-            ['Early bonus', formatDaoProjectUsd(milestone.bonusUsdStr)],
-          ])}
-        </div>
-        <div class="proposal-info-grid dao-project-info-runtime" aria-label="Milestone ${milestoneNumber} runtime status">
-          ${renderDaoProposalRows([
-            ['Milestone status', statusLabel, statusTone],
-            ['Started', milestone.startedAt === null ? null : formatDaoDetailTimestamp(milestone.startedAt)],
-            ['Completed', milestone.completedAt === null ? null : formatDaoDetailTimestamp(milestone.completedAt)],
-            ['Payout', milestone.payoutWei === null ? null : formatDaoLibWei(milestone.payoutWei)],
-            ['Paid', milestone.paid === null ? null : milestone.paid ? 'Yes' : 'No'],
-            ['Paid at', milestone.paidAt === null ? null : formatDaoDetailTimestamp(milestone.paidAt)],
-          ])}
-        </div>
-      </article>
+      </details>
     `;
   }).join('');
 
@@ -4792,16 +4807,10 @@ function renderDaoProjectProposalInfo(proposal, proposalState) {
     `
     : '';
   const budget = project.budget;
-  const projectStatus = project.status?.label || 'Unavailable';
-  const projectStatusTone = getDaoProjectStatusTone(project.status?.key);
-  const proposalStatusTone = getDaoProposalStatusTone(proposalState);
+  const showRuntimeStatus = shouldShowDaoProjectRuntime(project);
 
   return [
     partialNotice,
-    renderDaoProposalSection('Project Status', [
-      ['Proposal status', getDaoStateLabel(proposalState), proposalStatusTone],
-      ['Project status', projectStatus, projectStatusTone],
-    ], 'dao-project-info-status'),
     renderDaoProposalSection('Project Funding', [
       ['Recipient', project.address],
       ['Base cost', budget ? `${budget.baseCostUsdStr} USD` : null],
@@ -4810,7 +4819,7 @@ function renderDaoProjectProposalInfo(proposal, proposalState) {
       ['Treasury balance', project.balanceWei === null ? null : formatDaoLibWei(project.balanceWei)],
       ['Claimable balance', project.claimableBalanceWei === null ? null : formatDaoLibWei(project.claimableBalanceWei)],
     ], 'dao-project-info-funding'),
-    renderDaoProjectInfoMilestones(project),
+    renderDaoProjectInfoMilestones(project, proposalState, showRuntimeStatus),
   ].filter(Boolean).join('');
 }
 
