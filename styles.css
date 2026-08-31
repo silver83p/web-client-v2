@@ -2272,7 +2272,8 @@ input[type='file'].form-control::file-selector-button {
   display: none;
 }
 
-#addProposalModal .dao-project-preview-notice {
+#addProposalModal .dao-project-preview-notice,
+#confirmProposalModal .dao-project-review-notice {
   background: rgba(61, 61, 206, 0.08);
   border: 1px solid var(--primary-tint-60);
   border-radius: 10px;
@@ -2284,7 +2285,8 @@ input[type='file'].form-control::file-selector-button {
   padding: 10px;
 }
 
-#addProposalModal .dao-project-preview-notice span {
+#addProposalModal .dao-project-preview-notice span,
+#confirmProposalModal .dao-project-review-notice span {
   color: var(--secondary-text-color);
 }
 
@@ -2367,13 +2369,6 @@ input[type='file'].form-control::file-selector-button {
   width: 17px;
 }
 
-#addProposalModal .dao-project-review-help {
-  background: var(--input-background);
-  border-radius: 8px;
-  padding: 8px 10px;
-  text-align: center;
-}
-
 #addProposalModal .dao-project-editor input,
 #addProposalModal .dao-project-editor textarea {
   box-sizing: border-box;
@@ -2417,6 +2412,16 @@ input[type='file'].form-control::file-selector-button {
   width: 100%;
 }
 
+#confirmProposalModal .proposal-info > *,
+#confirmProposalModal .proposal-info-heading,
+#confirmProposalModal .proposal-info-section,
+#confirmProposalModal .proposal-info-grid,
+#confirmProposalModal .dao-project-review-notice {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
 #confirmProposalModal .proposal-info-heading,
 #proposalInfoModal .proposal-info-heading {
   display: grid;
@@ -2427,6 +2432,14 @@ input[type='file'].form-control::file-selector-button {
 #confirmProposalModal .proposal-info-title,
 #proposalInfoModal .proposal-info-title {
   margin-bottom: 0;
+}
+
+#confirmProposalModal .proposal-info-title,
+#confirmProposalModal .proposal-info-description,
+#confirmProposalModal .dao-project-review-notice > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 #confirmProposalModal .proposal-info-description,
@@ -2516,6 +2529,99 @@ input[type='file'].form-control::file-selector-button {
 
 #addProposalModal .dao-project-ballot {
   grid-auto-rows: 1fr;
+}
+
+#confirmProposalModal .dao-project-ballot {
+  grid-auto-rows: 1fr;
+}
+
+#confirmProposalModal .dao-project-ballot .proposal-option-section {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+#confirmProposalModal .dao-project-review-milestone-list {
+  display: grid;
+  gap: 10px;
+}
+
+#confirmProposalModal .dao-project-review-milestone {
+  background: rgba(61, 61, 206, 0.055);
+  border-radius: var(--overlay-border-radius);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+}
+
+#confirmProposalModal .dao-project-review-milestone h4 {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+}
+
+#confirmProposalModal .dao-project-review-milestone h4 > span,
+#confirmProposalModal .dao-project-review-copy span {
+  color: var(--secondary-text-color);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+#confirmProposalModal .dao-project-review-milestone h4 > strong {
+  color: var(--text-color);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+#confirmProposalModal .dao-project-review-copy,
+#confirmProposalModal .dao-project-review-copy > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+#confirmProposalModal .dao-project-review-copy {
+  gap: 8px;
+}
+
+#confirmProposalModal .dao-project-review-copy p {
+  color: var(--text-color);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+#confirmProposalModal .dao-project-review-milestone .proposal-info-row {
+  flex-basis: calc((100% - 8px) / 2);
+}
+
+#confirmProposalModal .dao-project-review-funding .proposal-info-row {
+  align-items: center;
+  flex-basis: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: none;
+  min-height: 0;
+  width: 100%;
+}
+
+#confirmProposalModal .dao-project-review-funding .proposal-info-row > span:not(.proposal-info-value) {
+  align-self: center;
+  justify-self: start;
+  text-align: left;
+}
+
+#confirmProposalModal .dao-project-review-funding .proposal-info-value {
+  justify-self: end;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+  word-break: break-word;
 }
 
 #addProposalModal .proposal-option-label,
