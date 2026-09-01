@@ -11938,8 +11938,8 @@ async function processChats(chats, keys) {
                   
                   if (!messageToDelete.my && originalSender === from) {
                     // This is a message received from sender, who is now deleting it - valid
-                    // Purge cached thumbnails for image attachments, if any
-                    chatModal.purgeThumbnail(messageToDelete.xattach);
+                    // Purge cached image data for attachments, if any
+                    chatModal.purgeImageCaches(messageToDelete.xattach);
 
                     // Mark the message as deleted
                     messageToDelete.deleted = MESSAGE_DELETED_STATE_ALL;
@@ -11964,8 +11964,8 @@ async function processChats(chats, keys) {
                     );
                   } else if (messageToDelete.my && normalizeAddress(keys.address) === normalizeAddress(tx.from)) {
                     // This is our own message, and we're deleting it - valid
-                    // Purge cached thumbnails for image attachments, if any
-                    chatModal.purgeThumbnail(messageToDelete.xattach);
+                    // Purge cached image data for attachments, if any
+                    chatModal.purgeImageCaches(messageToDelete.xattach);
 
                     // Mark the message as deleted
                     messageToDelete.deleted = MESSAGE_DELETED_STATE_ALL;
@@ -20368,7 +20368,7 @@ class ChatModal {
     if (!Array.isArray(this.fileAttachments) || this.fileAttachments.length === 0) return;
 
     const removedAttachments = this.fileAttachments.splice(0, this.fileAttachments.length);
-    this.purgeThumbnail(removedAttachments);
+    this.purgeImageCaches(removedAttachments);
 
     if (deleteFromServer) {
       this.deleteAttachmentsFromServer(removedAttachments);
@@ -22909,7 +22909,7 @@ class ChatModal {
   removeAttachment(index) {
     if (this.fileAttachments && index >= 0 && index < this.fileAttachments.length) {
       const removedFile = this.fileAttachments.splice(index, 1)[0];
-      this.purgeThumbnail([removedFile]);
+      this.purgeImageCaches([removedFile]);
       this.showAttachmentPreview(); // Refresh the preview
       showToast(`"${removedFile.name}" removed`, 2000, 'info');
 
@@ -23323,6 +23323,8 @@ class ChatModal {
     return fullImageCache.getOrCache({
       attachment,
       downloadAndDecrypt: () => this.decryptAttachmentToBlob(item, linkEl),
+      shouldCache: () => Array.isArray(item?.xattach)
+        && item.xattach.some(candidate => candidate?.url === attachment.url),
     });
   }
 
@@ -24251,20 +24253,24 @@ class ChatModal {
   }
 
   /**
-   * Removes cached thumbnails for any image attachments in an xattach array.
-   * Safe to call even if thumbnails don't exist.
+   * Removes cached thumbnails and full images for image attachments.
+   * Safe to call even if cached records don't exist.
    * @param {any} xattach
    */
-  purgeThumbnail(xattach) {
+  purgeImageCaches(xattach) {
     if (!Array.isArray(xattach) || !xattach.length) return;
-    for (const att of xattach) {
-      const url = att?.url;
-      const type = att?.type || '';
-      if (!url || url === '#') continue;
-      if (typeof type === 'string' && type.startsWith('image/')) {
-        // Fire-and-forget; deletion errors shouldn't block UI actions
-        void thumbnailCache.delete(url).catch((e) => console.warn('Failed to delete thumbnail:', e));
-      }
+
+    for (const attachment of xattach) {
+      const url = attachment?.url;
+      const type = attachment?.type;
+      if (!url || url === '#' || typeof type !== 'string' || !type.startsWith('image/')) continue;
+
+      void thumbnailCache.delete(url).catch((error) => {
+        console.warn('Failed to delete thumbnail:', error);
+      });
+      void fullImageCache.delete(url).catch((error) => {
+        console.warn('Failed to delete full image:', error);
+      });
     }
   }
 
@@ -25744,8 +25750,8 @@ class ChatModal {
           DELETED_MESSAGE_LOCAL_TEXT
         );
       }
-      // Remove cached thumbnails for image attachments, then remove attachments
-      this.purgeThumbnail(message.xattach);
+      // Remove cached image data for attachments, then remove attachments
+      this.purgeImageCaches(message.xattach);
       delete message.xattach;
       purgeContactReactionsForTarget(contact, message.txid);
       purgePendingReactionsForTarget(this.address, message.txid);
@@ -37304,7 +37310,7 @@ class FullImageCache {
     return records.reduce((total, record) => total + Number(record.size || 0), 0);
   }
 
-  async put(attachment, blob) {
+  async put(attachment, blob, shouldCache) {
     const attachmentUrl = attachment?.url;
     const mimeType = attachment?.type || blob?.type || '';
     if (!attachmentUrl) throw new Error('Cannot cache an image without an attachment URL');
@@ -37312,21 +37318,47 @@ class FullImageCache {
     if (!(blob instanceof Blob)) throw new Error('Full-image cache requires a Blob');
     if (blob.size > this.maxCacheSize) return false;
 
-    const existingRecord = await this.getRecord(attachmentUrl);
-    const currentSize = await this.getCacheSize();
-    const projectedSize = currentSize - Number(existingRecord?.size || 0) + blob.size;
-    if (projectedSize > this.maxCacheSize) return false;
-
     const db = await this.database.init();
+    if (shouldCache && !shouldCache()) return false;
+
     const transaction = db.transaction(this.database.fullImageStoreName, 'readwrite');
     const store = transaction.objectStore(this.database.fullImageStoreName);
-    store.put({
-      url: attachmentUrl,
-      mimeType,
-      size: blob.size,
-      blob,
-      cachedAt: Date.now(),
-    });
+    const cachedAtIndex = store.index('cachedAt');
+    const evictionCandidates = [];
+    let currentSize = 0;
+    let existingSize = 0;
+
+    const cursorRequest = cachedAtIndex.openCursor(null, 'next');
+    cursorRequest.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        const recordSize = Number(cursor.value?.size || 0);
+        currentSize += recordSize;
+        if (cursor.value?.url === attachmentUrl) {
+          existingSize = recordSize;
+        } else {
+          evictionCandidates.push({ url: cursor.primaryKey, size: recordSize });
+        }
+        cursor.continue();
+        return;
+      }
+
+      let bytesToFree = Math.max(0, currentSize - existingSize + blob.size - this.maxCacheSize);
+      for (const record of evictionCandidates) {
+        if (bytesToFree <= 0) break;
+        store.delete(record.url);
+        bytesToFree -= record.size;
+      }
+
+      store.put({
+        url: attachmentUrl,
+        mimeType,
+        size: blob.size,
+        blob,
+        cachedAt: Date.now(),
+      });
+    };
+
     await this.waitForTransaction(transaction);
     return true;
   }
@@ -37338,7 +37370,7 @@ class FullImageCache {
     await this.waitForTransaction(transaction);
   }
 
-  async getOrCache({ attachment, downloadAndDecrypt }) {
+  async getOrCache({ attachment, downloadAndDecrypt, shouldCache }) {
     try {
       const cachedBlob = await this.get(attachment.url);
       if (cachedBlob) return cachedBlob;
@@ -37349,7 +37381,7 @@ class FullImageCache {
     const blob = await downloadAndDecrypt();
 
     try {
-      await this.put(attachment, blob);
+      await this.put(attachment, blob, shouldCache);
     } catch (error) {
       console.warn('Failed to cache full image:', error);
     }
