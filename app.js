@@ -23290,11 +23290,50 @@ class ChatModal {
     }
   }
 
+  /**
+   * Resolves image metadata from the backing message record.
+   * The attachment URL is the cache identity; filenames are export metadata only.
+   * @param {Object} item - message containing the attachment metadata
+   * @param {HTMLElement} linkEl - rendered attachment row
+   * @returns {{url: string, type: string}}
+   */
+  getFullImageAttachment(item, linkEl) {
+    const attachmentUrl = linkEl?.dataset?.url;
+    const attachment = Array.isArray(item?.xattach)
+      ? item.xattach.find(candidate => candidate?.url === attachmentUrl)
+      : null;
+
+    assert(attachment, 'Image attachment entry not found');
+    assert(attachment.type?.startsWith('image/'), 'Full-image cache accepts only image attachments');
+
+    return {
+      url: attachment.url,
+      type: attachment.type,
+    };
+  }
+
+  /**
+   * Gets the decrypted full image from IndexedDB, downloading it on a cache miss.
+   * @param {Object} item - message containing the attachment metadata and keys
+   * @param {HTMLElement} linkEl - rendered attachment row
+   * @returns {Promise<Blob>}
+   */
+  async getFullImageBlob(item, linkEl) {
+    const attachment = this.getFullImageAttachment(item, linkEl);
+    return fullImageCache.getOrCache({
+      attachment,
+      downloadAndDecrypt: () => this.decryptAttachmentToBlob(item, linkEl),
+    });
+  }
+
   async handleAttachmentDownload(item, linkEl) {
     let loadingToastId;
     try {
-      loadingToastId = showToast(`Decrypting attachment...`, 0, 'loading');
-      const blob = await this.decryptAttachmentToBlob(item, linkEl);
+      const isImage = item.type !== 'vm' && (linkEl.dataset.type || '').startsWith('image/');
+      loadingToastId = showToast(isImage ? 'Preparing image...' : 'Decrypting attachment...', 0, 'loading');
+      const blob = isImage
+        ? await this.getFullImageBlob(item, linkEl)
+        : await this.decryptAttachmentToBlob(item, linkEl);
       const blobUrl = URL.createObjectURL(blob);
       const filename = decodeURIComponent(linkEl.dataset.name || 'download');
 
@@ -23343,13 +23382,9 @@ class ChatModal {
         
         try {
           if (isViewable) {
-            // Open in new tab and download
-            const newTab = window.open(blobUrl, '_blank');
-            this.triggerFileDownload(blobUrl, filename);
-          } else {
-            // Non-viewable files: download only
-            this.triggerFileDownload(blobUrl, filename);
+            window.open(blobUrl, '_blank');
           }
+          this.triggerFileDownload(blobUrl, filename);
         } finally {
           // Clean up blob URL after enough time for downloads/tabs to initialize
           setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
@@ -24900,11 +24935,11 @@ class ChatModal {
   }
 
   /**
-   * Save an image attachment using the existing download/decrypt flow.
+   * Save an image attachment using the cache-first download/decrypt flow.
    * @param {HTMLElement} attachmentRow
    */
   async saveImageAttachment(attachmentRow) {
-    // Reuse normal attachment download flow (decrypt + download)
+    // Reuse normal attachment download flow (cache/decrypt + download)
     const { item } = this.getAttachmentContextFromRow(attachmentRow);
 
     // Concurent download prevention
@@ -36070,8 +36105,10 @@ class ThumbnailCache {
   constructor() {
     this.dbName = 'liberdus_thumbnails';
     this.storeName = 'thumbnails';
-    this.dbVersion = 1;
+    this.fullImageStoreName = 'fullImages';
+    this.dbVersion = 2;
     this.db = null;
+    this.openPromise = null;
     this.maxCacheSize = 50 * 1024 * 1024; // 50MB in bytes
   }
 
@@ -36094,17 +36131,31 @@ class ThumbnailCache {
    * @returns {Promise<void>}
    */
   async init() {
-    return new Promise((resolve, reject) => {
+    if (this.db) return this.db;
+    if (this.openPromise) return this.openPromise;
+
+    this.openPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = () => {
         console.error('Failed to open thumbnail database:', request.error);
+        this.openPromise = null;
         reject(request.error);
+      };
+
+      request.onblocked = () => {
+        console.warn('Thumbnail database upgrade is blocked by another tab');
+        reject(new Error('Thumbnail database upgrade blocked'));
       };
 
       request.onsuccess = () => {
         this.db = request.result;
-        resolve();
+        this.db.onversionchange = () => {
+          this.db.close();
+          this.db = null;
+          this.openPromise = null;
+        };
+        resolve(this.db);
       };
 
       request.onupgradeneeded = (event) => {
@@ -36114,8 +36165,15 @@ class ThumbnailCache {
           const store = db.createObjectStore(this.storeName, { keyPath: 'url' });
           store.createIndex('cachedAt', 'cachedAt', { unique: false });
         }
+
+        if (!db.objectStoreNames.contains(this.fullImageStoreName)) {
+          const store = db.createObjectStore(this.fullImageStoreName, { keyPath: 'url' });
+          store.createIndex('cachedAt', 'cachedAt', { unique: false });
+        }
       };
     });
+
+    return this.openPromise;
   }
 
   /**
@@ -37202,3 +37260,102 @@ class PopupSelect {
     }
   }
 }
+
+const FULL_IMAGE_CACHE_MAX_SIZE = 250 * 1024 * 1024;
+
+class FullImageCache {
+  constructor(database, maxCacheSize = FULL_IMAGE_CACHE_MAX_SIZE) {
+    this.database = database;
+    this.maxCacheSize = maxCacheSize;
+  }
+
+  getRequestResult(request) {
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  waitForTransaction(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  }
+
+  async get(attachmentUrl) {
+    const record = await this.getRecord(attachmentUrl);
+    return record?.blob || null;
+  }
+
+  async getRecord(attachmentUrl) {
+    const db = await this.database.init();
+    const transaction = db.transaction(this.database.fullImageStoreName, 'readonly');
+    const store = transaction.objectStore(this.database.fullImageStoreName);
+    return this.getRequestResult(store.get(attachmentUrl));
+  }
+
+  async getCacheSize() {
+    const db = await this.database.init();
+    const transaction = db.transaction(this.database.fullImageStoreName, 'readonly');
+    const store = transaction.objectStore(this.database.fullImageStoreName);
+    const records = await this.getRequestResult(store.getAll());
+    return records.reduce((total, record) => total + Number(record.size || 0), 0);
+  }
+
+  async put(attachment, blob) {
+    const attachmentUrl = attachment?.url;
+    const mimeType = attachment?.type || blob?.type || '';
+    if (!attachmentUrl) throw new Error('Cannot cache an image without an attachment URL');
+    if (!mimeType.startsWith('image/')) throw new Error('Full-image cache accepts only image attachments');
+    if (!(blob instanceof Blob)) throw new Error('Full-image cache requires a Blob');
+    if (blob.size > this.maxCacheSize) return false;
+
+    const existingRecord = await this.getRecord(attachmentUrl);
+    const currentSize = await this.getCacheSize();
+    const projectedSize = currentSize - Number(existingRecord?.size || 0) + blob.size;
+    if (projectedSize > this.maxCacheSize) return false;
+
+    const db = await this.database.init();
+    const transaction = db.transaction(this.database.fullImageStoreName, 'readwrite');
+    const store = transaction.objectStore(this.database.fullImageStoreName);
+    store.put({
+      url: attachmentUrl,
+      mimeType,
+      size: blob.size,
+      blob,
+      cachedAt: Date.now(),
+    });
+    await this.waitForTransaction(transaction);
+    return true;
+  }
+
+  async delete(attachmentUrl) {
+    const db = await this.database.init();
+    const transaction = db.transaction(this.database.fullImageStoreName, 'readwrite');
+    transaction.objectStore(this.database.fullImageStoreName).delete(attachmentUrl);
+    await this.waitForTransaction(transaction);
+  }
+
+  async getOrCache({ attachment, downloadAndDecrypt }) {
+    try {
+      const cachedBlob = await this.get(attachment.url);
+      if (cachedBlob) return cachedBlob;
+    } catch (error) {
+      console.warn('Failed to read full image from cache:', error);
+    }
+
+    const blob = await downloadAndDecrypt();
+
+    try {
+      await this.put(attachment, blob);
+    } catch (error) {
+      console.warn('Failed to cache full image:', error);
+    }
+
+    return blob;
+  }
+}
+
+const fullImageCache = new FullImageCache(thumbnailCache);
