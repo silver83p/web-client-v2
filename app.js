@@ -834,6 +834,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Chat Modal
   chatModal.load();
+  fullImageModal.load();
 
   // Contact Info Modal
   contactInfoModal.load();
@@ -2483,6 +2484,7 @@ class MenuModal {
     saveState();
 
     // clear storage
+    fullImageModal.close();
     clearMyData();
 
     // Lock the app
@@ -24758,12 +24760,11 @@ class ChatModal {
 
   /**
    * Shows context menu for an attachment row.
-   * - Images/Videos: "Preview" when no thumbnail exists in IndexedDB; "Save" when it exists
-   * - Non-images/videos: always "Save"
+   * Images include an Open action; all attachment types include Save.
    * @param {Event} e
    * @param {HTMLElement} attachmentRow
    */
-  async showAttachmentContextMenu(e, attachmentRow) {
+  showAttachmentContextMenu(e, attachmentRow) {
     if (!this.imageAttachmentContextMenu || !attachmentRow) return;
     e.preventDefault();
     e.stopPropagation();
@@ -24774,7 +24775,7 @@ class ChatModal {
     this.currentImageAttachmentRow = attachmentRow;
 
     // Toggle delete-for-all visibility similar to regular message context menu gating
-    const { messageEl, url } = this.getAttachmentContextFromRow(attachmentRow);
+    const { messageEl } = this.getAttachmentContextFromRow(attachmentRow);
 
     // Show copy only if parent message has actual message text
     const copyOption = this.imageAttachmentContextMenu.querySelector('[data-action="copy"]');
@@ -24790,28 +24791,8 @@ class ChatModal {
     }
 
     const isImageAttachment = attachmentRow.dataset.imageAttachment === 'true';
-    const isVideoAttachment = attachmentRow.dataset.videoAttachment === 'true';
-    const hasThumbnailSupport = isImageAttachment || isVideoAttachment;
-
-    // Decide Preview/Save vs Save:
-    // - Images/Videos: Show both Preview and Save when no thumbnail exists; Show only Save when it exists
-    // - Non-images/videos: always Save (no thumbnail concept)
-    let hasThumb = true;
-    if (hasThumbnailSupport) {
-      hasThumb = false;
-      if (url !== '#') {
-        try {
-          const thumb = await thumbnailCache.get(url);
-          hasThumb = !!thumb;
-        } catch (_) {
-          hasThumb = false;
-        }
-      }
-    }
-
-    // Show Preview only for images/videos without a thumbnail; Save is always visible
-    const previewOpt = this.imageAttachmentContextMenu.querySelector('[data-action="preview"]');
-    if (previewOpt) previewOpt.style.display = (hasThumbnailSupport && !hasThumb) ? '' : 'none';
+    const openOption = this.imageAttachmentContextMenu.querySelector('[data-action="open"]');
+    if (openOption) openOption.style.display = isImageAttachment ? 'flex' : 'none';
 
     // Show Import Contacts option for VCF files
     const importContactsOpt = this.imageAttachmentContextMenu.querySelector('[data-action="import-contacts"]');
@@ -24843,8 +24824,8 @@ class ChatModal {
       case 'import-contacts':
         void this.openImportContactsModal(row);
         break;
-      case 'preview':
-        void this.previewMediaAttachment(row);
+      case 'open':
+        void this.openImageAttachment(row);
         break;
       case 'save':
         void this.saveImageAttachment(row);
@@ -24906,37 +24887,30 @@ class ChatModal {
   }
 
   /**
-   * Preview a media attachment (image or video): download + decrypt thumbnail from pUrl + cache in IndexedDB.
-   * Does NOT trigger full file download - uses the pre-generated thumbnail from server.
+   * Opens an image attachment using the cache-first full-image flow.
    * @param {HTMLElement} attachmentRow
    */
-  async previewMediaAttachment(attachmentRow) {
+  async openImageAttachment(attachmentRow) {
+    if (this.attachmentDownloadInProgress) return;
+    this.attachmentDownloadInProgress = true;
+
     let loadingToastId;
     try {
       const { item, url } = this.getAttachmentContextFromRow(attachmentRow);
       if (url === '#') return;
-      
-      // Get pUrl from data attributes
-      const pUrl = attachmentRow.dataset.pUrl;
-      if (!pUrl) {
-        showToast('Preview not available for this attachment', 2000, 'info');
-        return;
-      }
-      
-      loadingToastId = showToast(`Loading preview...`, 0, 'loading');
-      
-      // Decrypt thumbnail using pUrl (reuses same key derivation as main file)
-      const thumbnailBlob = await this.decryptAttachmentToBlob(item, attachmentRow, pUrl);
-      
-      // Cache and display thumbnail
-      await thumbnailCache.save(url, thumbnailBlob, 'image/jpeg');
-      await this.updateThumbnailInPlace(attachmentRow, thumbnailBlob);
-      
+
+      const filename = decodeURIComponent(attachmentRow.dataset.name || 'Image');
+      loadingToastId = showToast('Opening image...', 0, 'loading');
+      const blob = await this.getFullImageBlob(item, attachmentRow);
       hideToast(loadingToastId);
+      loadingToastId = null;
+      fullImageModal.open(blob, filename);
     } catch (err) {
-      console.error('Preview failed:', err);
-      hideToast(loadingToastId);
-      this.handleAttachmentError(err, 'Preview failed.');
+      console.error('Image open failed:', err);
+      this.handleAttachmentError(err, 'Failed to open image.');
+    } finally {
+      if (loadingToastId) hideToast(loadingToastId);
+      this.attachmentDownloadInProgress = false;
     }
   }
 
@@ -26857,6 +26831,269 @@ class ChatModal {
 }
 
 const chatModal = new ChatModal();
+
+class FullImageModal {
+  constructor() {
+    this.objectUrl = null;
+    this.scale = 1;
+    this.translateX = 0;
+    this.translateY = 0;
+    this.touchGesture = null;
+    this.dragPointerId = null;
+  }
+
+  load() {
+    this.modal = document.getElementById('fullImageModal');
+    this.closeButton = document.getElementById('closeFullImageModal');
+    this.title = document.getElementById('fullImageModalTitle');
+    this.viewer = document.getElementById('fullImageViewer');
+    this.loading = document.getElementById('fullImageLoading');
+    this.image = document.getElementById('fullImageViewerImage');
+    this.zoomControls = document.getElementById('fullImageZoomControls');
+    this.zoomInButton = document.getElementById('fullImageZoomIn');
+    this.zoomOutButton = document.getElementById('fullImageZoomOut');
+
+    assert(this.modal && this.closeButton && this.title && this.viewer && this.loading && this.image
+      && this.zoomControls && this.zoomInButton && this.zoomOutButton,
+      'Full image modal elements are required');
+
+    this.closeButton.addEventListener('click', () => this.close());
+    this.zoomInButton.addEventListener('click', () => this.zoomBy(0.5));
+    this.zoomOutButton.addEventListener('click', () => this.zoomBy(-0.5));
+    this.viewer.addEventListener('touchstart', (event) => this.handleTouchStart(event), { passive: false });
+    this.viewer.addEventListener('touchmove', (event) => this.handleTouchMove(event), { passive: false });
+    this.viewer.addEventListener('touchend', (event) => this.handleTouchEnd(event));
+    this.viewer.addEventListener('touchcancel', (event) => this.handleTouchEnd(event));
+    this.viewer.addEventListener('pointerdown', (event) => this.handlePointerDown(event));
+    this.viewer.addEventListener('pointermove', (event) => this.handlePointerMove(event));
+    this.viewer.addEventListener('pointerup', (event) => this.handlePointerEnd(event));
+    this.viewer.addEventListener('pointercancel', (event) => this.handlePointerEnd(event));
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !this.modal.classList.contains('active')) return;
+      event.preventDefault();
+      this.close();
+    });
+    this.updateZoomControls();
+  }
+
+  open(blob, filename = 'Image') {
+    assert(blob instanceof Blob, 'Full image modal requires a Blob');
+
+    const isAlreadyOpen = this.modal.classList.contains('active');
+    if (!isAlreadyOpen && !openModal(this.modal)) return false;
+
+    this.clearImage();
+
+    this.title.textContent = filename;
+    this.image.alt = filename;
+    this.loading.hidden = false;
+    this.viewer.setAttribute('aria-busy', 'true');
+
+    const objectUrl = URL.createObjectURL(blob);
+    this.objectUrl = objectUrl;
+    this.image.onload = () => {
+      if (this.objectUrl !== objectUrl) return;
+      this.loading.hidden = true;
+      this.image.hidden = false;
+      this.viewer.setAttribute('aria-busy', 'false');
+      this.updateZoomControls();
+    };
+    this.image.onerror = () => {
+      if (this.objectUrl !== objectUrl) return;
+      this.close();
+      showToast('Unable to display image.', 0, 'error');
+    };
+    this.image.src = objectUrl;
+    return true;
+  }
+
+  getTouchMidpoint(touches) {
+    return {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2,
+    };
+  }
+
+  getTouchDistance(touches) {
+    return Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY,
+    );
+  }
+
+  startPinch(touches) {
+    const midpoint = this.getTouchMidpoint(touches);
+    const viewerRect = this.viewer.getBoundingClientRect();
+    const centerX = viewerRect.left + viewerRect.width / 2;
+    const centerY = viewerRect.top + viewerRect.height / 2;
+
+    this.touchGesture = {
+      type: 'pinch',
+      startDistance: Math.max(this.getTouchDistance(touches), 1),
+      startScale: this.scale,
+      anchorX: (midpoint.x - centerX - this.translateX) / this.scale,
+      anchorY: (midpoint.y - centerY - this.translateY) / this.scale,
+    };
+  }
+
+  startPan(touch) {
+    this.touchGesture = {
+      type: 'pan',
+      startX: touch.clientX,
+      startY: touch.clientY,
+      translateX: this.translateX,
+      translateY: this.translateY,
+    };
+  }
+
+  handleTouchStart(event) {
+    if (this.image.hidden || event.target.closest('.full-image-zoom-controls')) return;
+
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      this.startPinch(event.touches);
+    } else if (event.touches.length === 1 && this.scale > 1) {
+      this.startPan(event.touches[0]);
+    }
+  }
+
+  handleTouchMove(event) {
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      if (this.touchGesture?.type !== 'pinch') this.startPinch(event.touches);
+
+      const midpoint = this.getTouchMidpoint(event.touches);
+      const viewerRect = this.viewer.getBoundingClientRect();
+      const centerX = viewerRect.left + viewerRect.width / 2;
+      const centerY = viewerRect.top + viewerRect.height / 2;
+      this.scale = Math.min(4, Math.max(1,
+        this.touchGesture.startScale * this.getTouchDistance(event.touches) / this.touchGesture.startDistance));
+      this.translateX = midpoint.x - centerX - this.touchGesture.anchorX * this.scale;
+      this.translateY = midpoint.y - centerY - this.touchGesture.anchorY * this.scale;
+      this.constrainTranslation();
+      this.applyTransform();
+    } else if (event.touches.length === 1 && this.touchGesture?.type === 'pan') {
+      event.preventDefault();
+      this.panTo(event.touches[0]);
+    }
+  }
+
+  handleTouchEnd(event) {
+    if (event.touches.length === 1 && this.scale > 1) {
+      this.startPan(event.touches[0]);
+    } else if (event.touches.length === 0) {
+      this.touchGesture = null;
+    }
+  }
+
+  handlePointerDown(event) {
+    if (event.pointerType === 'touch' || event.button !== 0 || event.target !== this.image
+      || this.image.hidden || this.scale <= 1) return;
+
+    event.preventDefault();
+    this.dragPointerId = event.pointerId;
+    this.startPan(event);
+    this.viewer.setPointerCapture?.(event.pointerId);
+    this.viewer.classList.add('is-dragging');
+  }
+
+  handlePointerMove(event) {
+    if (event.pointerId !== this.dragPointerId || this.touchGesture?.type !== 'pan') return;
+    event.preventDefault();
+    this.panTo(event);
+  }
+
+  handlePointerEnd(event) {
+    if (event.pointerId !== this.dragPointerId) return;
+
+    if (this.viewer.hasPointerCapture?.(event.pointerId)) {
+      this.viewer.releasePointerCapture(event.pointerId);
+    }
+    this.dragPointerId = null;
+    this.touchGesture = null;
+    this.viewer.classList.remove('is-dragging');
+  }
+
+  panTo(point) {
+    this.translateX = this.touchGesture.translateX + point.clientX - this.touchGesture.startX;
+    this.translateY = this.touchGesture.translateY + point.clientY - this.touchGesture.startY;
+    this.constrainTranslation();
+    this.applyTransform();
+  }
+
+  constrainTranslation() {
+    const maxX = Math.max(0, (this.image.clientWidth * this.scale - this.viewer.clientWidth) / 2);
+    const maxY = Math.max(0, (this.image.clientHeight * this.scale - this.viewer.clientHeight) / 2);
+    this.translateX = Math.min(maxX, Math.max(-maxX, this.translateX));
+    this.translateY = Math.min(maxY, Math.max(-maxY, this.translateY));
+  }
+
+  applyTransform() {
+    this.image.style.transform = this.scale === 1
+      ? ''
+      : `translate3d(${this.translateX}px, ${this.translateY}px, 0) scale(${this.scale})`;
+    this.viewer.classList.toggle('is-zoomed', this.scale > 1);
+    this.updateZoomControls();
+  }
+
+  zoomBy(amount) {
+    if (this.image.hidden) return;
+
+    const previousScale = this.scale;
+    this.scale = Math.min(4, Math.max(1, this.scale + amount));
+    const scaleRatio = this.scale / previousScale;
+    this.translateX *= scaleRatio;
+    this.translateY *= scaleRatio;
+    this.constrainTranslation();
+    this.applyTransform();
+  }
+
+  updateZoomControls() {
+    if (!this.zoomInButton || !this.zoomOutButton) return;
+
+    const imageUnavailable = this.image.hidden;
+    this.zoomControls.hidden = imageUnavailable;
+    this.zoomInButton.disabled = imageUnavailable || this.scale >= 4;
+    this.zoomOutButton.disabled = imageUnavailable || this.scale <= 1;
+  }
+
+  resetTransform() {
+    this.scale = 1;
+    this.translateX = 0;
+    this.translateY = 0;
+    this.touchGesture = null;
+    this.dragPointerId = null;
+    if (this.image) this.image.style.transform = '';
+    this.viewer?.classList.remove('is-zoomed', 'is-dragging');
+  }
+
+  clearImage() {
+    if (!this.image) return;
+
+    this.resetTransform();
+    this.image.onload = null;
+    this.image.onerror = null;
+    this.image.removeAttribute('src');
+    this.image.hidden = true;
+    this.loading.hidden = true;
+    this.viewer.setAttribute('aria-busy', 'false');
+    this.image.alt = '';
+    this.title.textContent = 'Image';
+    this.updateZoomControls();
+
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
+  }
+
+  close() {
+    this.modal?.classList.remove('active');
+    this.clearImage();
+  }
+}
+
+const fullImageModal = new FullImageModal();
 
 class CallInviteModal {
   constructor() {
@@ -36833,7 +37070,7 @@ function createModalCloseHandlers(modals) {
 
 const modalCloseHandlers = new Map([
   ...createModalCloseHandlers({
-    chatModal, menuModal, daoModal, addProposalModal,
+    chatModal, fullImageModal, menuModal, daoModal, addProposalModal,
     confirmProposalModal, proposalInfoModal, settingsModal, manageContactsModal,
     welcomeMenuModal, sendAssetFormModal, historyModal, newChatModal,
     createAccountModal, tollModal, inviteModal, aboutModal,
