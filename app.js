@@ -2750,14 +2750,20 @@ async function refreshDaoNotificationSummary() {
     return false;
   }
 
+  const notificationCutoff = getCorrectedTimestamp();
   try {
     await daoRepo.refresh({ force: true });
     if (accountData !== myData) return false;
 
+    if (!accountData.daoNotifications?.lastDaoOpenedAt) {
+      daoModal.acknowledgeNotifications(notificationCutoff);
+      return true;
+    }
+
     daoNotificationSummary = getDaoNotificationSummary({
       metadataEntries: daoRepo.getProposalMetaForUi(),
       daoUserVotes: accountData.daoUserVotes,
-      lastDaoOpenedAt: accountData.daoNotifications?.lastDaoOpenedAt || 0,
+      lastDaoOpenedAt: accountData.daoNotifications.lastDaoOpenedAt,
       now: getTransactionTimestamp(),
     });
     header.updateDaoNotificationsIcon();
