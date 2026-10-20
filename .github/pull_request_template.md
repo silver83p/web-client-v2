@@ -33,15 +33,20 @@ as safety nets when appropriate. Avoid repeating the change list.
 
 ## Validation
 
-<!-- List exact commands that actually ran and their results. State any checks
-that could not run and the concrete reason; do not imply unrun checks passed. -->
+<!-- Keep validation proportional. Prefer behavior checks and reuse existing
+automated runners/CI. For bug fixes, report failure before the fix and success
+afterward when practical, or explain the limitation. List exact commands that
+actually ran and their results; identify manual checks and unrun checks with
+the concrete reason. -->
 
 ## Companion regression tests
 
-- [ ] Companion-test status is recorded below, including pending actions or N/A with a reason.
-- Test files, branch and commit IDs:
-- Tested client revision, commands and results:
-- Remaining actions and reminder: commit / integrate into `codex/local-client-tests` / push / none / N/A with reason.
+- [ ] Companion changes have a linked topic-branch PR, or N/A with a reason.
+- Companion PR URL and base; parent test PR if stacked (link this client PR back from it):
+- Test files, topic branch and commit IDs:
+- Tested client revision, commands, results and known baseline failures:
+- Required client PRs/features, readiness after focused validation on client main, and child retarget/rebase steps after a parent test PR merges:
+- Remaining actions and reminder: commit / push topic / open or link PR / review / wait for client dependencies and revalidate before merge / none / N/A with reason.
 
 ## Related Issues
 
