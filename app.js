@@ -2539,6 +2539,11 @@ class WalletScreen {
       }
     }
 
+    if (!network.faucetUrl) {
+      showToast('Faucet not available', 0, 'error');
+      return;
+    }
+
     const toastId = showToast('Requesting from faucet...', 0, 'loading');
     try {
       this.isFaucetRequestInProgress = true;
@@ -2550,9 +2555,7 @@ class WalletScreen {
       };
       await signObj(payload, myAccount.keys);
       
-      const faucetUrl = network.faucetUrl || 'https://dev.liberdus.com:3355/faucet';
-      
-      const response = await fetch(faucetUrl, {
+      const response = await fetch(network.faucetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -20553,6 +20556,11 @@ class StakeValidatorModal {
    * @returns {Promise<void>}
    */
   async requestFromFaucet() {
+    if (!network.faucetUrl) {
+      showToast('Faucet not available', 0, 'error');
+      return;
+    }
+
     const toastId = showToast('Requesting from faucet...', 0, 'loading');
     try {
       const payload = {
@@ -20563,9 +20571,7 @@ class StakeValidatorModal {
       };
       await signObj(payload, myAccount.keys);
       
-      const faucetUrl = network.faucetUrl || 'https://dev.liberdus.com:3355/faucet';
-      
-      const response = await fetch(faucetUrl, {
+      const response = await fetch(network.faucetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
