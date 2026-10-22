@@ -2602,7 +2602,7 @@ class MenuModal {
     this.inviteButton = document.getElementById('openInvite');
     this.inviteButton.addEventListener('click', () => inviteModal.open());
     this.explorerButton = document.getElementById('openExplorer');
-    this.explorerButton.addEventListener('click', () => this.handleExternalClick('./explorer', 'explorer'));
+    this.explorerButton.addEventListener('click', () => this.handleExternalClick(normalizeHttpsUrl(network.explorerUrl), 'explorer'));
     this.networkButton = document.getElementById('openMonitor');
     this.networkButton.addEventListener('click', () => this.handleExternalClick('./network', 'network'));
     this.helpButton = document.getElementById('openHelp');
@@ -23698,6 +23698,48 @@ class ChatModal {
       </div>`;
   }
 
+  renderLibPaymentTransaction(transactionId) {
+    const code = `<code>${escapeHtml(transactionId)}</code>`;
+    const explorerUrl = normalizeHttpsUrl(network.explorerUrl);
+    if (!explorerUrl) return code;
+
+    const url = new URL(explorerUrl);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/transaction/${transactionId}`;
+    url.search = '';
+    url.hash = '';
+    return `<a href="${escapeHtmlAttribute(url.href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtmlAttribute(transactionId)}" aria-label="View transaction ${escapeHtmlAttribute(transactionId)} in block explorer">${code} <span aria-hidden="true">↗</span></a>`;
+  }
+
+  renderLibPaymentMessage(item, messageTimeHTML) {
+    const amount = big2str(item.amount, 18);
+    const exactAmount = `${formatDisplayAmount(amount, 18)} ${item.symbol || 'LIB'}`;
+    const transactionId = normalizeTransactionId(item.txid);
+    return `
+      <div class="lib-payment-message">
+        <div class="lib-payment-heading">
+          <img class="lib-payment-logo" src="./media/liberdus_logo_50.png" alt="" width="20" height="20">
+          <div class="lib-payment-label">Payment ${item.my ? 'sent' : 'received'}</div>
+        </div>
+        <div class="payment-header">
+          <span class="payment-direction">${item.my ? '-' : '+'}</span>
+          <span class="payment-amount" title="${escapeHtmlAttribute(exactAmount)}">${escapeHtml(formatDisplayAmount(amount, 6))} <span class="lib-payment-unit">${escapeHtml(item.symbol || 'LIB')}</span></span>
+        </div>
+        <div class="lib-payment-network">Liberdus</div>
+        ${item.message ? `<section class="lib-payment-note" aria-label="Payment note"><div class="lib-payment-label">Note</div><div class="payment-memo">${linkifyUrls(item.message)}</div></section>` : ''}
+        <div class="lib-payment-meta">
+          ${item.status === 'failed' ? '<div class="lib-payment-status">Payment failed</div>' : ''}
+          ${messageTimeHTML}
+        </div>
+        ${transactionId ? `<details class="lib-payment-details">
+          <summary>Payment details</summary>
+          <dl>
+            <div><dt>Amount</dt><dd>${escapeHtml(exactAmount)}</dd></div>
+            <div><dt>Transaction</dt><dd>${this.renderLibPaymentTransaction(transactionId)}</dd></div>
+          </dl>
+        </details>` : ''}
+      </div>`;
+  }
+
   renderChatMessageHTML(item, { contact, lastReadTs }) {
     const timeString = formatTime(item.timestamp);
     // Use a consistent timestamp attribute for potential future use (e.g., message jumping)
@@ -23705,6 +23747,8 @@ class ChatModal {
     // Add txid attribute if available
     const txidAttribute = item.txid ? `data-txid="${escapeHtmlAttribute(item.txid)}"` : '';
     const statusAttribute = item.status ? `data-status="${escapeHtmlAttribute(item.status)}"` : '';
+    const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !isDeleted(item);
+    const messageTimeHTML = `<div class="message-time">${timeString}${item.edited ? ' <span class="message-edited-label">edited</span>' : ''}${showEditedDot ? ' <span class="edited-new-dot" title="Edited since last read"></span>' : ''}</div>`;
 
     if (item.type === 'update_toll_required') {
       const statusText = escapeHtml(getUpdateTollRequiredPreviewText(item, contact));
@@ -23717,23 +23761,10 @@ class ChatModal {
 
     // Check if it's a payment based on the presence of the amount property (BigInt)
     if (typeof item.amount === 'bigint') {
-      // Assuming LIB (18 decimals) for now. TODO: Handle different asset decimals if needed.
-      // Format amount correctly using big2str
-      const amountStr = big2str(item.amount, 18);
-      const amountNum = parseFloat(amountStr);
-      const amountDisplay = `${amountNum.toFixed(6)} ${escapeHtml(item.symbol || 'LIB')}`;
-      const directionText = item.my ? '-' : '+';
       const messageClass = item.my ? 'sent' : 'received';
-      const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !isDeleted(item);
-      // --- Render Payment Transaction ---
       return `
           <div class="message ${messageClass} payment-info" ${timestampAttribute} ${txidAttribute} ${statusAttribute}>
-            <div class="payment-header">
-              <span class="payment-direction">${directionText}</span>
-              <span class="payment-amount">${amountDisplay}</span>
-            </div>
-            ${item.message ? `<div class="payment-memo">${linkifyUrls(item.message)}</div>` : ''}
-            <div class="message-time">${timeString}${item.edited ? ' <span class="message-edited-label">edited</span>' : ''}${showEditedDot ? ' <span class="edited-new-dot" title="Edited since last read"></span>' : ''}</div>
+            ${this.renderLibPaymentMessage(item, messageTimeHTML)}
           </div>
         `;
     }
@@ -23819,9 +23850,6 @@ class ChatModal {
               `;
       }).join('');
     }
-
-    const showEditedDot = !item.my && item.edited && item.edited_timestamp && item.edited_timestamp > lastReadTs && !isDeleted(item);
-    const messageTimeHTML = `<div class="message-time">${timeString}${item.edited ? ' <span class="message-edited-label">edited</span>' : ''}${showEditedDot ? ' <span class="edited-new-dot" title="Edited since last read"></span>' : ''}</div>`;
 
     // --- Render message text (if any) ---
     let messageTextHTML = '';
@@ -24041,10 +24069,17 @@ class ChatModal {
       this.messagesList.querySelectorAll('.evm-payment-details[open]'),
       (details) => details.parentElement.dataset.evmPayment
     ));
+    const expandedLibPayments = new Set(Array.from(
+      this.messagesList.querySelectorAll('.lib-payment-details[open]'),
+      (details) => details.closest('.message').dataset.txid
+    ));
     // Replace the list once to avoid one DOM mutation per message.
     this.messagesList.innerHTML = range.html;
     for (const details of this.messagesList.querySelectorAll('.evm-payment-details')) {
       if (expandedPayments.has(details.parentElement.dataset.evmPayment)) details.open = true;
+    }
+    for (const details of this.messagesList.querySelectorAll('.lib-payment-details')) {
+      if (expandedLibPayments.has(details.closest('.message').dataset.txid)) details.open = true;
     }
     this.syncAllRenderedReactionChips();
     // Straight after rendering, ahead of the early returns below: it used to
@@ -25328,7 +25363,7 @@ class ChatModal {
     if (e.target.closest('.voice-message-speed-button')) return;
     if (e.target.closest('.voice-message-seek')) return;
     if (e.target.closest('.reply-quote')) return;
-    if (e.target.closest('.evm-payment-details')) return;
+    if (e.target.closest('.evm-payment-details, .lib-payment-details')) return;
 
     // Check if keyboard is open - if so, don't show context menu
     if (this.isKeyboardOpen()) {
