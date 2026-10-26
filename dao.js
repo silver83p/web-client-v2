@@ -77,6 +77,7 @@ export const DAO_CONFIG_CHANGE_OPTIONS = {
     { key: 'stakeLockTime', path: 'current.stakeLockTime', label: 'Stake Lock Time', valueType: 'number', validation: 'integer' },
     { key: 'tollNetworkTaxPercent', path: 'current.tollNetworkTaxPercent', label: 'Toll Network Tax Percent', valueType: 'number', validation: 'integer' },
     { key: 'tollTimeout', path: 'current.tollTimeout', label: 'Toll Timeout', valueType: 'number', validation: 'integer' },
+    { key: 'transactionFeeUsdStr', path: 'current.transactionFeeUsdStr', label: 'Transaction Fee', valueType: 'string', validation: 'decimalString' },
     { key: 'txPause', path: 'current.txPause', label: 'Pause Transactions', valueType: 'boolean', validation: 'boolean' },
   ],
   protocol: [
