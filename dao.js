@@ -48,6 +48,7 @@ export function isValidDaoDecimalString(value) {
 export const DAO_CONFIG_CHANGE_OPTIONS = {
   governance: [
     { key: 'claimDuration', path: 'current.dao.claimDuration', label: 'Claim Duration', valueType: 'number', validation: 'integer' },
+    { key: 'committeeAddresses', path: 'current.dao.committeeAddresses', label: 'Committee Addresses', valueType: 'array', validation: 'committeeAddresses' },
     { key: 'graceDuration', path: 'current.dao.graceDuration', label: 'Grace Duration', valueType: 'number', validation: 'integer' },
     { key: 'minimumSpendUsdStr', path: 'current.dao.minimumSpendUsdStr', label: 'Minimum Vote Spend', valueType: 'string', validation: 'decimalString' },
     { key: 'pctBurned', path: 'current.dao.pctBurned', label: 'Percent Burned', valueType: 'number', validation: 'integer' },
@@ -447,6 +448,13 @@ function normalizeDaoDraftChanges(changes, actionOptionCount) {
       const key = requireDaoDraftString(change?.key, 'DAO parameter key');
       if (seenKeys.has(key)) throw new Error(`DAO proposal option ${optionIndex + 1} has duplicate ${key} changes`);
       seenKeys.add(key);
+      if (key === 'committeeAddresses') {
+        return {
+          key,
+          value: JSON.stringify(daoRepo.parseCommitteeAddresses(change.value)),
+          current: JSON.stringify(daoRepo.parseCommitteeAddresses(change.current)),
+        };
+      }
       return {
         key,
         value: requireDaoDraftString(change?.value, 'DAO parameter value'),
@@ -2246,6 +2254,54 @@ async function refreshInternal({ force, signal }) {
 }
 
 export const daoRepo = {
+  minCommitteeMembers: 4,
+  maxCommitteeMembers: 10,
+
+  /** Hide only the network padding of a canonical wallet-derived address. */
+  toCommitteeDisplayAddress(address) {
+    return address.length === 64 && address.endsWith('0'.repeat(24))
+      ? address.slice(0, 40)
+      : address;
+  },
+
+  /** Return a new list in network format, preserving the entered order. */
+  normalizeCommitteeAddresses(addresses) {
+    if (!Array.isArray(addresses)) throw new Error('Committee addresses must be a list');
+    if (addresses.length < this.minCommitteeMembers || addresses.length > this.maxCommitteeMembers) {
+      throw new Error(`Enter ${this.minCommitteeMembers}–${this.maxCommitteeMembers} committee addresses (currently ${addresses.length})`);
+    }
+
+    const seen = new Set();
+    return addresses.map((value, addressIndex) => {
+      const address = typeof value === 'string' ? value.trim().replace(/^0x/i, '').toLowerCase() : '';
+      let message = '';
+      if (!address) message = `Enter committee address ${addressIndex + 1}`;
+      else if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(address)) {
+        message = `Committee address ${addressIndex + 1} must contain 40 or 64 hexadecimal characters, with an optional 0x prefix`;
+      }
+      const normalized = address.padEnd(64, '0');
+      if (!message && seen.has(normalized)) message = `Committee address ${addressIndex + 1} is a duplicate`;
+      if (message) {
+        const error = new Error(message);
+        error.addressIndex = addressIndex;
+        throw error;
+      }
+      seen.add(normalized);
+      return normalized;
+    });
+  },
+
+  parseCommitteeAddresses(value) {
+    if (typeof value !== 'string') throw new Error('Committee addresses must be a JSON array string');
+    let addresses;
+    try {
+      addresses = JSON.parse(value);
+    } catch {
+      throw new Error('Committee addresses must be a JSON array string');
+    }
+    return this.normalizeCommitteeAddresses(addresses);
+  },
+
   reset() {
     _store = null;
     _loadingPromise = null;
