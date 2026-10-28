@@ -1693,7 +1693,7 @@ function normalizeDaoVoteReminderSchedule(value) {
 }
 
 export const DAO_USER_VOTE_CAST_STATUSES = Object.freeze({
-  PENDING: 'pending',
+  SUBMITTED: 'submitted',
 });
 
 function normalizeDaoUserVoteCastTxid(value) {
@@ -1718,11 +1718,11 @@ function normalizeDaoUserVoteCastStatus(value) {
   const status = typeof value === 'string' ? value.trim() : '';
   return Object.values(DAO_USER_VOTE_CAST_STATUSES).includes(status)
     ? status
-    : DAO_USER_VOTE_CAST_STATUSES.PENDING;
+    : DAO_USER_VOTE_CAST_STATUSES.SUBMITTED;
 }
 
-// A cast records one confirmed vote transaction. Malformed casts are dropped
-// without discarding the rest of the proposal entry.
+// A cast records one vote transaction the network accepted on submission.
+// Malformed casts are dropped without discarding the rest of the proposal entry.
 function normalizeDaoUserVoteCast(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 
@@ -1867,11 +1867,6 @@ export function createDaoProposalVoteTracker({
     votingEndsAt,
     estimatedClaimEndsAt,
     reminderExpiresAt,
-    txid,
-    weights,
-    spend,
-    optionWeights,
-    timestamp,
   }) {
     if (outcome !== 'success') return;
     if (type !== DAO_ACTION_TYPES.VOTE && type !== DAO_ACTION_TYPES.CLAIM_REWARD) return;
@@ -1883,32 +1878,19 @@ export function createDaoProposalVoteTracker({
     const isTracked = Object.prototype.hasOwnProperty.call(current, number);
 
     if (type === DAO_ACTION_TYPES.VOTE) {
-      const existingEntry = isTracked ? current[number] : {};
-      const existingSchedule = normalizeDaoVoteReminderSchedule(existingEntry);
-      const reminderSchedule = existingSchedule ?? normalizeDaoVoteReminderSchedule({
+      const reminderSchedule = normalizeDaoVoteReminderSchedule({
         votingEndsAt,
         estimatedClaimEndsAt,
         reminderExpiresAt,
       });
-
-      // Each confirmed vote transaction is kept once; earlier casts win on a repeat.
-      const cast = normalizeDaoUserVoteCast({
-        txid,
-        weights,
-        spend,
-        optionWeights,
-        timestamp,
-        status: DAO_USER_VOTE_CAST_STATUSES.PENDING,
+      if (isTracked && normalizeDaoVoteReminderSchedule(current[number])) return;
+      writeVotes({
+        ...current,
+        [number]: {
+          ...current[number],
+          ...reminderSchedule,
+        },
       });
-      const existingCasts = normalizeDaoUserVoteCasts(existingEntry.casts);
-      const casts = cast && !existingCasts.some((existing) => existing.txid === cast.txid)
-        ? [...existingCasts, cast]
-        : existingCasts;
-
-      if (existingSchedule && casts.length === existingCasts.length) return;
-      const nextEntry = { ...existingEntry, ...reminderSchedule };
-      if (casts.length) nextEntry.casts = casts;
-      writeVotes({ ...current, [number]: nextEntry });
       return;
     }
 
@@ -1919,10 +1901,37 @@ export function createDaoProposalVoteTracker({
     }
   }
 
+  // Called when the network accepts a vote submission. Whether the transaction
+  // was applied is not checked here; a later receipt check will update the cast.
+  function recordSubmittedVote({ proposalNumber, txid, weights, spend, timestamp }) {
+    const number = normalizeDaoPositiveInteger(proposalNumber);
+    const cast = normalizeDaoUserVoteCast({
+      txid,
+      weights,
+      spend,
+      optionWeights: null,
+      timestamp,
+      status: DAO_USER_VOTE_CAST_STATUSES.SUBMITTED,
+    });
+    if (!number || !cast) return false;
+
+    const current = readVotes();
+    const existingEntry = current[number] ?? {};
+    const existingCasts = normalizeDaoUserVoteCasts(existingEntry.casts);
+    if (existingCasts.some((existing) => existing.txid === cast.txid)) return false;
+
+    writeVotes({
+      ...current,
+      [number]: { ...existingEntry, casts: [...existingCasts, cast] },
+    });
+    return true;
+  }
+
   return Object.freeze({
     getPendingClaimProposalNumbers,
     getOpenClaimProposalNumbers,
     handleSettlement,
+    recordSubmittedVote,
     setAuthoritativeClaimWindow,
   });
 }
