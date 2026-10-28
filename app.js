@@ -3206,8 +3206,9 @@ class DaoModal {
     return this.loadPageWithFeedback(false, 'Failed to load more proposals');
   }
 
-  async refreshAfterDaoSettlement(pendingTxInfo, outcome) {
+  async refreshAfterDaoSettlement(pendingTxInfo, outcome, receipt = null) {
     const refreshId = ++this.refreshSequence;
+    const additionalInfo = receipt?.additionalInfo;
     daoProposalVoteTracker.handleSettlement({
       type: pendingTxInfo?.type,
       outcome,
@@ -3215,6 +3216,11 @@ class DaoModal {
       votingEndsAt: pendingTxInfo?.votingEndsAt,
       estimatedClaimEndsAt: pendingTxInfo?.estimatedClaimEndsAt,
       reminderExpiresAt: pendingTxInfo?.reminderExpiresAt,
+      txid: pendingTxInfo?.txid,
+      weights: pendingTxInfo?.weights ?? additionalInfo?.weights,
+      spend: pendingTxInfo?.spend ?? additionalInfo?.spend,
+      timestamp: pendingTxInfo?.timestamp ?? receipt?.timestamp,
+      optionWeights: additionalInfo?.optionWeights,
     });
 
     let didRefreshDaoData = false;
@@ -7719,6 +7725,14 @@ class ProposalInfoModal {
       from: result.transaction.from,
       networkId: result.transaction.networkId,
     });
+    if (result.transaction.type === DAO_ACTION_TYPES.VOTE) {
+      // Persisted with the pending record so the confirmed cast can be saved after a reload.
+      Object.assign(pendingAction, {
+        timestamp: result.transaction.timestamp,
+        weights: result.transaction.weights.slice(),
+        spend: result.transaction.spend,
+      });
+    }
     return pendingAction;
   }
 
@@ -37456,7 +37470,7 @@ async function checkPendingTransactionsOnce() {
         }
 
         if (isPendingDaoTransaction) {
-          const didRefreshDaoData = await daoModal.refreshAfterDaoSettlement(pendingTxInfo, 'success');
+          const didRefreshDaoData = await daoModal.refreshAfterDaoSettlement(pendingTxInfo, 'success', res.transaction);
           if (didRefreshDaoData) {
             showToast(getDaoTransactionMessage(type, 'success'), 3000, 'success');
           } else if (!myData.pending.some((pendingTx) => pendingTx.txid === txid)) {

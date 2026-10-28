@@ -178,10 +178,12 @@ Important implementation detail:
 - New accounts initialize an empty `daoUserVotes` map. For existing accounts without the map, the first confirmed vote creates it and adds its proposal number with the proposal's local reminder schedule.
 - The schedule is calculated from the proposal already loaded when the vote is submitted: `votingEndsAt` is the estimated voting end, `estimatedClaimEndsAt` is `votingEndsAt + claimDuration`, and `reminderExpiresAt` adds one more day.
 - The schedule is saved with the pending transaction so it survives a reload, then copied into `daoUserVotes` only after the vote confirms. Failed and timed-out votes are not tracked.
+- The pending vote record also keeps the transaction's `timestamp`, `weights` and `spend`. When the vote confirms, a cast `{ txid, weights, spend, optionWeights, timestamp, status }` is appended to the entry's `casts` array. `optionWeights` is copied from the receipt's `additionalInfo.optionWeights` when present and is otherwise `null`; `status` is `pending` for now. Casts are deduplicated by `txid`, keeping the earlier cast. Entries that only hold a reminder schedule or claim window remain valid without `casts`.
+- `spend` and `optionWeights` are stored as bigints and survive the account save/restore round trip. Malformed casts are dropped when the account record is normalized; the rest of the proposal entry is kept.
 - Vote-history changes update `myData` in memory and otherwise rely on the normal account save lifecycle.
 - When the DAO modal refreshes metadata, tracked proposals that have entered a final state are refreshed once and updated with the authoritative claim window derived from `votingEndedAt`.
-- Repeated confirmed votes on one proposal keep a single stored entry.
-- Confirmed reward claims remove their proposal number. Submitted, failed, and timed-out claims leave it available for retry.
+- Repeated confirmed votes on one proposal keep a single stored entry and append one cast per confirmed transaction.
+- Confirmed reward claims remove their proposal number together with its casts. Submitted, failed, and timed-out claims leave it available for retry.
 - Proposals are hidden until their authoritative claim window opens and after it ends. Expired entries are removed from the account record when claim candidates are evaluated.
 - The authoritative saved claim window narrows the account's candidate list. Fresh proposal details must confirm current eligibility before rendering, and the server remains authoritative when a claim is submitted.
 - Account backups include this vote history and restore it with the rest of the account data. It does not discover votes that are absent from the restored account record.
