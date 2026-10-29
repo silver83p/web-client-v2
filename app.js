@@ -8265,6 +8265,13 @@ class ProposalInfoModal {
       const reminderSchedule = getDaoVoteReminderSchedule(proposal);
       assert(reminderSchedule, 'Accepted DAO vote missing reminder schedule');
       Object.assign(pendingAction, reminderSchedule);
+      daoProposalVoteTracker.recordSubmittedVote({
+        proposalNumber: proposal.number,
+        txid: result.response.txid,
+        weights: result.transaction.weights,
+        spend: result.transaction.spend,
+        timestamp: result.transaction.timestamp,
+      });
       saveState();
       showToast(getDaoTransactionMessage(DAO_ACTION_TYPES.VOTE, 'pending'), 4000, 'info');
       this.updateSubmitButtons();
